@@ -277,8 +277,33 @@ button:disabled {
 }
 
 .alert-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid rgba(155, 106, 0, 0.28);
+  border-left: 4px solid var(--amber);
+  border-radius: var(--radius);
   background: var(--amber-soft);
-  border-color: rgba(155, 106, 0, 0.22);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.alert-card.is-hidden {
+  display: none !important;
+}
+
+.alert-card.warning {
+  border-color: rgba(179, 72, 53, 0.32);
+  border-left-color: var(--coral);
+  background: var(--coral-soft);
+}
+
+.alert-card.success {
+  border-color: rgba(33, 110, 78, 0.28);
+  border-left-color: var(--green);
+  background: var(--green-soft);
 }
 
 .tab-panel {
@@ -1002,6 +1027,7 @@ tbody tr:last-child td {
         <button type="button" class="nav-tab is-active" data-tab="stock">Stock</button>
         <button type="button" class="nav-tab" data-tab="sell">Sell</button>
         <button type="button" class="nav-tab" data-tab="events">Events</button>
+        <button type="button" class="nav-tab admin-only" data-tab="money">Money</button>
         <button type="button" class="nav-tab admin-only" data-tab="admin">Admin</button>
       </nav>
       <div class="user-strip">
@@ -1189,6 +1215,89 @@ tbody tr:last-child td {
           </div>
           <div id="eventsList" class="events-list"></div>
         </section>
+
+        <section class="panel-block">
+          <div class="section-heading tight">
+            <div>
+              <h4>Past events</h4>
+              <p>See what each completed event earned in sales revenue.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th>Location</th>
+                  <th>Date</th>
+                  <th>Sales</th>
+                  <th>Revenue</th>
+                  <th>Profit</th>
+                </tr>
+              </thead>
+              <tbody id="pastEventsTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section class="tab-panel is-hidden" id="moneyTab" data-panel="money">
+        <div class="section-heading">
+          <div>
+            <h3>Money</h3>
+            <p>Compare expected sales totals with the actual cash and SumUp floats.</p>
+          </div>
+        </div>
+
+        <div class="admin-grid">
+          <article class="admin-card">
+            <span>Expected cash</span>
+            <strong id="moneyExpectedCash">GBP 0.00</strong>
+          </article>
+          <article class="admin-card">
+            <span>Actual cash</span>
+            <strong id="moneyActualCash">GBP 0.00</strong>
+          </article>
+          <article class="admin-card">
+            <span>Expected SumUp</span>
+            <strong id="moneyExpectedSumup">GBP 0.00</strong>
+          </article>
+          <article class="admin-card">
+            <span>Actual SumUp</span>
+            <strong id="moneyActualSumup">GBP 0.00</strong>
+          </article>
+        </div>
+
+        <div class="split-layout">
+          <section class="panel-block">
+            <h4>Cash float</h4>
+            <p>Expected cash from cash sales and the current till total.</p>
+            <div class="form-readout">
+              <span>Difference</span>
+              <strong id="moneyCashDifference">GBP 0.00</strong>
+            </div>
+            <div class="modal-actions">
+              <button type="button" id="enterCashButton" class="primary-button">Enter cash</button>
+              <button type="button" id="removeCashButton" class="danger-button">Remove cash</button>
+            </div>
+          </section>
+
+          <section class="panel-block">
+            <h4>SumUp float</h4>
+            <p>Expected SumUp income and the amount seen on the reader.</p>
+            <div class="form-readout">
+              <span>Difference</span>
+              <strong id="moneySumupDifference">GBP 0.00</strong>
+            </div>
+            <div class="modal-actions">
+              <button type="button" id="fetchSumupButton" class="secondary-button">Fetch from API</button>
+              <button type="button" id="enterSumupButton" class="primary-button">Enter SumUp total</button>
+              <button type="button" id="removeSumupButton" class="danger-button">Remove SumUp</button>
+            </div>
+          </section>
+        </div>
+
+        <div id="moneyAlert" class="alert-card is-hidden success" aria-live="polite"></div>
       </section>
 
       <section class="tab-panel is-hidden" id="adminTab" data-panel="admin">
@@ -1416,6 +1525,35 @@ tbody tr:last-child td {
     </form>
   </dialog>
 
+  <dialog id="moneyInputDialog" class="modal">
+    <form id="moneyInputForm" method="dialog">
+      <h3 id="moneyInputTitle">Enter amount</h3>
+      <div class="quantity-keypad-panel">
+        <div id="moneyInputDisplay" class="quantity-display">GBP 0.00</div>
+        <div class="keypad-grid">
+          <button type="button" class="keypad-button" data-key="1">1</button>
+          <button type="button" class="keypad-button" data-key="2">2</button>
+          <button type="button" class="keypad-button" data-key="3">3</button>
+          <button type="button" class="keypad-button" data-key="4">4</button>
+          <button type="button" class="keypad-button" data-key="5">5</button>
+          <button type="button" class="keypad-button" data-key="6">6</button>
+          <button type="button" class="keypad-button" data-key="7">7</button>
+          <button type="button" class="keypad-button" data-key="8">8</button>
+          <button type="button" class="keypad-button" data-key="9">9</button>
+          <button type="button" class="keypad-button keypad-action" data-action="clear">Clear</button>
+          <button type="button" class="keypad-button" data-key="0">0</button>
+          <button type="button" class="keypad-button keypad-action" data-action="backspace">⌫</button>
+          <button type="button" class="keypad-button keypad-action" data-action="decimal" style="grid-column: span 2;">.</button>
+        </div>
+      </div>
+      <input id="moneyInputValue" type="hidden" inputmode="decimal" required>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" id="cancelMoneyInputButton">Cancel</button>
+        <button type="submit" class="primary-button">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+
   <script>
 (() => {
   const STORAGE_KEY = "tuck-shop-manager-v1";
@@ -1433,6 +1571,8 @@ tbody tr:last-child td {
     role: "admin",
     password: "20111606"
   };
+
+  const MONEY_REMOVE_CODE = "CASHOUT";
 
   const money = new Intl.NumberFormat("en-GB", {
     style: "currency",
@@ -1452,6 +1592,7 @@ tbody tr:last-child td {
   let basket = [];
   let pendingSaleDraft = null;
   let toastTimer;
+  let pendingMoneyAction = null;
 
   const elements = {};
 
@@ -1503,6 +1644,7 @@ tbody tr:last-child td {
     elements.adminSectionTitle = document.querySelector("#adminSectionTitle");
     elements.eventBanner = document.querySelector("#eventBanner");
     elements.eventsList = document.querySelector("#eventsList");
+    elements.pastEventsTableBody = document.querySelector("#pastEventsTableBody");
     elements.eventForm = document.querySelector("#eventForm");
     elements.eventId = document.querySelector("#eventId");
     elements.eventName = document.querySelector("#eventName");
@@ -1545,6 +1687,12 @@ tbody tr:last-child td {
     elements.passwordForm = document.querySelector("#passwordForm");
     elements.passwordUser = document.querySelector("#passwordUser");
     elements.passwordValue = document.querySelector("#passwordValue");
+    elements.enterCashButton = document.querySelector("#enterCashButton");
+    elements.removeCashButton = document.querySelector("#removeCashButton");
+    elements.enterSumupButton = document.querySelector("#enterSumupButton");
+    elements.removeSumupButton = document.querySelector("#removeSumupButton");
+    elements.fetchSumupButton = document.querySelector("#fetchSumupButton");
+    elements.moneyAlert = document.querySelector("#moneyAlert");
     elements.peopleProfitBody = document.querySelector("#peopleProfitBody");
     elements.usersTableBody = document.querySelector("#usersTableBody");
     elements.salesLogBody = document.querySelector("#salesLogBody");
@@ -1557,6 +1705,12 @@ tbody tr:last-child td {
 
     elements.exportButton = document.querySelector("#exportButton");
     elements.importInput = document.querySelector("#importInput");
+    elements.moneyInputDialog = document.querySelector("#moneyInputDialog");
+    elements.moneyInputForm = document.querySelector("#moneyInputForm");
+    elements.moneyInputTitle = document.querySelector("#moneyInputTitle");
+    elements.moneyInputDisplay = document.querySelector("#moneyInputDisplay");
+    elements.moneyInputValue = document.querySelector("#moneyInputValue");
+    elements.cancelMoneyInputButton = document.querySelector("#cancelMoneyInputButton");
   }
 
   function bindEvents() {
@@ -1602,6 +1756,11 @@ tbody tr:last-child td {
 
     elements.createUserForm.addEventListener("submit", handleCreateUser);
     elements.passwordForm.addEventListener("submit", handlePasswordChange);
+    elements.enterCashButton.addEventListener("click", () => enterCashAmount());
+    elements.removeCashButton.addEventListener("click", () => removeCashAmount());
+    elements.enterSumupButton.addEventListener("click", () => enterSumUpAmount());
+    elements.removeSumupButton.addEventListener("click", () => removeSumUpAmount());
+    elements.fetchSumupButton.addEventListener("click", () => fetchSumUpAmountFromApi());
     elements.usersTableBody.addEventListener("click", handleUserAction);
     elements.selfDestructButton.addEventListener("click", () => {
       elements.resetConfirm.value = "";
@@ -1610,6 +1769,10 @@ tbody tr:last-child td {
     });
     elements.resetForm.addEventListener("submit", handleSelfDestruct);
     elements.cancelResetButton.addEventListener("click", () => closeModal(elements.resetDialog));
+
+    elements.moneyInputForm.addEventListener("submit", handleMoneyInputSubmit);
+    elements.cancelMoneyInputButton.addEventListener("click", () => closeModal(elements.moneyInputDialog));
+    elements.moneyInputDialog.addEventListener("click", handleMoneyKeypadInput);
 
     elements.exportButton.addEventListener("click", exportBackup);
     elements.importInput.addEventListener("change", importBackup);
@@ -1659,6 +1822,17 @@ tbody tr:last-child td {
         sales: 0,
         unitsSold: 0
       },
+      money: {
+        cash: {
+          actual: 0,
+          lastUpdatedAt: null
+        },
+        sumup: {
+          actual: 0,
+          expectedAdjustment: 0,
+          lastUpdatedAt: null
+        }
+      },
       meta: {
         createdAt: new Date().toISOString(),
         lastSelfDestructAt: null
@@ -1697,6 +1871,17 @@ tbody tr:last-child td {
     next.lifetime = {
       ...next.lifetime,
       ...(value.lifetime && typeof value.lifetime === "object" ? value.lifetime : {})
+    };
+    next.money = {
+      cash: {
+        actual: Number(value.money?.cash?.actual || 0),
+        lastUpdatedAt: value.money?.cash?.lastUpdatedAt || null
+      },
+      sumup: {
+        actual: Number(value.money?.sumup?.actual || 0),
+        expectedAdjustment: Number(value.money?.sumup?.expectedAdjustment || 0),
+        lastUpdatedAt: value.money?.sumup?.lastUpdatedAt || null
+      }
     };
     next.meta = {
       ...next.meta,
@@ -1866,14 +2051,15 @@ tbody tr:last-child td {
     renderSellGrid();
     renderEvents();
     renderEventBanner();
+    renderMoneyTab();
     renderAdmin();
   }
 
   function setActiveTab(tab, render = true) {
-    if (isBackdoor() && tab !== "admin") {
+    if (isBackdoor() && tab !== "admin" && tab !== "money") {
       tab = "admin";
     }
-    if (tab === "admin" && !isAdmin()) {
+    if ((tab === "admin" || tab === "money") && !isAdmin()) {
       tab = "sell";
     }
     activeTab = tab;
@@ -1882,6 +2068,7 @@ tbody tr:last-child td {
       stock: "Stock Management",
       sell: "Selling",
       events: "Events",
+      money: "Money",
       admin: isBackdoor() ? "Backdoor access" : "Admin"
     };
     elements.pageTitle.textContent = titles[tab] || "Tuck Shop";
@@ -1917,11 +2104,220 @@ tbody tr:last-child td {
     elements.lifetimeProfit.textContent = money.format(roundMoney(store.lifetime.profit));
   }
 
+  function getExpectedMoneyBreakdown() {
+    const cashExpected = store.sales
+      .filter((sale) => sale.paymentMethod === "cash")
+      .reduce((sum, sale) => sum + Number(sale.revenue || 0), 0);
+
+    const sumupExpectedFromSales = store.sales
+      .filter((sale) => sale.paymentMethod === "sumup")
+      .reduce((sum, sale) => sum + Number(sale.revenue || 0), 0);
+
+    const sumupAdjustment = Number(store.money?.sumup?.expectedAdjustment || 0);
+    const sumupExpected = Math.max(0, roundMoney(sumupExpectedFromSales - sumupAdjustment));
+
+    return {
+      cashExpected: roundMoney(cashExpected),
+      sumupExpected,
+      totalExpected: roundMoney(cashExpected + sumupExpected)
+    };
+  }
+
+  function renderMoneyTab() {
+    if (!elements.moneyAlert) {
+      return;
+    }
+
+    const expected = getExpectedMoneyBreakdown();
+    const actualCash = Number(store.money?.cash?.actual || 0);
+    const actualSumup = Number(store.money?.sumup?.actual || 0);
+    const cashDifference = roundMoney(actualCash - expected.cashExpected);
+    const sumupDifference = roundMoney(actualSumup - expected.sumupExpected);
+    const totalDifference = roundMoney((actualCash + actualSumup) - expected.totalExpected);
+
+    document.getElementById("moneyExpectedCash").textContent = money.format(expected.cashExpected);
+    document.getElementById("moneyActualCash").textContent = money.format(actualCash);
+    document.getElementById("moneyExpectedSumup").textContent = money.format(expected.sumupExpected);
+    document.getElementById("moneyActualSumup").textContent = money.format(actualSumup);
+    document.getElementById("moneyCashDifference").textContent = money.format(cashDifference);
+    document.getElementById("moneySumupDifference").textContent = money.format(sumupDifference);
+
+    const alertText = totalDifference === 0
+      ? "Money matches the recorded sales totals."
+      : `Money does not match. Total difference is ${money.format(totalDifference)}.`;
+
+    elements.moneyAlert.textContent = alertText;
+    elements.moneyAlert.classList.toggle("is-hidden", totalDifference === 0);
+    elements.moneyAlert.classList.toggle("success", totalDifference === 0);
+    elements.moneyAlert.classList.toggle("warning", totalDifference !== 0);
+  }
+
+  function normaliseMoney(value) {
+    const numeric = Number(value || 0);
+    return Number.isFinite(numeric) ? roundMoney(Math.max(0, numeric)) : 0;
+  }
+
+  function enterCashAmount() {
+    const nextValue = window.prompt("Enter the actual cash in the till.", String(store.money?.cash?.actual || 0));
+    if (nextValue === null) {
+      return;
+    }
+
+    const numericValue = normaliseMoney(nextValue);
+    store.money = store.money || { cash: { actual: 0 }, sumup: { actual: 0 } };
+    store.money.cash = store.money.cash || { actual: 0 };
+    store.money.cash.actual = numericValue;
+    store.money.cash.lastUpdatedAt = new Date().toISOString();
+    saveStore();
+    renderMoneyTab();
+    showToast(`Cash total updated to ${money.format(numericValue)}.`);
+  }
+
+  function removeCashAmount() {
+    const enteredCode = window.prompt("Type the code to remove cash from the till.", "");
+    if (enteredCode === null) {
+      return;
+    }
+
+    if (enteredCode.trim().toUpperCase() !== MONEY_REMOVE_CODE) {
+      showToast("Invalid removal code.");
+      return;
+    }
+
+    pendingMoneyAction = "removeCash";
+    elements.moneyInputTitle.textContent = "Remove cash from till";
+    elements.moneyInputValue.value = "";
+    elements.moneyInputDisplay.textContent = "GBP 0.00";
+    elements.moneyInputForm.querySelector("button[type='submit']").textContent = "Remove";
+    openModal(elements.moneyInputDialog);
+  }
+
+  function enterSumUpAmount() {
+    const nextValue = window.prompt("Enter the actual SumUp amount.", String(store.money?.sumup?.actual || 0));
+    if (nextValue === null) {
+      return;
+    }
+
+    const numericValue = normaliseMoney(nextValue);
+    store.money = store.money || { cash: { actual: 0 }, sumup: { actual: 0 } };
+    store.money.sumup = store.money.sumup || { actual: 0 };
+    store.money.sumup.actual = numericValue;
+    store.money.sumup.lastUpdatedAt = new Date().toISOString();
+    saveStore();
+    renderMoneyTab();
+    showToast(`SumUp total updated to ${money.format(numericValue)}.`);
+  }
+
+  function removeSumUpAmount() {
+    pendingMoneyAction = "removeSumUp";
+    elements.moneyInputTitle.textContent = "Remove from expected SumUp";
+    elements.moneyInputValue.value = "";
+    elements.moneyInputDisplay.textContent = "GBP 0.00";
+    elements.moneyInputForm.querySelector("button[type='submit']").textContent = "Remove";
+    openModal(elements.moneyInputDialog);
+  }
+
+  function handleMoneyKeypadInput(event) {
+    const button = event.target.closest("button[data-key], button[data-action]");
+    if (!button) {
+      return;
+    }
+
+    const action = button.dataset.action;
+    const digit = button.dataset.key;
+    let currentValue = String(elements.moneyInputValue.value || "");
+
+    let nextValue = currentValue;
+    if (action === "clear") {
+      nextValue = "";
+    } else if (action === "backspace") {
+      nextValue = currentValue.length > 0 ? currentValue.slice(0, -1) : "";
+    } else if (action === "decimal") {
+      if (!currentValue.includes(".")) {
+        nextValue = currentValue === "" ? "0." : currentValue + ".";
+      }
+    } else if (digit !== undefined) {
+      nextValue = currentValue === "0" || currentValue === "" ? digit : currentValue + digit;
+    }
+
+    elements.moneyInputValue.value = nextValue;
+    const numericValue = nextValue ? normaliseMoney(nextValue) : 0;
+    elements.moneyInputDisplay.textContent = money.format(roundMoney(numericValue));
+  }
+
+  function handleMoneyInputSubmit(event) {
+    event.preventDefault();
+    const value = normaliseMoney(elements.moneyInputValue.value);
+
+    if (pendingMoneyAction === "removeCash") {
+      store.money = store.money || { cash: { actual: 0 }, sumup: { actual: 0, expectedAdjustment: 0 } };
+      store.money.cash = store.money.cash || { actual: 0 };
+      const updatedValue = Math.max(0, normaliseMoney(store.money.cash.actual) - value);
+      store.money.cash.actual = updatedValue;
+      store.money.cash.lastUpdatedAt = new Date().toISOString();
+      saveStore();
+      renderMoneyTab();
+      showToast(`Cash removed. Till now holds ${money.format(updatedValue)}.`);
+    } else if (pendingMoneyAction === "removeSumUp") {
+      store.money = store.money || { cash: { actual: 0 }, sumup: { actual: 0, expectedAdjustment: 0 } };
+      store.money.sumup = store.money.sumup || { actual: 0, expectedAdjustment: 0 };
+      const currentAdjustment = Number(store.money.sumup.expectedAdjustment || 0);
+      store.money.sumup.expectedAdjustment = roundMoney(currentAdjustment + value);
+      store.money.sumup.lastUpdatedAt = new Date().toISOString();
+      const expected = getExpectedMoneyBreakdown();
+      const actualTotal = Number(store.money.cash.actual || 0) + Number(store.money.sumup.actual || 0);
+      const totalDifference = roundMoney(actualTotal - expected.totalExpected);
+      saveStore();
+      renderMoneyTab();
+      showToast(`Expected SumUp reduced by ${money.format(value)}. Difference is ${money.format(totalDifference)}.`);
+    }
+
+    pendingMoneyAction = null;
+    closeModal(elements.moneyInputDialog);
+  }
+
+  async function fetchSumUpAmountFromApi() {
+    const endpoint = (window.SUMUP_API_URL || "").trim();
+    if (!endpoint) {
+      showToast("Set window.SUMUP_API_URL to a SumUp reporting endpoint before fetching the total.");
+      return;
+    }
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "GET",
+        headers: { "Accept": "application/json" }
+      });
+
+      if (!response.ok) {
+        throw new Error(`SumUp API returned ${response.status}`);
+      }
+
+      const payload = await response.json();
+      const total = Number(payload?.total ?? payload?.amount ?? payload?.gross ?? 0);
+      if (!Number.isFinite(total)) {
+        throw new Error("SumUp response did not include a valid total value.");
+      }
+
+      store.money = store.money || { cash: { actual: 0 }, sumup: { actual: 0 } };
+      store.money.sumup = store.money.sumup || { actual: 0 };
+      store.money.sumup.actual = roundMoney(total);
+      store.money.sumup.lastUpdatedAt = new Date().toISOString();
+      saveStore();
+      renderMoneyTab();
+      showToast(`SumUp total synced from the API: ${money.format(store.money.sumup.actual)}.`);
+    } catch (error) {
+      console.error("SumUp API sync failed", error);
+      showToast("Could not sync the SumUp amount from the configured API endpoint.");
+    }
+  }
+
   function renderEvents() {
     const events = [...store.events].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
 
     if (!events.length) {
       elements.eventsList.innerHTML = `<div class="empty-state">No events yet. Admins can add one from the form above.</div>`;
+      elements.pastEventsTableBody.innerHTML = `<tr><td colspan="6" class="empty-state">No past events yet.</td></tr>`;
       return;
     }
 
@@ -1952,6 +2348,29 @@ tbody tr:last-child td {
             </div>
           ` : ""}
         </article>
+      `;
+    }).join("");
+
+    const pastEvents = [...store.events]
+      .filter((event) => getEventStatus(event) === "ended")
+      .sort((a, b) => new Date(b.startAt) - new Date(a.startAt));
+
+    if (!pastEvents.length) {
+      elements.pastEventsTableBody.innerHTML = `<tr><td colspan="6" class="empty-state">No past events yet.</td></tr>`;
+      return;
+    }
+
+    elements.pastEventsTableBody.innerHTML = pastEvents.map((event) => {
+      const summary = event.summary || { sales: 0, units: 0, revenue: 0, profit: 0 };
+      return `
+        <tr>
+          <td>${escapeHtml(event.name)}</td>
+          <td>${escapeHtml(event.location)}</td>
+          <td>${formatDate(event.startAt)}</td>
+          <td>${summary.sales}</td>
+          <td>${money.format(roundMoney(summary.revenue))}</td>
+          <td>${money.format(roundMoney(summary.profit))}</td>
+        </tr>
       `;
     }).join("");
   }
