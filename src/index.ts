@@ -15,6 +15,11 @@ interface StoreDocument {
     sales: number;
     unitsSold: number;
   };
+  apiConfig: {
+    sumupApiUrl: string;
+    sumupApiKey: string;
+    sumupMerchantCode: string;
+  };
   meta: {
     createdAt: string;
     lastSelfDestructAt: string | null;
@@ -107,6 +112,11 @@ function blankStore(): StoreDocument {
       sales: 0,
       unitsSold: 0,
     },
+    apiConfig: {
+      sumupApiUrl: "",
+      sumupApiKey: "",
+      sumupMerchantCode: "",
+    },
     meta: {
       createdAt: new Date().toISOString(),
       lastSelfDestructAt: null,
@@ -129,6 +139,10 @@ function normalizeStore(store: unknown): StoreDocument {
     lifetime: {
       ...base.lifetime,
       ...(source.lifetime ?? {}),
+    },
+    apiConfig: {
+      ...base.apiConfig,
+      ...(source.apiConfig ?? {}),
     },
     meta: {
       ...base.meta,
@@ -176,6 +190,43 @@ export default {
       } catch (error) {
         console.error("save failed", error);
         return jsonResponse({ error: "Invalid JSON body" }, 400);
+      }
+    }
+
+    // SumUp transaction history proxy (avoids browser CORS)
+    if (request.method === "GET" && url.pathname === "/api/sumup/transactions") {
+      const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
+      const normalized = normalizeStore(store);
+      const apiKey = (normalized.apiConfig?.sumupApiKey || "").trim();
+      const merchantCode = (normalized.apiConfig?.sumupMerchantCode || "").trim();
+
+      if (!apiKey || !merchantCode) {
+        return jsonResponse({ error: "SumUp API key or merchant code not configured." }, 400);
+      }
+
+      const oldestTime = url.searchParams.get("oldest_time") || "";
+      const sumupUrl = new URL(`https://api.sumup.com/v2.1/merchants/${merchantCode}/transactions/history`);
+      if (oldestTime) {
+        sumupUrl.searchParams.set("oldest_time", oldestTime);
+      }
+
+      try {
+        const response = await fetch(sumupUrl.toString(), {
+          method: "GET",
+          headers: {
+            "Accept": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
+          },
+        });
+
+        const body = await response.text();
+        return new Response(body, {
+          status: response.status,
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (error) {
+        console.error("SumUp proxy error:", error);
+        return jsonResponse({ error: "Failed to reach SumUp API." }, 502);
       }
     }
 

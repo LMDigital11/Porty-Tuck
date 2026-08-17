@@ -1297,6 +1297,44 @@ tbody tr:last-child td {
           </section>
         </div>
 
+        <section class="panel-block">
+          <h4>SumUp API</h4>
+          <p>Configure and test a SumUp reporting endpoint to auto-fetch totals.</p>
+          <div class="form-readout">
+            <span>Current endpoint</span>
+            <strong id="sumupApiCurrentUrl">Not configured</strong>
+          </div>
+          <div id="sumupApiStatus" class="alert-card is-hidden" aria-live="polite"></div>
+          <div class="modal-actions">
+            <button type="button" id="configureSumupApiButton" class="primary-button">Configure API URL</button>
+            <button type="button" id="testSumupApiButton" class="secondary-button">Test connection</button>
+          </div>
+        </section>
+
+        <section class="panel-block">
+          <div class="section-heading tight">
+            <div>
+              <h4>Pending SumUp Sales</h4>
+              <p>Sales waiting for SumUp API confirmation. Stock is held until confirmed.</p>
+            </div>
+            <button type="button" id="pollSumupButton" class="secondary-button">Check for payments</button>
+          </div>
+          <div id="pendingSumupList" class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Items</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="pendingSumupBody"></tbody>
+            </table>
+          </div>
+        </section>
+
         <div id="moneyAlert" class="alert-card is-hidden success" aria-live="polite"></div>
       </section>
 
@@ -1554,6 +1592,31 @@ tbody tr:last-child td {
     </form>
   </dialog>
 
+  <dialog id="sumupApiDialog" class="modal">
+    <form id="sumupApiForm" method="dialog">
+      <h3>SumUp API Configuration</h3>
+      <p>Enter the full URL for a SumUp reporting endpoint that returns JSON with a total/amount/gross field.</p>
+      <label>
+        API URL
+        <input id="sumupApiUrlInput" type="url" placeholder="https://api.sumup.com/v0.1/..." autocomplete="off">
+      </label>
+      <label>
+        API Key
+        <input id="sumupApiKeyInput" type="password" placeholder="sk_live_..." autocomplete="off">
+      </label>
+      <label>
+        Merchant Code
+        <input id="sumupMerchantCodeInput" type="text" placeholder="MH4H92C7" autocomplete="off">
+      </label>
+      <div id="sumupApiTestResult" class="alert-card is-hidden" aria-live="polite"></div>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" id="cancelSumupApiButton">Cancel</button>
+        <button type="button" class="secondary-button" id="testSumupApiDialogButton">Test</button>
+        <button type="submit" class="primary-button">Save</button>
+      </div>
+    </form>
+  </dialog>
+
   <script>
 (() => {
   const STORAGE_KEY = "tuck-shop-manager-v1";
@@ -1711,6 +1774,20 @@ tbody tr:last-child td {
     elements.moneyInputDisplay = document.querySelector("#moneyInputDisplay");
     elements.moneyInputValue = document.querySelector("#moneyInputValue");
     elements.cancelMoneyInputButton = document.querySelector("#cancelMoneyInputButton");
+    elements.sumupApiDialog = document.querySelector("#sumupApiDialog");
+    elements.sumupApiForm = document.querySelector("#sumupApiForm");
+    elements.sumupApiUrlInput = document.querySelector("#sumupApiUrlInput");
+    elements.sumupApiKeyInput = document.querySelector("#sumupApiKeyInput");
+    elements.sumupMerchantCodeInput = document.querySelector("#sumupMerchantCodeInput");
+    elements.sumupApiTestResult = document.querySelector("#sumupApiTestResult");
+    elements.cancelSumupApiButton = document.querySelector("#cancelSumupApiButton");
+    elements.testSumupApiDialogButton = document.querySelector("#testSumupApiDialogButton");
+    elements.configureSumupApiButton = document.querySelector("#configureSumupApiButton");
+    elements.testSumupApiButton = document.querySelector("#testSumupApiButton");
+    elements.sumupApiCurrentUrl = document.querySelector("#sumupApiCurrentUrl");
+    elements.sumupApiStatus = document.querySelector("#sumupApiStatus");
+    elements.pendingSumupBody = document.querySelector("#pendingSumupBody");
+    elements.pollSumupButton = document.querySelector("#pollSumupButton");
   }
 
   function bindEvents() {
@@ -1774,6 +1851,14 @@ tbody tr:last-child td {
     elements.cancelMoneyInputButton.addEventListener("click", () => closeModal(elements.moneyInputDialog));
     elements.moneyInputDialog.addEventListener("click", handleMoneyKeypadInput);
 
+    elements.configureSumupApiButton.addEventListener("click", openSumupApiConfig);
+    elements.testSumupApiButton.addEventListener("click", () => testSumupApiFromPanel());
+    elements.cancelSumupApiButton.addEventListener("click", () => closeModal(elements.sumupApiDialog));
+    elements.testSumupApiDialogButton.addEventListener("click", () => testSumupApiFromDialog());
+    elements.sumupApiForm.addEventListener("submit", handleSaveSumupApiUrl);
+    elements.pollSumupButton.addEventListener("click", pollSumupTransactions);
+    elements.pendingSumupBody.addEventListener("click", handlePendingSumupAction);
+
     elements.exportButton.addEventListener("click", exportBackup);
     elements.importInput.addEventListener("change", importBackup);
   }
@@ -1833,6 +1918,11 @@ tbody tr:last-child td {
           lastUpdatedAt: null
         }
       },
+      apiConfig: {
+        sumupApiUrl: "",
+        sumupApiKey: "",
+        sumupMerchantCode: ""
+      },
       meta: {
         createdAt: new Date().toISOString(),
         lastSelfDestructAt: null
@@ -1882,6 +1972,11 @@ tbody tr:last-child td {
         expectedAdjustment: Number(value.money?.sumup?.expectedAdjustment || 0),
         lastUpdatedAt: value.money?.sumup?.lastUpdatedAt || null
       }
+    };
+    next.apiConfig = {
+      sumupApiUrl: String(value.apiConfig?.sumupApiUrl || ""),
+      sumupApiKey: String(value.apiConfig?.sumupApiKey || ""),
+      sumupMerchantCode: String(value.apiConfig?.sumupMerchantCode || "")
     };
     next.meta = {
       ...next.meta,
@@ -2150,6 +2245,9 @@ tbody tr:last-child td {
     elements.moneyAlert.classList.toggle("is-hidden", totalDifference === 0);
     elements.moneyAlert.classList.toggle("success", totalDifference === 0);
     elements.moneyAlert.classList.toggle("warning", totalDifference !== 0);
+
+    renderSumupApiConfig();
+    renderPendingSumupSales();
   }
 
   function normaliseMoney(value) {
@@ -2277,16 +2375,24 @@ tbody tr:last-child td {
   }
 
   async function fetchSumUpAmountFromApi() {
-    const endpoint = (window.SUMUP_API_URL || "").trim();
+    const endpoint = (store.apiConfig?.sumupApiUrl || "").trim();
+    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
     if (!endpoint) {
-      showToast("Set window.SUMUP_API_URL to a SumUp reporting endpoint before fetching the total.");
+      showToast("No SumUp API URL configured. Click Configure API URL in the Money tab.");
+      return;
+    }
+    if (!apiKey) {
+      showToast("No SumUp API key configured. Click Configure API URL and enter your key.");
       return;
     }
 
     try {
       const response = await fetch(endpoint, {
         method: "GET",
-        headers: { "Accept": "application/json" }
+        headers: {
+          "Accept": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        }
       });
 
       if (!response.ok) {
@@ -2310,6 +2416,315 @@ tbody tr:last-child td {
       console.error("SumUp API sync failed", error);
       showToast("Could not sync the SumUp amount from the configured API endpoint.");
     }
+  }
+
+  function renderSumupApiConfig() {
+    const url = (store.apiConfig?.sumupApiUrl || "").trim();
+    const hasKey = Boolean((store.apiConfig?.sumupApiKey || "").trim());
+    if (!url) {
+      elements.sumupApiCurrentUrl.textContent = "Not configured";
+    } else if (!hasKey) {
+      elements.sumupApiCurrentUrl.textContent = url + " (no API key)";
+    } else {
+      elements.sumupApiCurrentUrl.textContent = url + " (key set)";
+    }
+  }
+
+  function getPendingSumupSales() {
+    return store.sales.filter((sale) => sale.paymentMethod === "sumup" && sale.paymentStatus === "pending");
+  }
+
+  function renderPendingSumupSales() {
+    const pending = getPendingSumupSales();
+    if (!pending.length) {
+      elements.pendingSumupBody.innerHTML = `<tr><td colspan="5" class="empty-state">No pending SumUp sales.</td></tr>`;
+      return;
+    }
+    elements.pendingSumupBody.innerHTML = pending.map((sale) => {
+      const itemNames = sale.itemName || "Unknown";
+      return `
+        <tr>
+          <td>${formatDate(sale.createdAt)}</td>
+          <td>${escapeHtml(itemNames)} × ${sale.quantity}</td>
+          <td>${money.format(roundMoney(sale.revenue))}</td>
+          <td><span class="badge warning">Pending</span></td>
+          <td>
+            <div class="actions-row">
+              <button type="button" class="icon-button sell-action" data-confirm-sale-id="${sale.id}" title="Confirm payment received">Confirm</button>
+              <button type="button" class="icon-button" data-cancel-sale-id="${sale.id}" title="Cancel this sale">Cancel</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  function handlePendingSumupAction(event) {
+    const confirmButton = event.target.closest("button[data-confirm-sale-id]");
+    if (confirmButton) {
+      confirmSumupSale(confirmButton.dataset.confirmSaleId);
+      return;
+    }
+    const cancelButton = event.target.closest("button[data-cancel-sale-id]");
+    if (cancelButton) {
+      cancelPendingSumupSale(cancelButton.dataset.cancelSaleId);
+    }
+  }
+
+  function confirmSumupSale(saleId) {
+    const sale = store.sales.find((s) => s.id === saleId);
+    if (!sale || sale.paymentMethod !== "sumup" || sale.paymentStatus !== "pending") {
+      showToast("Sale not found or already processed.");
+      return;
+    }
+
+    const item = findItem(sale.itemId);
+    if (!item) {
+      showToast(`Item "${sale.itemName}" no longer exists in stock. Cannot deduct.`);
+      return;
+    }
+
+    if (item.quantity < sale.quantity) {
+      showToast(`Not enough stock for ${item.name}. Need ${sale.quantity}, have ${item.quantity}.`);
+      return;
+    }
+
+    item.quantity -= sale.quantity;
+    item.updatedAt = new Date().toISOString();
+    sale.paymentStatus = "paid";
+    sale.confirmedAt = new Date().toISOString();
+    sale.confirmedBy = currentUser.id;
+
+    store.lifetime.revenue = roundMoney(store.lifetime.revenue + sale.revenue);
+    store.lifetime.cost = roundMoney(store.lifetime.cost + sale.cost);
+    store.lifetime.profit = roundMoney(store.lifetime.profit + sale.profit);
+    store.lifetime.sales += 1;
+    store.lifetime.unitsSold += sale.quantity;
+    recordSaleForActiveEvent(sale);
+
+    saveStore();
+    renderPendingSumupSales();
+    renderAll();
+    showToast(`SumUp sale confirmed. Stock deducted. Profit: ${money.format(sale.profit)}.`);
+  }
+
+  function cancelPendingSumupSale(saleId) {
+    const sale = store.sales.find((s) => s.id === saleId);
+    if (!sale || sale.paymentStatus !== "pending") {
+      return;
+    }
+    if (!window.confirm(`Cancel this pending SumUp sale of ${money.format(sale.revenue)}?`)) {
+      return;
+    }
+    store.sales = store.sales.filter((s) => s.id !== saleId);
+    saveStore();
+    renderPendingSumupSales();
+    renderMoneyTab();
+    showToast("Pending sale cancelled.");
+  }
+
+  async function pollSumupTransactions() {
+    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
+    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
+    if (!apiKey || !merchantCode) {
+      showToast("Configure your SumUp API key and merchant code first.");
+      return;
+    }
+
+    const pending = getPendingSumupSales();
+    if (!pending.length) {
+      showToast("No pending SumUp sales to check.");
+      return;
+    }
+
+    const oldestTime = pending.reduce((oldest, sale) => {
+      const t = new Date(sale.createdAt).toISOString();
+      return !oldest || t < oldest ? t : oldest;
+    }, "");
+
+    elements.pollSumupButton.disabled = true;
+    elements.pollSumupButton.textContent = "Checking...";
+
+    try {
+      const params = new URLSearchParams();
+      if (oldestTime) {
+        params.set("oldest_time", oldestTime);
+      }
+      const response = await fetch(`${API_URL}/sumup/transactions?${params.toString()}`);
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        showToast(err.error || `API returned ${response.status}`);
+        return;
+      }
+
+      const data = await response.json();
+      const items = data?.items || [];
+      let confirmed = 0;
+
+      for (const sale of pending) {
+        if (sale.paymentStatus !== "pending") {
+          continue;
+        }
+        const saleTime = new Date(sale.createdAt).getTime();
+        const match = items.find((tx) => {
+          if (tx.simple_status !== "successful" && tx.simple_status !== "settled") {
+            return false;
+          }
+          const txAmount = Math.round(Number(tx.amount) * 100) / 100;
+          if (Math.abs(txAmount - sale.revenue) > 0.01) {
+            return false;
+          }
+          const txTime = new Date(tx.timestamp).getTime();
+          const diff = Math.abs(txTime - saleTime);
+          return diff < 5 * 60 * 1000;
+        });
+
+        if (match) {
+          confirmSumupSale(sale.id);
+          confirmed++;
+        }
+      }
+
+      if (confirmed > 0) {
+        showToast(`${confirmed} sale${confirmed === 1 ? "" : "s"} confirmed from SumUp API.`);
+      } else {
+        showToast("No matching SumUp transactions found yet. Try again after payment completes.");
+      }
+    } catch (error) {
+      console.error("SumUp poll failed:", error);
+      showToast("Failed to check SumUp transactions.");
+    } finally {
+      elements.pollSumupButton.disabled = false;
+      elements.pollSumupButton.textContent = "Check for payments";
+    }
+  }
+
+  function openSumupApiConfig() {
+    const url = store.apiConfig?.sumupApiUrl || "";
+    const apiKey = store.apiConfig?.sumupApiKey || "";
+    const merchantCode = store.apiConfig?.sumupMerchantCode || "";
+    elements.sumupApiUrlInput.value = url;
+    elements.sumupApiKeyInput.value = apiKey;
+    elements.sumupMerchantCodeInput.value = merchantCode;
+    elements.sumupApiTestResult.classList.add("is-hidden");
+    elements.sumupApiTestResult.textContent = "";
+    openModal(elements.sumupApiDialog);
+    setTimeout(() => elements.sumupApiUrlInput.focus(), 0);
+  }
+
+  async function testSumupApi(url, apiKey) {
+    if (!url) {
+      return { ok: false, message: "No URL configured. Enter an API endpoint first." };
+    }
+    if (!apiKey) {
+      return { ok: false, message: "No API key provided. Enter your SumUp API key (sk_test_... or sk_live_...)." };
+    }
+
+    const headers = { "Accept": "application/json" };
+    if (apiKey) {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+
+    let response;
+    try {
+      response = await fetch(url, {
+        method: "GET",
+        headers
+      });
+    } catch (error) {
+      return { ok: false, message: `Connection failed: ${error.message || "Network error"}` };
+    }
+
+    if (response.status === 401) {
+      return { ok: false, message: "Authentication failed. The API key is invalid or expired." };
+    }
+    if (response.status === 403) {
+      return { ok: false, message: "Forbidden. The API key does not have permission for this endpoint." };
+    }
+    if (!response.ok) {
+      return { ok: false, message: `API returned HTTP ${response.status} ${response.statusText}` };
+    }
+
+    let payload;
+    try {
+      payload = await response.json();
+    } catch (error) {
+      return { ok: false, message: "Response is not valid JSON." };
+    }
+
+    const total = Number(payload?.total ?? payload?.amount ?? payload?.gross ?? 0);
+    if (!Number.isFinite(total)) {
+      return { ok: false, message: "Connected, but the response JSON does not contain a total/amount/gross number field." };
+    }
+
+    return { ok: true, message: `Connected successfully. Returned total: ${money.format(roundMoney(total))}` };
+  }
+
+  function showApiTestResult(container, result) {
+    container.textContent = result.message;
+    container.classList.remove("is-hidden", "success", "warning");
+    container.classList.add(result.ok ? "success" : "warning");
+  }
+
+  async function testSumupApiFromDialog() {
+    const url = elements.sumupApiUrlInput.value.trim();
+    const apiKey = elements.sumupApiKeyInput.value.trim();
+    elements.sumupApiTestResult.textContent = "Testing connection...";
+    elements.sumupApiTestResult.classList.remove("is-hidden", "success", "warning");
+    elements.sumupApiTestResult.classList.add("info");
+    elements.testSumupApiDialogButton.disabled = true;
+
+    const result = await testSumupApi(url, apiKey);
+    showApiTestResult(elements.sumupApiTestResult, result);
+    elements.testSumupApiDialogButton.disabled = false;
+  }
+
+  async function testSumupApiFromPanel() {
+    const url = (store.apiConfig?.sumupApiUrl || "").trim();
+    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
+    if (!url) {
+      showToast("No API URL configured. Click Configure API URL first.");
+      return;
+    }
+    if (!apiKey) {
+      showToast("No API key configured. Click Configure API URL and enter your key.");
+      return;
+    }
+
+    elements.sumupApiStatus.textContent = "Testing connection...";
+    elements.sumupApiStatus.classList.remove("is-hidden", "success", "warning");
+    elements.sumupApiStatus.classList.add("info");
+    elements.testSumupApiButton.disabled = true;
+
+    const result = await testSumupApi(url, apiKey);
+    showApiTestResult(elements.sumupApiStatus, result);
+    showToast(result.ok ? "SumUp API connected." : "SumUp API test failed.");
+    elements.testSumupApiButton.disabled = false;
+  }
+
+  function handleSaveSumupApiUrl(event) {
+    event.preventDefault();
+    const url = elements.sumupApiUrlInput.value.trim();
+    const apiKey = elements.sumupApiKeyInput.value.trim();
+    const merchantCode = elements.sumupMerchantCodeInput.value.trim();
+
+    if (url) {
+      try {
+        new URL(url);
+      } catch (e) {
+        showToast("Enter a valid URL (including https://).");
+        return;
+      }
+    }
+
+    store.apiConfig = store.apiConfig || {};
+    store.apiConfig.sumupApiUrl = url;
+    store.apiConfig.sumupApiKey = apiKey;
+    store.apiConfig.sumupMerchantCode = merchantCode;
+    saveStore();
+    closeModal(elements.sumupApiDialog);
+    renderSumupApiConfig();
+    showToast(url ? "SumUp API configuration saved." : "SumUp API configuration cleared.");
   }
 
   function renderEvents() {
@@ -2986,38 +3401,45 @@ tbody tr:last-child td {
       });
     }
 
-    for (const line of draft.items) {
-      const item = findItem(line.itemId);
-      if (!item) {
-        continue;
+    if (paymentMethod === "cash") {
+      for (const line of draft.items) {
+        const item = findItem(line.itemId);
+        if (item) {
+          item.quantity -= line.quantity;
+          item.updatedAt = new Date().toISOString();
+        }
       }
-      item.quantity -= line.quantity;
-      item.updatedAt = new Date().toISOString();
-    }
-
-    for (const sale of sales) {
-      store.sales.unshift(sale);
-      store.lifetime.revenue = roundMoney(store.lifetime.revenue + sale.revenue);
-      store.lifetime.cost = roundMoney(store.lifetime.cost + sale.cost);
-      store.lifetime.profit = roundMoney(store.lifetime.profit + sale.profit);
-      store.lifetime.sales += 1;
-      store.lifetime.unitsSold += sale.quantity;
-      recordSaleForActiveEvent(sale);
-    }
-
-    saveStore();
-    basket = [];
-    pendingSaleDraft = null;
-    closeModal(elements.paymentDialog);
-    renderBasket();
-    renderSellGrid();
-    renderAll();
-
-    if (paymentMethod === "sumup") {
-      openSumUpPayment(draft.total);
-      showToast(`SumUp payment started for ${money.format(roundMoney(draft.total))}.`);
+      for (const sale of sales) {
+        store.sales.unshift(sale);
+        store.lifetime.revenue = roundMoney(store.lifetime.revenue + sale.revenue);
+        store.lifetime.cost = roundMoney(store.lifetime.cost + sale.cost);
+        store.lifetime.profit = roundMoney(store.lifetime.profit + sale.profit);
+        store.lifetime.sales += 1;
+        store.lifetime.unitsSold += sale.quantity;
+        recordSaleForActiveEvent(sale);
+      }
+      saveStore();
+      basket = [];
+      pendingSaleDraft = null;
+      closeModal(elements.paymentDialog);
+      renderBasket();
+      renderSellGrid();
+      renderAll();
+      showToast(`Cash payment recorded. Profit: ${money.format(roundMoney(draft.total - draft.items.reduce((sum, line) => sum + line.buyPrice * line.quantity, 0)))}`);
     } else {
-      showToast(`Basket paid. Total profit: ${money.format(roundMoney(draft.total - draft.items.reduce((sum, line) => sum + line.buyPrice * line.quantity, 0)))}`);
+      for (const sale of sales) {
+        store.sales.unshift(sale);
+      }
+      saveStore();
+      basket = [];
+      pendingSaleDraft = null;
+      closeModal(elements.paymentDialog);
+      renderBasket();
+      renderSellGrid();
+      renderPendingSumupSales();
+      renderMoneyTab();
+      openSumUpPayment(draft.total);
+      showToast(`SumUp payment started for ${money.format(roundMoney(draft.total))}. Stock held until confirmed.`);
     }
   }
 
@@ -3285,16 +3707,21 @@ tbody tr:last-child td {
       return;
     }
 
-    elements.salesLogBody.innerHTML = store.sales.slice(0, 80).map((sale) => `
-      <tr>
-        <td>${formatDate(sale.createdAt)}</td>
-        <td>${escapeHtml(sale.sellerName)}</td>
-        <td>${escapeHtml(sale.itemName)}</td>
-        <td>${sale.quantity}</td>
-        <td>${money.format(roundMoney(sale.revenue))}</td>
-        <td>${money.format(roundMoney(sale.profit))}</td>
-      </tr>
-    `).join("");
+    elements.salesLogBody.innerHTML = store.sales.slice(0, 80).map((sale) => {
+      const statusBadge = sale.paymentStatus === "pending"
+        ? ` <span class="badge warning">Pending</span>`
+        : "";
+      return `
+        <tr>
+          <td>${formatDate(sale.createdAt)}</td>
+          <td>${escapeHtml(sale.sellerName)}${statusBadge}</td>
+          <td>${escapeHtml(sale.itemName)}</td>
+          <td>${sale.quantity}</td>
+          <td>${money.format(roundMoney(sale.revenue))}</td>
+          <td>${sale.paymentStatus === "pending" ? "—" : money.format(roundMoney(sale.profit))}</td>
+        </tr>
+      `;
+    }).join("");
   }
 
   function renderStockLog() {
