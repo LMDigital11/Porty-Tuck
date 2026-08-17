@@ -1115,6 +1115,229 @@ tbody tr:last-child td {
   }
 }
 
+body.dark-mode {
+  color-scheme: dark;
+  --ink: #e4ede8;
+  --muted: #8fa098;
+  --panel: #1a211e;
+  --soft: #1e2a24;
+  --line: #2e3d35;
+  --green: #4dba82;
+  --green-soft: rgba(77, 186, 130, 0.14);
+  --blue: #5da3d4;
+  --blue-soft: rgba(93, 163, 212, 0.14);
+  --coral: #e07060;
+  --coral-soft: rgba(224, 112, 96, 0.14);
+  --amber: #e0a830;
+  --amber-soft: rgba(224, 168, 48, 0.14);
+  --shadow: 0 18px 45px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(180deg, #121816 0%, #151d1a 100%);
+  color: var(--ink);
+}
+
+body.dark-mode .login-panel,
+body.dark-mode .maintenance-panel,
+body.dark-mode .toast,
+body.dark-mode .modal,
+body.dark-mode .sell-card,
+body.dark-mode .sidebar {
+  background: var(--panel);
+}
+
+body.dark-mode .login-panel,
+body.dark-mode .maintenance-panel,
+body.dark-mode .modal {
+  border-color: var(--line);
+}
+
+body.dark-mode input,
+body.dark-mode select {
+  background: var(--soft);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+body.dark-mode .sell-card-button:hover,
+body.dark-mode .sell-card-button:focus-visible {
+  background: var(--green-soft);
+}
+
+body.dark-mode .nav-tab:hover {
+  background: rgba(77, 186, 130, 0.08);
+}
+
+body.dark-mode .nav-tab.is-active {
+  background: var(--green-soft);
+  color: var(--green);
+  border-color: rgba(77, 186, 130, 0.25);
+}
+
+body.dark-mode .modal::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.password-field {
+  position: relative;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  padding: 4px 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 120ms ease;
+}
+
+.password-toggle:hover {
+  color: var(--ink);
+}
+
+.sort-bar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.sort-bar span {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-right: 2px;
+}
+
+.sort-button {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 0.8rem;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.sort-button:hover {
+  background: var(--soft);
+}
+
+.sort-button.is-active {
+  border-color: rgba(33, 110, 78, 0.35);
+  background: var(--green-soft);
+  color: var(--green);
+  font-weight: 700;
+}
+
+.receipt-lines {
+  display: grid;
+  gap: 6px;
+  font-size: 0.88rem;
+  border-top: 1px dashed var(--line);
+  padding-top: 12px;
+}
+
+.receipt-line {
+  display: flex;
+  justify-content: space-between;
+}
+
+.receipt-line.total {
+  font-weight: 800;
+  font-size: 1.05rem;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  margin-top: 4px;
+}
+
+.receipt-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.receipt-actions button {
+  flex: 1;
+}
+
+.bottom-nav {
+  display: none;
+}
+
+@media (max-width: 520px) {
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 15;
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+    padding: 6px 4px env(safe-area-inset-bottom, 6px);
+    gap: 2px;
+    backdrop-filter: blur(12px);
+  }
+
+  .bottom-nav-tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 2px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.6rem;
+    font-weight: 600;
+    transition: color 120ms ease, background 120ms ease;
+    cursor: pointer;
+  }
+
+  .bottom-nav-tab .nav-icon {
+    font-size: 1.15rem;
+    line-height: 1;
+  }
+
+  .bottom-nav-tab.is-active {
+    color: var(--green);
+    background: var(--green-soft);
+  }
+
+  .bottom-nav-tab:hover {
+    background: rgba(33, 110, 78, 0.06);
+  }
+
+  .app-shell .sidebar .nav-tabs {
+    display: none;
+  }
+
+  .app-shell .sidebar .sidebar-brand {
+    display: none;
+  }
+
+  .app-shell .sidebar .user-strip {
+    display: none;
+  }
+
+  .app-shell .sidebar {
+    display: none;
+  }
+
+  .app-shell {
+    grid-template-columns: 1fr;
+    padding-bottom: 70px;
+  }
+
+  .content {
+    padding-bottom: 80px;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -1132,11 +1355,15 @@ tbody tr:last-child td {
         </label>
         <label>
           Password
-          <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
+          <span class="password-field">
+            <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
+            <button type="button" class="password-toggle" data-toggle="loginPassword" tabindex="-1">Show</button>
+          </span>
         </label>
         <button type="submit" class="primary-button full-width">Log in</button>
       </form>
       <p id="loginNote" class="login-note">Default admin: <strong>admin</strong> / <strong>admin</strong></p>
+      <button type="button" id="loginDarkModeButton" class="ghost-button" style="margin-top:12px;font-size:0.8rem;" title="Toggle dark mode">🌙 Dark mode</button>
       <div id="loginMaintenanceBanner" class="alert-card is-hidden warning" style="margin-top:18px;" aria-live="polite">
         <span id="loginMaintenanceBannerText"></span>
       </div>
@@ -1161,7 +1388,10 @@ tbody tr:last-child td {
         </label>
         <label>
           Password
-          <input id="maintenanceLoginPassword" type="password" autocomplete="current-password" required>
+          <span class="password-field">
+            <input id="maintenanceLoginPassword" type="password" autocomplete="current-password" required>
+            <button type="button" class="password-toggle" data-toggle="maintenanceLoginPassword" tabindex="-1">Show</button>
+          </span>
         </label>
         <button type="submit" class="primary-button full-width">Log in</button>
       </form>
@@ -1187,9 +1417,20 @@ tbody tr:last-child td {
       </nav>
       <div class="user-strip">
         <span id="signedInAs"></span>
-        <button type="button" id="logoutButton" class="ghost-button">Log out</button>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button type="button" id="darkModeButton" class="ghost-button" title="Toggle dark mode">🌙</button>
+          <button type="button" id="logoutButton" class="ghost-button">Log out</button>
+        </div>
       </div>
     </aside>
+
+    <nav class="bottom-nav" aria-label="Mobile navigation">
+      <button type="button" class="bottom-nav-tab is-active" data-tab="stock"><span class="nav-icon">📦</span>Stock</button>
+      <button type="button" class="bottom-nav-tab" data-tab="sell"><span class="nav-icon">🛒</span>Sell</button>
+      <button type="button" class="bottom-nav-tab" data-tab="events"><span class="nav-icon">📅</span>Events</button>
+      <button type="button" class="bottom-nav-tab admin-only" data-tab="money"><span class="nav-icon">💰</span>Money</button>
+      <button type="button" class="bottom-nav-tab admin-only" data-tab="admin"><span class="nav-icon">⚙️</span>Admin</button>
+    </nav>
 
     <main class="content">
       <header class="topbar">
@@ -1304,10 +1545,19 @@ tbody tr:last-child td {
             <h3>Selling</h3>
             <p>Record sales and remove the sold quantity from stock.</p>
           </div>
-          <label class="search-field compact">
-            Search items
-            <input id="sellSearch" type="search" placeholder="Find an item to sell">
-          </label>
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+            <div class="sort-bar">
+              <span>Sort:</span>
+              <button type="button" class="sort-button is-active" data-sort="default">Stock</button>
+              <button type="button" class="sort-button" data-sort="name">Name</button>
+              <button type="button" class="sort-button" data-sort="price-asc">Price ↑</button>
+              <button type="button" class="sort-button" data-sort="price-desc">Price ↓</button>
+            </div>
+            <label class="search-field compact">
+              Search items
+              <input id="sellSearch" type="search" placeholder="Find an item to sell">
+            </label>
+          </div>
         </div>
         <div id="lowStockList" class="low-stock-list"></div>
         <div class="sell-layout">
@@ -1641,6 +1891,10 @@ tbody tr:last-child td {
               <h4>Sales Log</h4>
               <p>Who sold what and how much profit it made.</p>
             </div>
+            <label class="search-field compact">
+              Search sales
+              <input id="salesLogSearch" type="search" placeholder="Filter by name, seller...">
+            </label>
           </div>
           <div class="table-wrap">
             <table>
@@ -1791,6 +2045,15 @@ tbody tr:last-child td {
         <button type="button" class="ghost-button" id="cancelPaymentButton">Cancel</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="receiptDialog" class="modal">
+    <h3>Would you like a receipt?</h3>
+    <div id="receiptContent" class="receipt-lines"></div>
+    <div class="receipt-actions">
+      <button type="button" id="printReceiptButton" class="primary-button">Print</button>
+      <button type="button" id="closeReceiptButton" class="secondary-button">No thanks</button>
+    </div>
   </dialog>
 
   <dialog id="resetDialog" class="modal danger-modal">
@@ -1971,6 +2234,8 @@ tbody tr:last-child td {
   let toastTimer;
   let pendingMoneyAction = null;
   let pendingScheduleEditId = null;
+  let sellSortMode = "default";
+  let lastSaleForReceipt = null;
 
   const elements = {};
 
@@ -1982,6 +2247,11 @@ tbody tr:last-child td {
     bindEvents();
     await updateLoginHint();
     renderAuth();
+    if (localStorage.getItem("tuck-dark-mode") === "1") {
+      document.body.classList.add("dark-mode");
+      elements.darkModeButton.textContent = "☀️";
+      if (elements.loginDarkModeButton) elements.loginDarkModeButton.textContent = "☀️ Dark mode";
+    }
     updateProfitPreview();
     setInterval(refreshStore, 10000);
   }
@@ -2168,6 +2438,14 @@ tbody tr:last-child td {
     elements.maintenanceLoginForm = document.querySelector("#maintenanceLoginForm");
     elements.maintenanceLoginUsername = document.querySelector("#maintenanceLoginUsername");
     elements.maintenanceLoginPassword = document.querySelector("#maintenanceLoginPassword");
+    elements.salesLogSearch = document.querySelector("#salesLogSearch");
+    elements.receiptDialog = document.querySelector("#receiptDialog");
+    elements.receiptContent = document.querySelector("#receiptContent");
+    elements.printReceiptButton = document.querySelector("#printReceiptButton");
+    elements.closeReceiptButton = document.querySelector("#closeReceiptButton");
+    elements.darkModeButton = document.querySelector("#darkModeButton");
+    elements.loginDarkModeButton = document.querySelector("#loginDarkModeButton");
+    elements.bottomNavTabs = document.querySelectorAll(".bottom-nav-tab");
   }
 
   function bindEvents() {
@@ -2263,6 +2541,37 @@ tbody tr:last-child td {
 
     elements.exportButton.addEventListener("click", exportBackup);
     elements.importInput.addEventListener("change", importBackup);
+
+    document.querySelectorAll(".password-toggle").forEach((button) => {
+      button.addEventListener("click", () => {
+        const input = document.getElementById(button.dataset.toggle);
+        if (!input) return;
+        const isPassword = input.type === "password";
+        input.type = isPassword ? "text" : "password";
+        button.textContent = isPassword ? "Hide" : "Show";
+      });
+    });
+
+    elements.salesLogSearch.addEventListener("input", renderSalesLog);
+
+    document.querySelectorAll(".sort-button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".sort-button").forEach((b) => b.classList.remove("is-active"));
+        button.classList.add("is-active");
+        sellSortMode = button.dataset.sort;
+        renderSellGrid();
+      });
+    });
+
+    elements.bottomNavTabs.forEach((button) => {
+      button.addEventListener("click", () => setActiveTab(button.dataset.tab));
+    });
+
+    elements.darkModeButton.addEventListener("click", toggleDarkMode);
+    elements.loginDarkModeButton.addEventListener("click", toggleDarkMode);
+
+    elements.printReceiptButton.addEventListener("click", printReceipt);
+    elements.closeReceiptButton.addEventListener("click", () => closeModal(elements.receiptDialog));
   }
 
   async function loadStore() {
@@ -3030,6 +3339,9 @@ tbody tr:last-child td {
     elements.pageTitle.textContent = titles[tab] || "Tuck Shop";
 
     elements.navTabs.forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.tab === tab);
+    });
+    elements.bottomNavTabs.forEach((button) => {
       button.classList.toggle("is-active", button.dataset.tab === tab);
     });
     elements.panels.forEach((panel) => {
@@ -4233,6 +4545,8 @@ tbody tr:last-child td {
   }
 
   function clearBasket() {
+    if (!basket.length) return;
+    if (!confirm("Clear all items from the basket?")) return;
     basket = [];
     renderBasket();
     renderSellGrid();
@@ -4322,7 +4636,7 @@ tbody tr:last-child td {
       renderBasket();
       renderSellGrid();
       renderAll();
-      showToast(`Cash payment recorded. Profit: ${money.format(roundMoney(draft.total - draft.items.reduce((sum, line) => sum + line.buyPrice * line.quantity, 0)))}`);
+      showReceiptDialog(draft);
     } else {
       for (const sale of sales) {
         store.sales.unshift(sale);
@@ -4339,6 +4653,16 @@ tbody tr:last-child td {
     }
   }
 
+  function toggleDarkMode() {
+    document.body.classList.toggle("dark-mode");
+    const isDark = document.body.classList.contains("dark-mode");
+    localStorage.setItem("tuck-dark-mode", isDark ? "1" : "0");
+    elements.darkModeButton.textContent = isDark ? "☀️" : "🌙";
+    if (elements.loginDarkModeButton) {
+      elements.loginDarkModeButton.textContent = isDark ? "☀️ Dark mode" : "🌙 Dark mode";
+    }
+  }
+
   function openSumUpPayment(amount) {
     const pounds = Number(amount || 0);
     const sumUpAmount = pounds.toFixed(2);
@@ -4352,6 +4676,40 @@ tbody tr:last-child td {
       console.error(error);
       showToast("Could not launch SumUp payment. Check the reader setup.");
     }
+  }
+
+  function showReceiptDialog(draft) {
+    lastSaleForReceipt = draft;
+    const now = new Date();
+    let html = `<div class="receipt-line"><span>Porty Tuck Shop</span></div>`;
+    html += `<div class="receipt-line"><span>${formatDate(now.toISOString())}</span></div>`;
+    html += `<div class="receipt-line"><span>Seller: ${escapeHtml(currentUser.displayName)}</span></div>`;
+    for (const line of draft.items) {
+      html += `<div class="receipt-line"><span>${escapeHtml(line.name)} x${line.quantity}</span><span>${money.format(roundMoney(line.sellPrice * line.quantity))}</span></div>`;
+    }
+    const profit = roundMoney(draft.total - draft.items.reduce((sum, line) => sum + line.buyPrice * line.quantity, 0));
+    html += `<div class="receipt-line total"><span>Total</span><span>${money.format(roundMoney(draft.total))}</span></div>`;
+    html += `<div class="receipt-line"><span>Paid: Cash</span></div>`;
+    html += `<div class="receipt-line"><span>Profit: ${money.format(profit)}</span></div>`;
+    elements.receiptContent.innerHTML = html;
+    openModal(elements.receiptDialog);
+  }
+
+  function printReceipt() {
+    const content = elements.receiptContent.innerHTML;
+    const win = window.open("", "_blank", "width=320,height=500");
+    if (!win) {
+      showToast("Pop-up blocked. Allow pop-ups to print receipts.");
+      return;
+    }
+    win.document.write(`<!DOCTYPE html><html><head><title>Receipt</title><style>
+      body{font-family:monospace;padding:16px;font-size:13px;color:#000;}
+      .receipt-line{display:flex;justify-content:space-between;margin:4px 0;}
+      .receipt-line.total{font-weight:bold;font-size:15px;border-top:1px solid #000;padding-top:6px;margin-top:6px;}
+    </style></head><body>${content}<script>setTimeout(()=>{window.print();window.close();},300);<\/script></body></html>`);
+    win.document.close();
+    closeModal(elements.receiptDialog);
+    showToast("Receipt sent to printer.");
   }
 
   function generateTempPassword() {
@@ -4783,12 +5141,20 @@ tbody tr:last-child td {
   }
 
   function renderSalesLog() {
-    if (!store.sales.length) {
-      elements.salesLogBody.innerHTML = `<tr><td colspan="6" class="empty-state">No sales recorded yet.</td></tr>`;
+    const query = elements.salesLogSearch ? elements.salesLogSearch.value.trim().toLowerCase() : "";
+    let sales = store.sales;
+    if (query) {
+      sales = sales.filter((sale) => {
+        return `${sale.itemName} ${sale.sellerName} ${sale.paymentMethod} ${sale.paymentStatus}`.toLowerCase().includes(query);
+      });
+    }
+
+    if (!sales.length) {
+      elements.salesLogBody.innerHTML = `<tr><td colspan="6" class="empty-state">${query ? "No sales match that search." : "No sales recorded yet."}</td></tr>`;
       return;
     }
 
-    elements.salesLogBody.innerHTML = store.sales.slice(0, 80).map((sale) => {
+    elements.salesLogBody.innerHTML = sales.slice(0, 80).map((sale) => {
       const statusBadge = sale.paymentStatus === "pending"
         ? ` <span class="badge warning">Pending</span>`
         : "";
@@ -4885,11 +5251,19 @@ tbody tr:last-child td {
   }
 
   function sortedItems() {
-    return [...store.items].sort((a, b) => {
+    const items = [...store.items];
+    if (sellSortMode === "name") {
+      return items.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    if (sellSortMode === "price-asc") {
+      return items.sort((a, b) => a.sellPrice - b.sellPrice);
+    }
+    if (sellSortMode === "price-desc") {
+      return items.sort((a, b) => b.sellPrice - a.sellPrice);
+    }
+    return items.sort((a, b) => {
       const byStatus = stockWeight(a) - stockWeight(b);
-      if (byStatus !== 0) {
-        return byStatus;
-      }
+      if (byStatus !== 0) return byStatus;
       return a.name.localeCompare(b.name);
     });
   }
