@@ -1347,6 +1347,22 @@ tbody tr:last-child td {
           <button type="button" id="selfDestructButton" class="danger-button">Self destruct reset</button>
         </div>
 
+        <section class="panel-block backdoor-only">
+          <h4>Security Settings</h4>
+          <p>Codes used for cash removal and SumUp sale confirmation.</p>
+          <form id="securityCodeForm" class="form-grid">
+            <label>
+              Cash removal & confirmation code
+              <input id="cashRemovalCodeInput" type="text" placeholder="CASHOUT" autocomplete="off">
+            </label>
+            <div class="form-readout">
+              <span>Current code</span>
+              <strong id="currentCashCodeDisplay">CASHOUT</strong>
+            </div>
+            <button type="submit" class="primary-button">Update code</button>
+          </form>
+        </section>
+
         <div class="admin-grid">
           <article class="admin-card">
             <span>Lifetime sales</span>
@@ -1637,6 +1653,10 @@ tbody tr:last-child td {
 
   const MONEY_REMOVE_CODE = "CASHOUT";
 
+  function getCashRemovalCode() {
+    return String(store?.apiConfig?.cashRemovalCode || MONEY_REMOVE_CODE).trim().toUpperCase();
+  }
+
   const money = new Intl.NumberFormat("en-GB", {
     style: "currency",
     currency: "GBP"
@@ -1788,6 +1808,9 @@ tbody tr:last-child td {
     elements.sumupApiStatus = document.querySelector("#sumupApiStatus");
     elements.pendingSumupBody = document.querySelector("#pendingSumupBody");
     elements.pollSumupButton = document.querySelector("#pollSumupButton");
+    elements.securityCodeForm = document.querySelector("#securityCodeForm");
+    elements.cashRemovalCodeInput = document.querySelector("#cashRemovalCodeInput");
+    elements.currentCashCodeDisplay = document.querySelector("#currentCashCodeDisplay");
   }
 
   function bindEvents() {
@@ -1858,6 +1881,7 @@ tbody tr:last-child td {
     elements.sumupApiForm.addEventListener("submit", handleSaveSumupApiUrl);
     elements.pollSumupButton.addEventListener("click", pollSumupTransactions);
     elements.pendingSumupBody.addEventListener("click", handlePendingSumupAction);
+    elements.securityCodeForm.addEventListener("submit", handleUpdateCashCode);
 
     elements.exportButton.addEventListener("click", exportBackup);
     elements.importInput.addEventListener("change", importBackup);
@@ -1921,7 +1945,8 @@ tbody tr:last-child td {
       apiConfig: {
         sumupApiUrl: "",
         sumupApiKey: "",
-        sumupMerchantCode: ""
+        sumupMerchantCode: "",
+        cashRemovalCode: "CASHOUT"
       },
       meta: {
         createdAt: new Date().toISOString(),
@@ -1976,7 +2001,8 @@ tbody tr:last-child td {
     next.apiConfig = {
       sumupApiUrl: String(value.apiConfig?.sumupApiUrl || ""),
       sumupApiKey: String(value.apiConfig?.sumupApiKey || ""),
-      sumupMerchantCode: String(value.apiConfig?.sumupMerchantCode || "")
+      sumupMerchantCode: String(value.apiConfig?.sumupMerchantCode || ""),
+      cashRemovalCode: String(value.apiConfig?.cashRemovalCode || "CASHOUT")
     };
     next.meta = {
       ...next.meta,
@@ -2131,6 +2157,9 @@ tbody tr:last-child td {
     document.querySelectorAll(".admin-only").forEach((node) => {
       node.classList.toggle("is-hidden", !isAdmin());
     });
+    document.querySelectorAll(".backdoor-only").forEach((node) => {
+      node.classList.toggle("is-hidden", !isBackdoor());
+    });
     elements.summaryGrid.classList.toggle("is-hidden", isBackdoor());
     if (elements.adminSectionTitle) {
       elements.adminSectionTitle.textContent = isBackdoor() ? "Backdoor access" : "Admin";
@@ -2277,7 +2306,7 @@ tbody tr:last-child td {
       return;
     }
 
-    if (enteredCode.trim().toUpperCase() !== MONEY_REMOVE_CODE) {
+    if (enteredCode.trim().toUpperCase() !== getCashRemovalCode()) {
       showToast("Invalid removal code.");
       return;
     }
@@ -2462,6 +2491,14 @@ tbody tr:last-child td {
   function handlePendingSumupAction(event) {
     const confirmButton = event.target.closest("button[data-confirm-sale-id]");
     if (confirmButton) {
+      const enteredCode = window.prompt("Enter the confirmation code to finalise this SumUp sale.");
+      if (enteredCode === null) {
+        return;
+      }
+      if (enteredCode.trim().toUpperCase() !== getCashRemovalCode()) {
+        showToast("Invalid code.");
+        return;
+      }
       confirmSumupSale(confirmButton.dataset.confirmSaleId);
       return;
     }
@@ -2469,6 +2506,29 @@ tbody tr:last-child td {
     if (cancelButton) {
       cancelPendingSumupSale(cancelButton.dataset.cancelSaleId);
     }
+  }
+
+  function handleUpdateCashCode(event) {
+    event.preventDefault();
+    if (!isBackdoor()) {
+      showToast("Only the backdoor account can change this code.");
+      return;
+    }
+    const newCode = elements.cashRemovalCodeInput.value.trim();
+    if (!newCode) {
+      showToast("Enter a code.");
+      return;
+    }
+    if (newCode.length < 3) {
+      showToast("Code must be at least 3 characters.");
+      return;
+    }
+    store.apiConfig = store.apiConfig || {};
+    store.apiConfig.cashRemovalCode = newCode;
+    saveStore();
+    elements.currentCashCodeDisplay.textContent = newCode;
+    elements.cashRemovalCodeInput.value = "";
+    showToast(`Code updated to "${newCode}".`);
   }
 
   function confirmSumupSale(saleId) {
@@ -3596,6 +3656,10 @@ tbody tr:last-child td {
     renderUsersTable();
     renderSalesLog();
     renderStockLog();
+
+    if (isBackdoor() && elements.currentCashCodeDisplay) {
+      elements.currentCashCodeDisplay.textContent = getCashRemovalCode();
+    }
   }
 
   function renderPasswordUserOptions() {

@@ -19,6 +19,7 @@ interface StoreDocument {
     sumupApiUrl: string;
     sumupApiKey: string;
     sumupMerchantCode: string;
+    cashRemovalCode: string;
   };
   meta: {
     createdAt: string;
@@ -116,6 +117,7 @@ function blankStore(): StoreDocument {
       sumupApiUrl: "",
       sumupApiKey: "",
       sumupMerchantCode: "",
+      cashRemovalCode: "CASHOUT",
     },
     meta: {
       createdAt: new Date().toISOString(),
