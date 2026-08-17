@@ -1,0 +1,8 @@
+name = "tuck-shop-manager"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "data"
+database_id = "759a7a38-1ea2-401b-a5e6-a4c4fcea39b7"

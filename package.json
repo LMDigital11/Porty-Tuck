@@ -1,0 +1,15 @@
+{
+  "name": "tuck-shop-manager-d1",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute data --file=./schema.sql"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250813.0",
+    "typescript": "^5.6.3",
+    "wrangler": "^3.115.0"
+  }
+}
