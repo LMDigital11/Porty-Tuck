@@ -1430,6 +1430,7 @@ body.dark-mode .modal::backdrop {
       <button type="button" class="bottom-nav-tab" data-tab="events"><span class="nav-icon">📅</span>Events</button>
       <button type="button" class="bottom-nav-tab admin-only" data-tab="money"><span class="nav-icon">💰</span>Money</button>
       <button type="button" class="bottom-nav-tab admin-only" data-tab="admin"><span class="nav-icon">⚙️</span>Admin</button>
+      <button type="button" class="bottom-nav-tab" id="bottomLogoutButton" style="color:var(--coral);"><span class="nav-icon">🚪</span>Out</button>
     </nav>
 
     <main class="content">
@@ -2445,7 +2446,8 @@ body.dark-mode .modal::backdrop {
     elements.closeReceiptButton = document.querySelector("#closeReceiptButton");
     elements.darkModeButton = document.querySelector("#darkModeButton");
     elements.loginDarkModeButton = document.querySelector("#loginDarkModeButton");
-    elements.bottomNavTabs = document.querySelectorAll(".bottom-nav-tab");
+    elements.bottomNavTabs = document.querySelectorAll(".bottom-nav-tab[data-tab]");
+    elements.bottomLogoutButton = document.querySelector("#bottomLogoutButton");
   }
 
   function bindEvents() {
@@ -2565,6 +2567,11 @@ body.dark-mode .modal::backdrop {
 
     elements.bottomNavTabs.forEach((button) => {
       button.addEventListener("click", () => setActiveTab(button.dataset.tab));
+    });
+    elements.bottomLogoutButton.addEventListener("click", () => {
+      currentUser = null;
+      renderAuth();
+      showToast("Logged out.");
     });
 
     elements.darkModeButton.addEventListener("click", toggleDarkMode);
