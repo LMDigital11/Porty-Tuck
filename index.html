@@ -2060,7 +2060,7 @@ body.dark-mode .modal::backdrop {
   <dialog id="resetDialog" class="modal danger-modal">
     <form id="resetForm" method="dialog">
       <h3>Self Destruct Reset</h3>
-      <p>This clears stock, user accounts except the main admin, and logs. Lifetime profit and sales totals stay.</p>
+      <p>This clears stock, sales, events, money, and lifetime totals. User accounts, SumUp config, and security code are kept.</p>
       <label>
         Type RESET
         <input id="resetConfirm" type="text" autocomplete="off">
@@ -4865,27 +4865,21 @@ body.dark-mode .modal::backdrop {
       return;
     }
 
-    const lifetime = { ...store.lifetime };
-    let admin = store.users.find((user) => user.username === DEFAULT_ADMIN.username);
-    if (!admin) {
-      admin = currentUser && currentUser.role === "admin" ? currentUser : null;
-    }
+    const users = store.users.map((u) => ({ ...u }));
+    const apiConfig = { ...store.apiConfig };
 
     const next = blankStore();
-    if (admin) {
-      next.users = [{ ...admin, role: "admin", active: true }];
-    }
-    next.lifetime = lifetime;
+    next.users = users;
+    next.apiConfig = apiConfig;
     next.meta.createdAt = store.meta.createdAt || new Date().toISOString();
     next.meta.lastSelfDestructAt = new Date().toISOString();
-    await ensurePrimaryAdmin(next);
 
     store = next;
-    currentUser = store.users.find((user) => user.username === DEFAULT_ADMIN.username);
+    currentUser = store.users.find((user) => user.username === DEFAULT_ADMIN.username) || currentUser;
     saveStore();
     closeModal(elements.resetDialog);
     renderAuth();
-    showToast("Reset complete. Lifetime totals were kept.");
+    showToast("Reset complete. All users and security code were kept.");
   }
 
   function recordSaleForActiveEvent(sale) {
