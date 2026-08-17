@@ -4083,7 +4083,13 @@ tbody tr:last-child td {
     }
 
     const itemId = button.dataset.basketId;
-    basket = basket.filter((line) => line.itemId !== itemId);
+    const line = basket.find((l) => l.itemId === itemId);
+    if (line) {
+      line.quantity -= 1;
+      if (line.quantity <= 0) {
+        basket = basket.filter((l) => l.itemId !== itemId);
+      }
+    }
     renderBasket();
     renderSellGrid();
   }
