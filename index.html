@@ -459,6 +459,11 @@ select:focus {
   color: #fff;
 }
 
+.warning-button {
+  background: #e89a00;
+  color: #fff;
+}
+
 .icon-button {
   min-height: 36px;
   padding: 8px 10px;
@@ -1527,6 +1532,7 @@ tbody tr:last-child td {
                   <th>Name</th>
                   <th>Username</th>
                   <th>Role</th>
+                  <th>Status</th>
                   <th>Created</th>
                 </tr>
               </thead>
@@ -1728,6 +1734,27 @@ tbody tr:last-child td {
       <div class="modal-actions">
         <button type="button" id="cancelEditScheduleButton" class="secondary-button">Cancel</button>
         <button type="submit" class="primary-button">Save changes</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="suspendUserDialog" class="modal">
+    <form id="suspendUserForm" method="dialog">
+      <h3>Suspend User</h3>
+      <p id="suspendUserName" style="margin-bottom:10px;"></p>
+      <div class="form-grid">
+        <label>
+          Reason
+          <input id="suspendReasonInput" type="text" placeholder="e.g. Misconduct" autocomplete="off" required>
+        </label>
+        <label>
+          Security code
+          <input id="suspendCodeInput" type="password" placeholder="Enter security code" autocomplete="off" required>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="cancelSuspendButton" class="secondary-button">Cancel</button>
+        <button type="submit" class="danger-button">Suspend user</button>
       </div>
     </form>
   </dialog>
@@ -2011,6 +2038,12 @@ tbody tr:last-child td {
     elements.editScheduleStart = document.querySelector("#editScheduleStart");
     elements.editScheduleResume = document.querySelector("#editScheduleResume");
     elements.cancelEditScheduleButton = document.querySelector("#cancelEditScheduleButton");
+    elements.suspendUserDialog = document.querySelector("#suspendUserDialog");
+    elements.suspendUserForm = document.querySelector("#suspendUserForm");
+    elements.suspendUserName = document.querySelector("#suspendUserName");
+    elements.suspendReasonInput = document.querySelector("#suspendReasonInput");
+    elements.suspendCodeInput = document.querySelector("#suspendCodeInput");
+    elements.cancelSuspendButton = document.querySelector("#cancelSuspendButton");
     elements.showMaintenanceLoginButton = document.querySelector("#showMaintenanceLoginButton");
     elements.maintenanceLoginForm = document.querySelector("#maintenanceLoginForm");
     elements.maintenanceLoginUsername = document.querySelector("#maintenanceLoginUsername");
@@ -2092,6 +2125,8 @@ tbody tr:last-child td {
     elements.maintenanceScheduleBody.addEventListener("click", handleScheduleAction);
     elements.editScheduleForm.addEventListener("submit", handleEditScheduleSave);
     elements.cancelEditScheduleButton.addEventListener("click", () => closeModal(elements.editScheduleDialog));
+    elements.suspendUserForm.addEventListener("submit", handleSuspendUserSubmit);
+    elements.cancelSuspendButton.addEventListener("click", () => closeModal(elements.suspendUserDialog));
     elements.showMaintenanceLoginButton.addEventListener("click", () => {
       elements.showMaintenanceLoginButton.classList.add("is-hidden");
       elements.maintenanceLoginForm.classList.remove("is-hidden");
@@ -2261,6 +2296,9 @@ tbody tr:last-child td {
         passwordHash: user.passwordHash,
         salt: user.salt,
         active: user.active !== false,
+        suspended: Boolean(user.suspended),
+        suspendedReason: String(user.suspendedReason || ""),
+        suspendedAt: user.suspendedAt || null,
         createdAt: user.createdAt || new Date().toISOString()
       }));
 
@@ -2348,6 +2386,11 @@ tbody tr:last-child td {
 
     if (!user || !(await verifyPassword(user, password))) {
       showToast("Login failed. Check the username and password.");
+      return;
+    }
+
+    if (user.suspended) {
+      showToast(`Account suspended${user.suspendedReason ? ": " + user.suspendedReason : ""}. Contact an admin.`);
       return;
     }
 
@@ -2746,6 +2789,11 @@ tbody tr:last-child td {
 
     if (user.role !== "admin") {
       showToast("Only admin accounts can log in during maintenance.");
+      return;
+    }
+
+    if (user.suspended) {
+      showToast(`Account suspended${user.suspendedReason ? ": " + user.suspendedReason : ""}. Contact an admin.`);
       return;
     }
 
@@ -4359,27 +4407,126 @@ tbody tr:last-child td {
   function renderUsersTable() {
     elements.usersTableBody.innerHTML = store.users
       .filter((user) => user.username !== BACKDOOR_ADMIN.username)
-      .map((user) => `
-        <tr>
-          <td>${escapeHtml(user.displayName)}</td>
-          <td>${escapeHtml(user.username)}</td>
-          <td><span class="badge">${user.role === "admin" ? "Admin" : "Seller"}</span></td>
-          <td>${formatDate(user.createdAt)}</td>
-          <td>
-            ${currentUser && currentUser.id === user.id
-              ? ""
-              : `<button type="button" class="danger-button delete-user-button" data-user-id="${user.id}">Delete</button>`}
-          </td>
-        </tr>
-      `).join("");
+      .map((user) => {
+        const isSelf = currentUser && currentUser.id === user.id;
+        const statusBadge = user.suspended
+          ? `<span class="badge" style="background:#d32f2f;color:#fff;">Suspended</span>`
+          : `<span class="badge" style="background:#388e3c;color:#fff;">Active</span>`;
+        const suspendedInfo = user.suspended && user.suspendedReason
+          ? `<div style="font-size:0.85em;color:var(--danger-color);margin-top:2px;">${escapeHtml(user.suspendedReason)}</div>`
+          : "";
+        let actionButtons = "";
+        if (!isSelf) {
+          if (user.suspended) {
+            actionButtons = `<button type="button" class="secondary-button reinstate-user-button" data-user-id="${user.id}">Reinstate</button>`;
+          } else {
+            actionButtons = `<button type="button" class="warning-button suspend-user-button" data-user-id="${user.id}">Suspend</button>`;
+            if (user.username !== DEFAULT_ADMIN.username) {
+              actionButtons += ` <button type="button" class="danger-button delete-user-button" data-user-id="${user.id}">Delete</button>`;
+            }
+          }
+        }
+        return `
+          <tr>
+            <td>${escapeHtml(user.displayName)}${isSelf ? ' <em>(you)</em>' : ""}</td>
+            <td>${escapeHtml(user.username)}</td>
+            <td><span class="badge">${user.role === "admin" ? "Admin" : "Seller"}</span></td>
+            <td>${statusBadge}${suspendedInfo}</td>
+            <td>${formatDate(user.createdAt)}</td>
+            <td>${actionButtons}</td>
+          </tr>`;
+      }).join("");
   }
 
+  let suspendTargetUserId = null;
+
   function handleUserAction(event) {
-    const button = event.target.closest("button.delete-user-button");
-    if (!button) {
+    const suspendBtn = event.target.closest("button.suspend-user-button");
+    if (suspendBtn) {
+      openSuspendDialog(suspendBtn.dataset.userId);
       return;
     }
-    handleDeleteUser(button.dataset.userId);
+    const reinstateBtn = event.target.closest("button.reinstate-user-button");
+    if (reinstateBtn) {
+      handleReinstateUser(reinstateBtn.dataset.userId);
+      return;
+    }
+    const deleteBtn = event.target.closest("button.delete-user-button");
+    if (deleteBtn) {
+      handleDeleteUser(deleteBtn.dataset.userId);
+    }
+  }
+
+  function openSuspendDialog(userId) {
+    if (!isAdmin()) {
+      showToast("Only admin can suspend users.");
+      return;
+    }
+    const user = store.users.find((c) => c.id === userId);
+    if (!user) {
+      showToast("User not found.");
+      return;
+    }
+    if (currentUser && currentUser.id === user.id) {
+      showToast("You cannot suspend your own account.");
+      return;
+    }
+    suspendTargetUserId = userId;
+    elements.suspendUserName.textContent = `Suspend "${user.displayName}" (${user.username})?`;
+    elements.suspendReasonInput.value = "";
+    elements.suspendCodeInput.value = "";
+    openModal(elements.suspendUserDialog);
+    elements.suspendReasonInput.focus();
+  }
+
+  function handleSuspendUserSubmit(event) {
+    event.preventDefault();
+    if (!isAdmin()) {
+      showToast("Only admin can suspend users.");
+      return;
+    }
+    const code = elements.suspendCodeInput.value.trim().toUpperCase();
+    if (code !== getCashRemovalCode()) {
+      showToast("Invalid security code.");
+      return;
+    }
+    const reason = elements.suspendReasonInput.value.trim();
+    if (!reason) {
+      showToast("Enter a reason for the suspension.");
+      return;
+    }
+    const user = store.users.find((c) => c.id === suspendTargetUserId);
+    if (!user) {
+      showToast("User not found.");
+      closeModal(elements.suspendUserDialog);
+      return;
+    }
+    user.suspended = true;
+    user.suspendedReason = reason;
+    user.suspendedAt = new Date().toISOString();
+    saveStore();
+    closeModal(elements.suspendUserDialog);
+    suspendTargetUserId = null;
+    renderAdmin();
+    showToast(`${user.displayName} has been suspended.`);
+  }
+
+  function handleReinstateUser(userId) {
+    if (!isAdmin()) {
+      showToast("Only admin can reinstate users.");
+      return;
+    }
+    const user = store.users.find((c) => c.id === userId);
+    if (!user) {
+      showToast("User not found.");
+      return;
+    }
+    user.suspended = false;
+    user.suspendedReason = "";
+    user.suspendedAt = null;
+    saveStore();
+    renderAdmin();
+    showToast(`${user.displayName} has been reinstated.`);
   }
 
   function handleDeleteUser(userId) {
@@ -4400,6 +4547,15 @@ tbody tr:last-child td {
     }
 
     if (!window.confirm(`Delete user "${user.displayName}"? This cannot be undone.`)) {
+      return;
+    }
+
+    const enteredCode = window.prompt("Type the security code to delete this user.", "");
+    if (enteredCode === null) {
+      return;
+    }
+    if (enteredCode.trim().toUpperCase() !== getCashRemovalCode()) {
+      showToast("Invalid code. User was not deleted.");
       return;
     }
 
