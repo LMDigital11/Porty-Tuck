@@ -217,6 +217,11 @@ button:disabled {
   background: transparent;
   color: var(--ink);
   text-align: left;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.nav-tab:hover {
+  background: rgba(33, 110, 78, 0.06);
 }
 
 .nav-tab.is-active {
@@ -287,7 +292,13 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 8px 26px rgba(36, 45, 40, 0.06);
+  box-shadow: 0 4px 16px rgba(36, 45, 40, 0.05);
+  transition: box-shadow 160ms ease;
+}
+
+.summary-card:hover,
+.admin-card:hover {
+  box-shadow: 0 8px 24px rgba(36, 45, 40, 0.09);
 }
 
 .summary-card,
@@ -375,6 +386,23 @@ button:disabled {
   gap: 12px;
 }
 
+.checkbox-field {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink) !important;
+  font-size: 0.88rem !important;
+  cursor: pointer;
+}
+
+.checkbox-field input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+
 label {
   display: grid;
   gap: 7px;
@@ -387,12 +415,13 @@ input,
 select {
   width: 100%;
   min-height: 43px;
-  border: 1px solid #cfc7b7;
-  border-radius: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: #fff;
   color: var(--ink);
   padding: 10px 11px;
   outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
 input:focus,
@@ -407,7 +436,7 @@ select:focus {
   align-content: center;
   gap: 2px;
   padding: 9px 11px;
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: var(--blue-soft);
 }
 
@@ -429,11 +458,12 @@ select:focus {
 .icon-button,
 .import-button {
   min-height: 42px;
-  border-radius: 7px;
+  border-radius: var(--radius);
   border: 1px solid transparent;
   padding: 10px 14px;
   font-weight: 800;
   text-align: center;
+  transition: background 160ms ease, border-color 160ms ease, transform 100ms ease;
 }
 
 .primary-button {
@@ -441,11 +471,24 @@ select:focus {
   color: #fff;
 }
 
+.primary-button:active {
+  transform: scale(0.97);
+}
+
 .secondary-button,
 .import-button {
-  border-color: #cfc7b7;
+  border-color: var(--line);
   background: #fff;
   color: var(--ink);
+}
+
+.secondary-button:hover,
+.icon-button:hover {
+  background: var(--soft);
+}
+
+.secondary-button:active {
+  transform: scale(0.97);
 }
 
 .ghost-button {
@@ -459,15 +502,23 @@ select:focus {
   color: #fff;
 }
 
+.danger-button:hover {
+  filter: brightness(1.1);
+}
+
 .warning-button {
-  background: #e89a00;
+  background: var(--amber);
   color: #fff;
+}
+
+.warning-button:hover {
+  filter: brightness(1.1);
 }
 
 .icon-button {
   min-height: 36px;
   padding: 8px 10px;
-  border-color: #cfc7b7;
+  border-color: var(--line);
   background: #fff;
   color: var(--ink);
 }
@@ -618,15 +669,27 @@ tbody tr:last-child td {
   color: var(--green);
 }
 
+.sell-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+  align-items: start;
+}
+
+.sell-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
 .sell-card {
-  aspect-ratio: 1 / 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   gap: 4px;
-  padding: 8px;
+  padding: 14px 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.84);
@@ -637,15 +700,16 @@ tbody tr:last-child td {
   width: 100%;
   border: 1px solid var(--line);
   color: inherit;
-  box-shadow: 0 8px 20px rgba(36, 45, 40, 0.05);
-  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  box-shadow: 0 4px 12px rgba(36, 45, 40, 0.04);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
 }
 
 .sell-card-button:hover,
 .sell-card-button:focus-visible {
   transform: translateY(-2px);
   border-color: rgba(33, 110, 78, 0.38);
-  box-shadow: 0 14px 30px rgba(36, 45, 40, 0.12);
+  background: var(--green-soft);
+  box-shadow: 0 8px 24px rgba(36, 45, 40, 0.1);
 }
 
 .sell-card-button:disabled {
@@ -671,6 +735,24 @@ tbody tr:last-child td {
   font-weight: 700;
 }
 
+.sell-card-price {
+  color: var(--green);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+@keyframes cardPulse {
+  0% { box-shadow: 0 0 0 0 rgba(33, 110, 78, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(33, 110, 78, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(33, 110, 78, 0); }
+}
+
+.sell-card-button:active:not(:disabled) {
+  transform: scale(0.96);
+  border-color: var(--green);
+  animation: cardPulse 0.4s ease-out;
+}
+
 .sell-metrics {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -682,8 +764,8 @@ tbody tr:last-child td {
   gap: 3px;
   min-width: 0;
   padding: 9px;
-  border-radius: 7px;
-  background: #f7f4ee;
+  border-radius: var(--radius);
+  background: var(--soft);
 }
 
 .sell-metrics span {
@@ -725,12 +807,13 @@ tbody tr:last-child td {
 
 .keypad-button {
   min-height: 48px;
-  border: 1px solid #d7cfbf;
+  border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;
   color: var(--ink);
   font-size: 1rem;
   font-weight: 800;
+  transition: background 100ms ease, transform 100ms ease;
 }
 
 .keypad-button:active {
@@ -764,7 +847,9 @@ tbody tr:last-child td {
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.84);
+  background: rgba(255, 255, 255, 0.92);
+  position: sticky;
+  top: 20px;
 }
 
 .basket-header {
@@ -790,8 +875,9 @@ tbody tr:last-child td {
   gap: 10px;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: #fff;
+  transition: background 100ms ease;
 }
 
 .basket-item strong {
@@ -862,13 +948,15 @@ tbody tr:last-child td {
   border-color: rgba(179, 72, 53, 0.35);
 }
 
-@media (max-width: 1280px) {
-  .sell-grid {
-    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
-  }
-}
-
 @media (max-width: 1040px) {
+  .sell-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .basket-panel {
+    position: static;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
   }
@@ -923,7 +1011,7 @@ tbody tr:last-child td {
   }
 
   .sell-grid {
-    grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
     gap: 8px;
   }
 
@@ -1222,8 +1310,9 @@ tbody tr:last-child td {
           </label>
         </div>
         <div id="lowStockList" class="low-stock-list"></div>
-        <div id="sellGrid" class="sell-grid"></div>
-        <section id="basketPanel" class="basket-panel">
+        <div class="sell-layout">
+          <div id="sellGrid" class="sell-grid"></div>
+          <section id="basketPanel" class="basket-panel">
           <div class="basket-header">
             <div>
               <h4>Basket</h4>
@@ -1239,6 +1328,7 @@ tbody tr:last-child td {
             <span id="basketTotal" class="basket-total">GBP 0.00</span>
           </div>
         </section>
+        </div>
       </section>
 
       <section class="tab-panel is-hidden" id="eventsTab" data-panel="events">
@@ -1464,9 +1554,9 @@ tbody tr:last-child td {
                 Username
                 <input id="newUsername" type="text" required placeholder="alex">
               </label>
-              <label>
+              <label id="newPasswordLabel">
                 Password
-                <input id="newPassword" type="password" required minlength="4">
+                <input id="newPassword" type="password" minlength="4" placeholder="Leave blank for temp password">
               </label>
               <label>
                 Role
@@ -1474,6 +1564,10 @@ tbody tr:last-child td {
                   <option value="seller">Seller</option>
                   <option value="admin">Admin</option>
                 </select>
+              </label>
+              <label class="checkbox-field">
+                <input id="newMustChangePassword" type="checkbox" checked>
+                User must set their own password on first login
               </label>
               <button type="submit" class="primary-button full-width">Create account</button>
             </form>
@@ -1755,6 +1849,26 @@ tbody tr:last-child td {
       <div class="modal-actions">
         <button type="button" id="cancelSuspendButton" class="secondary-button">Cancel</button>
         <button type="submit" class="danger-button">Suspend user</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="forcePasswordDialog" class="modal">
+    <form id="forcePasswordForm" method="dialog">
+      <h3>Set your password</h3>
+      <p>Your administrator requires you to set a new password before continuing.</p>
+      <div class="form-grid">
+        <label>
+          New password
+          <input id="forcePasswordValue" type="password" minlength="4" required autocomplete="new-password">
+        </label>
+        <label>
+          Confirm password
+          <input id="forcePasswordConfirm" type="password" minlength="4" required autocomplete="new-password">
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="primary-button">Save password</button>
       </div>
     </form>
   </dialog>
@@ -2044,6 +2158,12 @@ tbody tr:last-child td {
     elements.suspendReasonInput = document.querySelector("#suspendReasonInput");
     elements.suspendCodeInput = document.querySelector("#suspendCodeInput");
     elements.cancelSuspendButton = document.querySelector("#cancelSuspendButton");
+    elements.newMustChangePassword = document.querySelector("#newMustChangePassword");
+    elements.newPasswordLabel = document.querySelector("#newPasswordLabel");
+    elements.forcePasswordDialog = document.querySelector("#forcePasswordDialog");
+    elements.forcePasswordForm = document.querySelector("#forcePasswordForm");
+    elements.forcePasswordValue = document.querySelector("#forcePasswordValue");
+    elements.forcePasswordConfirm = document.querySelector("#forcePasswordConfirm");
     elements.showMaintenanceLoginButton = document.querySelector("#showMaintenanceLoginButton");
     elements.maintenanceLoginForm = document.querySelector("#maintenanceLoginForm");
     elements.maintenanceLoginUsername = document.querySelector("#maintenanceLoginUsername");
@@ -2127,6 +2247,13 @@ tbody tr:last-child td {
     elements.cancelEditScheduleButton.addEventListener("click", () => closeModal(elements.editScheduleDialog));
     elements.suspendUserForm.addEventListener("submit", handleSuspendUserSubmit);
     elements.cancelSuspendButton.addEventListener("click", () => closeModal(elements.suspendUserDialog));
+    elements.forcePasswordForm.addEventListener("submit", handleForcePasswordSubmit);
+    elements.newMustChangePassword.addEventListener("change", () => {
+      const checked = elements.newMustChangePassword.checked;
+      elements.newPassword.required = !checked;
+      elements.newPassword.placeholder = checked ? "Leave blank for temp password" : "";
+      if (checked) elements.newPassword.value = "";
+    });
     elements.showMaintenanceLoginButton.addEventListener("click", () => {
       elements.showMaintenanceLoginButton.classList.add("is-hidden");
       elements.maintenanceLoginForm.classList.remove("is-hidden");
@@ -2299,6 +2426,7 @@ tbody tr:last-child td {
         suspended: Boolean(user.suspended),
         suspendedReason: String(user.suspendedReason || ""),
         suspendedAt: user.suspendedAt || null,
+        mustChangePassword: Boolean(user.mustChangePassword),
         createdAt: user.createdAt || new Date().toISOString()
       }));
 
@@ -2396,6 +2524,15 @@ tbody tr:last-child td {
 
     currentUser = user;
     elements.loginForm.reset();
+
+    if (user.mustChangePassword) {
+      elements.forcePasswordValue.value = "";
+      elements.forcePasswordConfirm.value = "";
+      openModal(elements.forcePasswordDialog);
+      elements.forcePasswordValue.focus();
+      return;
+    }
+
     activeTab = user.role === "admin" ? "stock" : "sell";
     renderAuth();
     showToast(`Welcome, ${user.displayName}.`);
@@ -3948,7 +4085,8 @@ tbody tr:last-child td {
         <button type="button" class="sell-card sell-card-button" data-sell-id="${item.id}" ${disabled || availableDisabled}>
           <span class="sell-card-name">${escapeHtml(item.name)}</span>
           <span class="sell-card-meta">${escapeHtml(item.category)}</span>
-          <span class="sell-card-stock">${availableQty} available</span>
+          <span class="sell-card-price">${money.format(item.sellPrice)}</span>
+          <span class="sell-card-stock">${availableQty} left</span>
           ${stockStatusBadge(item)}
         </button>
       `;
@@ -4216,6 +4354,15 @@ tbody tr:last-child td {
     }
   }
 
+  function generateTempPassword() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+    let pass = "";
+    for (let i = 0; i < 8; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return pass;
+  }
+
   async function handleCreateUser(event) {
     event.preventDefault();
     if (!isAdmin()) {
@@ -4225,16 +4372,32 @@ tbody tr:last-child td {
 
     const username = normalizeUsername(elements.newUsername.value);
     const displayName = elements.newDisplayName.value.trim();
-    const password = elements.newPassword.value;
     const role = elements.newRole.value === "admin" ? "admin" : "seller";
+    const mustChange = elements.newMustChangePassword.checked;
+    let password = elements.newPassword.value;
 
-    if (!username || !displayName || password.length < 4) {
-      showToast("Complete the account details.");
+    if (!username || !displayName) {
+      showToast("Enter a name and username.");
       return;
     }
     if (store.users.some((user) => user.username === username)) {
       showToast("That username already exists.");
       return;
+    }
+
+    let tempPassword = null;
+    if (mustChange) {
+      if (password && password.length >= 4) {
+        tempPassword = password;
+      } else {
+        tempPassword = generateTempPassword();
+      }
+    } else {
+      if (!password || password.length < 4) {
+        showToast("Password must be at least 4 characters.");
+        return;
+      }
+      tempPassword = password;
     }
 
     const salt = uid("salt");
@@ -4243,16 +4406,23 @@ tbody tr:last-child td {
       username,
       displayName,
       role,
-      passwordHash: await hashPassword(password, salt),
+      passwordHash: await hashPassword(tempPassword, salt),
       salt,
       active: true,
+      mustChangePassword: mustChange,
       createdAt: new Date().toISOString()
     });
 
     saveStore();
     elements.createUserForm.reset();
     renderAdmin();
-    showToast(`${displayName} account created.`);
+
+    if (mustChange) {
+      showToast(`${displayName} account created. Temporary password: ${tempPassword}`);
+      navigator.clipboard.writeText(tempPassword).catch(() => {});
+    } else {
+      showToast(`${displayName} account created.`);
+    }
   }
 
   async function handlePasswordChange(event) {
@@ -4276,10 +4446,51 @@ tbody tr:last-child td {
 
     user.salt = uid("salt");
     user.passwordHash = await hashPassword(password, user.salt);
+    user.mustChangePassword = false;
     saveStore();
     elements.passwordValue.value = "";
     await updateLoginHint();
     showToast(`${user.displayName} password updated.`);
+  }
+
+  async function handleForcePasswordSubmit(event) {
+    event.preventDefault();
+    if (!currentUser) {
+      showToast("No user logged in.");
+      return;
+    }
+
+    const password = elements.forcePasswordValue.value;
+    const confirm = elements.forcePasswordConfirm.value;
+
+    if (password.length < 4) {
+      showToast("Password must be at least 4 characters.");
+      return;
+    }
+    if (password !== confirm) {
+      showToast("Passwords do not match.");
+      return;
+    }
+
+    const user = store.users.find((u) => u.id === currentUser.id);
+    if (!user) {
+      showToast("User not found.");
+      closeModal(elements.forcePasswordDialog);
+      currentUser = null;
+      renderAuth();
+      return;
+    }
+
+    user.salt = uid("salt");
+    user.passwordHash = await hashPassword(password, user.salt);
+    user.mustChangePassword = false;
+    currentUser = user;
+    saveStore();
+    closeModal(elements.forcePasswordDialog);
+
+    activeTab = user.role === "admin" ? "stock" : "sell";
+    renderAuth();
+    showToast("Password updated. Welcome, " + user.displayName + ".");
   }
 
   async function handleSelfDestruct(event) {
