@@ -27,24 +27,23 @@ interface Env {
 
 const STORE_KEY = "tuck-shop-manager-v1";
 
-async function ensureAppStateTable(db: D1Database): Promise<void> {
-  await db
-    .prepare(`
-      CREATE TABLE IF NOT EXISTS app_state (
-        id TEXT PRIMARY KEY,
-        data TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `)
-    .run();
+const APP_STATE_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS app_state (
+    id TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )
+`;
 
-  await db
-    .prepare(`
-      CREATE INDEX IF NOT EXISTS app_state_updated_at_idx
-      ON app_state(updated_at)
-    `)
-    .run();
+const APP_STATE_INDEX_SQL = `
+  CREATE INDEX IF NOT EXISTS app_state_updated_at_idx
+  ON app_state(updated_at)
+`;
+
+async function ensureAppStateTable(db: D1Database): Promise<void> {
+  await db.prepare(APP_STATE_TABLE_SQL).run();
+  await db.prepare(APP_STATE_INDEX_SQL).run();
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -55,8 +54,6 @@ function jsonResponse(data: unknown, status = 200): Response {
 }
 
 async function loadStoreFromDb(db: D1Database): Promise<StoreDocument | null> {
-  await ensureAppStateTable(db);
-
   const row = await db
     .prepare("SELECT data FROM app_state WHERE id = ?")
     .bind(STORE_KEY)
@@ -75,8 +72,6 @@ async function loadStoreFromDb(db: D1Database): Promise<StoreDocument | null> {
 }
 
 async function saveStoreToDb(db: D1Database, store: StoreDocument): Promise<void> {
-  await ensureAppStateTable(db);
-
   const payload = JSON.stringify(store);
   const existing = await db
     .prepare("SELECT 1 FROM app_state WHERE id = ?")
