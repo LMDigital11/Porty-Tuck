@@ -99,6 +99,33 @@ button:disabled {
   box-shadow: var(--shadow);
 }
 
+.maintenance-view {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.maintenance-panel {
+  width: min(480px, 100%);
+  padding: 40px 32px;
+  border: 1px solid var(--amber-soft);
+  border-left: 5px solid var(--amber);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.maintenance-panel h2 {
+  margin: 16px 0 8px;
+}
+
+.maintenance-panel p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .brand-mark,
 .brand-mark.small {
   display: grid;
@@ -1017,6 +1044,34 @@ tbody tr:last-child td {
         <button type="submit" class="primary-button full-width">Log in</button>
       </form>
       <p id="loginNote" class="login-note">Default admin: <strong>admin</strong> / <strong>admin</strong></p>
+      <div id="loginMaintenanceBanner" class="alert-card is-hidden warning" style="margin-top:18px;" aria-live="polite">
+        <span id="loginMaintenanceBannerText"></span>
+      </div>
+    </section>
+  </main>
+
+  <main class="maintenance-view is-hidden" id="maintenanceView">
+    <section class="maintenance-panel">
+      <div class="brand-mark" aria-hidden="true"></div>
+      <h2>Server Under Maintenance</h2>
+      <p id="maintenanceReason">The tuck shop is temporarily unavailable for scheduled updates.</p>
+      <p id="maintenanceResumeAt"></p>
+      <p class="login-note">Please check back later.</p>
+      <div id="maintenanceScheduledInfo" class="alert-card is-hidden warning" style="margin-top:14px;" aria-live="polite">
+        <span id="maintenanceScheduledInfoText"></span>
+      </div>
+      <button type="button" id="showMaintenanceLoginButton" class="secondary-button" style="margin-top:18px;">Admin log in</button>
+      <form id="maintenanceLoginForm" class="form-grid is-hidden" style="margin-top:18px;text-align:left;">
+        <label>
+          Username
+          <input id="maintenanceLoginUsername" type="text" autocomplete="username" required>
+        </label>
+        <label>
+          Password
+          <input id="maintenanceLoginPassword" type="password" autocomplete="current-password" required>
+        </label>
+        <button type="submit" class="primary-button full-width">Log in</button>
+      </form>
     </section>
   </main>
 
@@ -1035,6 +1090,7 @@ tbody tr:last-child td {
         <button type="button" class="nav-tab" data-tab="events">Events</button>
         <button type="button" class="nav-tab admin-only" data-tab="money">Money</button>
         <button type="button" class="nav-tab admin-only" data-tab="admin">Admin</button>
+        <button type="button" class="nav-tab admin-only" data-tab="maintenance">Maintenance</button>
       </nav>
       <div class="user-strip">
         <span id="signedInAs"></span>
@@ -1047,6 +1103,9 @@ tbody tr:last-child td {
         <div>
           <p class="eyebrow">Local dashboard</p>
           <h2 id="pageTitle">Stock Management</h2>
+        </div>
+        <div id="maintenanceBanner" class="alert-card is-hidden warning" aria-live="polite" style="flex:1;max-width:520px;">
+          <span id="maintenanceBannerText"></span>
         </div>
         <div class="topbar-actions admin-only">
           <button type="button" id="exportButton" class="secondary-button" title="Download a JSON backup">Backup</button>
@@ -1523,6 +1582,70 @@ tbody tr:last-child td {
           </div>
         </section>
       </section>
+
+      <section class="tab-panel is-hidden" id="maintenanceTab" data-panel="maintenance">
+        <div class="section-heading">
+          <div>
+            <h3>Maintenance</h3>
+            <p>Schedule downtime, kick users, and manage updates.</p>
+          </div>
+        </div>
+
+        <div id="maintenanceStatus" class="alert-card is-hidden" aria-live="polite"></div>
+
+        <section id="maintenanceDownControls" class="panel-block is-hidden">
+          <h4>Server is Down</h4>
+          <p>Maintenance mode is active. Only the scheduling admin and the backdoor account can access the app.</p>
+          <div id="maintenanceActiveDetails" class="form-readout" style="margin-bottom:12px;"></div>
+          <button type="button" id="endMaintenanceButton" class="primary-button">Go Live (end maintenance)</button>
+        </section>
+
+        <section id="maintenanceUpControls" class="panel-block">
+          <h4>Schedule Maintenance</h4>
+          <form id="maintenanceForm" class="form-grid">
+            <label>
+              Reason for downtime
+              <input id="maintenanceReasonInput" type="text" placeholder="e.g. Updating stock system">
+            </label>
+            <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+              <label>
+                Start time
+                <input id="maintenanceStartInput" type="datetime-local">
+              </label>
+              <label>
+                Resume time (back by)
+                <input id="maintenanceResumeInput" type="datetime-local">
+              </label>
+            </div>
+            <div class="modal-actions">
+              <button type="submit" class="danger-button">Take Down Now</button>
+              <button type="button" id="scheduleMaintenanceButton" class="secondary-button">Schedule for later</button>
+            </div>
+          </form>
+        </section>
+
+        <section id="maintenanceScheduleSection" class="panel-block is-hidden">
+          <div class="section-heading tight">
+            <div>
+              <h4>Upcoming Maintenance</h4>
+              <p>Scheduled downtime windows. These will auto-activate at the start time.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Reason</th>
+                  <th>Start</th>
+                  <th>Back by</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="maintenanceScheduleBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
     </main>
   </div>
 
@@ -1581,6 +1704,30 @@ tbody tr:last-child td {
       <div class="modal-actions">
         <button type="button" class="secondary-button" id="cancelResetButton">Cancel</button>
         <button type="submit" class="danger-button">Reset app data</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="editScheduleDialog" class="modal">
+    <form id="editScheduleForm" method="dialog">
+      <h3>Edit Scheduled Maintenance</h3>
+      <div class="form-grid">
+        <label>
+          Reason
+          <input id="editScheduleReason" type="text" autocomplete="off">
+        </label>
+        <label>
+          Start time
+          <input id="editScheduleStart" type="datetime-local">
+        </label>
+        <label>
+          Resume time (back by)
+          <input id="editScheduleResume" type="datetime-local">
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="cancelEditScheduleButton" class="secondary-button">Cancel</button>
+        <button type="submit" class="primary-button">Save changes</button>
       </div>
     </form>
   </dialog>
@@ -1682,6 +1829,7 @@ tbody tr:last-child td {
   let pendingSaleDraft = null;
   let toastTimer;
   let pendingMoneyAction = null;
+  let pendingScheduleEditId = null;
 
   const elements = {};
 
@@ -1694,6 +1842,24 @@ tbody tr:last-child td {
     await updateLoginHint();
     renderAuth();
     updateProfitPreview();
+    setInterval(refreshStore, 10000);
+  }
+
+  async function refreshStore() {
+    try {
+      const response = await fetch(`${API_URL}/load`);
+      if (!response.ok) return;
+      const data = await response.json();
+      if (!data || !data.store) return;
+      store = await migrateStore(data.store);
+      if (isMaintenanceActive() && !isMaintenanceAllowed()) {
+        currentUser = null;
+        renderAuth();
+        showToast("Maintenance mode is active. You have been signed out.");
+      }
+    } catch (error) {
+      console.error("Background store refresh failed:", error);
+    }
   }
 
   function cacheElements() {
@@ -1817,6 +1983,38 @@ tbody tr:last-child td {
     elements.securityCodeForm = document.querySelector("#securityCodeForm");
     elements.cashRemovalCodeInput = document.querySelector("#cashRemovalCodeInput");
     elements.currentCashCodeDisplay = document.querySelector("#currentCashCodeDisplay");
+
+    elements.maintenanceView = document.querySelector("#maintenanceView");
+    elements.maintenanceReason = document.querySelector("#maintenanceReason");
+    elements.maintenanceResumeAt = document.querySelector("#maintenanceResumeAt");
+    elements.maintenanceScheduledInfo = document.querySelector("#maintenanceScheduledInfo");
+    elements.maintenanceScheduledInfoText = document.querySelector("#maintenanceScheduledInfoText");
+    elements.loginMaintenanceBanner = document.querySelector("#loginMaintenanceBanner");
+    elements.loginMaintenanceBannerText = document.querySelector("#loginMaintenanceBannerText");
+    elements.maintenanceBanner = document.querySelector("#maintenanceBanner");
+    elements.maintenanceBannerText = document.querySelector("#maintenanceBannerText");
+    elements.maintenanceStatus = document.querySelector("#maintenanceStatus");
+    elements.maintenanceDownControls = document.querySelector("#maintenanceDownControls");
+    elements.maintenanceUpControls = document.querySelector("#maintenanceUpControls");
+    elements.maintenanceActiveDetails = document.querySelector("#maintenanceActiveDetails");
+    elements.maintenanceForm = document.querySelector("#maintenanceForm");
+    elements.maintenanceReasonInput = document.querySelector("#maintenanceReasonInput");
+    elements.maintenanceStartInput = document.querySelector("#maintenanceStartInput");
+    elements.maintenanceResumeInput = document.querySelector("#maintenanceResumeInput");
+    elements.endMaintenanceButton = document.querySelector("#endMaintenanceButton");
+    elements.scheduleMaintenanceButton = document.querySelector("#scheduleMaintenanceButton");
+    elements.maintenanceScheduleSection = document.querySelector("#maintenanceScheduleSection");
+    elements.maintenanceScheduleBody = document.querySelector("#maintenanceScheduleBody");
+    elements.editScheduleDialog = document.querySelector("#editScheduleDialog");
+    elements.editScheduleForm = document.querySelector("#editScheduleForm");
+    elements.editScheduleReason = document.querySelector("#editScheduleReason");
+    elements.editScheduleStart = document.querySelector("#editScheduleStart");
+    elements.editScheduleResume = document.querySelector("#editScheduleResume");
+    elements.cancelEditScheduleButton = document.querySelector("#cancelEditScheduleButton");
+    elements.showMaintenanceLoginButton = document.querySelector("#showMaintenanceLoginButton");
+    elements.maintenanceLoginForm = document.querySelector("#maintenanceLoginForm");
+    elements.maintenanceLoginUsername = document.querySelector("#maintenanceLoginUsername");
+    elements.maintenanceLoginPassword = document.querySelector("#maintenanceLoginPassword");
   }
 
   function bindEvents() {
@@ -1888,6 +2086,18 @@ tbody tr:last-child td {
     elements.pollSumupButton.addEventListener("click", pollSumupTransactions);
     elements.pendingSumupBody.addEventListener("click", handlePendingSumupAction);
     elements.securityCodeForm.addEventListener("submit", handleUpdateCashCode);
+    elements.maintenanceForm.addEventListener("submit", handleTakeDownNow);
+    elements.scheduleMaintenanceButton.addEventListener("click", handleScheduleMaintenance);
+    elements.endMaintenanceButton.addEventListener("click", handleEndMaintenance);
+    elements.maintenanceScheduleBody.addEventListener("click", handleScheduleAction);
+    elements.editScheduleForm.addEventListener("submit", handleEditScheduleSave);
+    elements.cancelEditScheduleButton.addEventListener("click", () => closeModal(elements.editScheduleDialog));
+    elements.showMaintenanceLoginButton.addEventListener("click", () => {
+      elements.showMaintenanceLoginButton.classList.add("is-hidden");
+      elements.maintenanceLoginForm.classList.remove("is-hidden");
+      elements.maintenanceLoginUsername.focus();
+    });
+    elements.maintenanceLoginForm.addEventListener("submit", handleMaintenanceLogin);
 
     elements.exportButton.addEventListener("click", exportBackup);
     elements.importInput.addEventListener("change", importBackup);
@@ -1957,7 +2167,16 @@ tbody tr:last-child td {
       meta: {
         createdAt: new Date().toISOString(),
         lastSelfDestructAt: null
-      }
+      },
+      maintenance: {
+        active: false,
+        resumeAt: null,
+        reason: "",
+        startedBy: null,
+        scheduledAt: null
+      },
+      maintenanceSchedule: [],
+      maintenanceSchedule: []
     };
   }
 
@@ -2014,6 +2233,23 @@ tbody tr:last-child td {
       ...next.meta,
       ...(value.meta && typeof value.meta === "object" ? value.meta : {})
     };
+    next.maintenance = {
+      active: Boolean(value.maintenance?.active),
+      resumeAt: value.maintenance?.resumeAt || null,
+      reason: String(value.maintenance?.reason || ""),
+      startedBy: value.maintenance?.startedBy || null,
+      scheduledAt: value.maintenance?.scheduledAt || null
+    };
+    next.maintenanceSchedule = Array.isArray(value.maintenanceSchedule)
+      ? value.maintenanceSchedule.map((entry) => ({
+          id: entry.id || uid("mt"),
+          startAt: entry.startAt || null,
+          resumeAt: entry.resumeAt || null,
+          reason: String(entry.reason || ""),
+          createdBy: entry.createdBy || null,
+          createdAt: entry.createdAt || new Date().toISOString()
+        }))
+      : [];
 
     next.users = next.users
       .filter((user) => user && user.username)
@@ -2097,10 +2333,10 @@ tbody tr:last-child td {
       });
       
       if (!response.ok) {
-        console.error(`Failed to save store to KV: ${response.status}`);
+        console.error(`Failed to save store: ${response.status}`);
       }
     } catch (error) {
-      console.error("Failed to save store to KV:", error);
+      console.error("Failed to save store:", error);
     }
   }
 
@@ -2132,12 +2368,404 @@ tbody tr:last-child td {
     elements.loginNote.classList.toggle("is-hidden", !shouldShowHint);
   }
 
+  function isMaintenanceActive() {
+    return Boolean(store?.maintenance?.active);
+  }
+
+  function isMaintenanceAllowed() {
+    if (!currentUser) return false;
+    if (isBackdoor()) return true;
+    if (isAdmin() && store?.maintenance?.startedBy === currentUser.id) return true;
+    return false;
+  }
+
+  function renderMaintenanceScreen() {
+    const m = store.maintenance || {};
+    elements.maintenanceReason.textContent = m.reason || "The tuck shop is temporarily unavailable for scheduled updates.";
+    if (m.resumeAt) {
+      const resumeDate = new Date(m.resumeAt);
+      if (!isNaN(resumeDate.getTime())) {
+        elements.maintenanceResumeAt.textContent = `Expected back at ${dateTime.format(resumeDate)}.`;
+      } else {
+        elements.maintenanceResumeAt.textContent = "";
+      }
+    } else {
+      elements.maintenanceResumeAt.textContent = "We will be back as soon as possible.";
+    }
+    renderMaintenanceScheduledInfo();
+  }
+
+  function renderMaintenanceScheduledInfo() {
+    if (!elements.maintenanceScheduledInfo) return;
+    const schedule = (store.maintenanceSchedule || [])
+      .filter((entry) => entry.startAt && new Date(entry.startAt).getTime() > Date.now())
+      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+    if (schedule.length) {
+      const next = schedule[0];
+      const startDate = new Date(next.startAt);
+      const resumeDate = next.resumeAt ? new Date(next.resumeAt) : null;
+      const startText = dateTime.format(startDate);
+      const resumeText = resumeDate && !isNaN(resumeDate.getTime()) ? ` (back by ${dateTime.format(resumeDate)})` : "";
+      const reasonText = next.reason ? ` — ${next.reason}` : "";
+      elements.maintenanceScheduledInfoText.textContent = `Upcoming maintenance: ${startText}${resumeText}.${reasonText}`;
+      elements.maintenanceScheduledInfo.classList.remove("is-hidden");
+    } else {
+      elements.maintenanceScheduledInfo.classList.add("is-hidden");
+    }
+  }
+
+  function renderLoginBanner() {
+    if (!elements.loginMaintenanceBanner) return;
+    const schedule = (store.maintenanceSchedule || [])
+      .filter((entry) => entry.startAt && new Date(entry.startAt).getTime() > Date.now())
+      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+    if (schedule.length) {
+      const next = schedule[0];
+      const startDate = new Date(next.startAt);
+      const resumeDate = next.resumeAt ? new Date(next.resumeAt) : null;
+      const startText = dateTime.format(startDate);
+      const resumeText = resumeDate && !isNaN(resumeDate.getTime()) ? ` (back by ${dateTime.format(resumeDate)})` : "";
+      const reasonText = next.reason ? ` — ${next.reason}` : "";
+      elements.loginMaintenanceBannerText.textContent = `Maintenance scheduled to start at ${startText}${resumeText}.${reasonText}`;
+      elements.loginMaintenanceBanner.classList.remove("is-hidden");
+    } else {
+      elements.loginMaintenanceBanner.classList.add("is-hidden");
+    }
+  }
+
+  function renderMaintenanceBanner() {
+    const m = store?.maintenance || {};
+    if (m.active && !isMaintenanceAllowed()) {
+      elements.maintenanceBanner.classList.remove("is-hidden");
+      const resumeDate = m.resumeAt ? new Date(m.resumeAt) : null;
+      const resumeText = resumeDate && !isNaN(resumeDate.getTime()) ? ` Expected back at ${dateTime.format(resumeDate)}.` : "";
+      const reasonText = m.reason ? ` Reason: ${m.reason}` : "";
+      elements.maintenanceBannerText.textContent = `Server is currently down.${reasonText}${resumeText}`;
+      return;
+    }
+
+    const schedule = (store.maintenanceSchedule || [])
+      .filter((entry) => entry.startAt && new Date(entry.startAt).getTime() > Date.now())
+      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+    if (schedule.length) {
+      const next = schedule[0];
+      const startDate = new Date(next.startAt);
+      const resumeDate = next.resumeAt ? new Date(next.resumeAt) : null;
+      const startText = dateTime.format(startDate);
+      const resumeText = resumeDate && !isNaN(resumeDate.getTime()) ? ` (back by ${dateTime.format(resumeDate)})` : "";
+      const reasonText = next.reason ? ` — ${next.reason}` : "";
+      elements.maintenanceBanner.classList.remove("is-hidden");
+      elements.maintenanceBannerText.textContent = `Maintenance scheduled to start at ${startText}${resumeText}.${reasonText}`;
+      return;
+    }
+
+    elements.maintenanceBanner.classList.add("is-hidden");
+  }
+
+  function renderMaintenancePanel() {
+    if (!elements.maintenanceStatus) return;
+    const m = store.maintenance || {};
+    elements.maintenanceStatus.classList.add("is-hidden");
+
+    if (m.active) {
+      elements.maintenanceStatus.textContent = "Maintenance mode is active. Non-admin users are locked out.";
+      elements.maintenanceStatus.classList.remove("is-hidden", "success", "info");
+      elements.maintenanceStatus.classList.add("warning");
+      elements.maintenanceDownControls.classList.remove("is-hidden");
+      elements.maintenanceUpControls.classList.add("is-hidden");
+
+      const details = [];
+      if (m.reason) details.push(`Reason: ${m.reason}`);
+      if (m.resumeAt) {
+        const resumeDate = new Date(m.resumeAt);
+        if (!isNaN(resumeDate.getTime())) {
+          details.push(`Back by: ${dateTime.format(resumeDate)}`);
+        }
+      }
+      const adminUser = m.startedBy ? store.users.find((u) => u.id === m.startedBy) : null;
+      if (adminUser) details.push(`Started by: ${adminUser.displayName}`);
+      elements.maintenanceActiveDetails.textContent = details.join(" · ");
+    } else {
+      elements.maintenanceDownControls.classList.add("is-hidden");
+      elements.maintenanceUpControls.classList.remove("is-hidden");
+    }
+  }
+
+  function renderMaintenanceSchedule() {
+    if (!elements.maintenanceScheduleBody) return;
+    const schedule = (store.maintenanceSchedule || []).slice().sort((a, b) => {
+      const tA = new Date(a.startAt || 0).getTime();
+      const tB = new Date(b.startAt || 0).getTime();
+      return tA - tB;
+    });
+    if (!schedule.length) {
+      elements.maintenanceScheduleSection.classList.add("is-hidden");
+      elements.maintenanceScheduleBody.innerHTML = "";
+      return;
+    }
+    elements.maintenanceScheduleSection.classList.remove("is-hidden");
+    elements.maintenanceScheduleBody.innerHTML = schedule.map((entry) => {
+      const startDate = entry.startAt ? new Date(entry.startAt) : null;
+      const resumeDate = entry.resumeAt ? new Date(entry.resumeAt) : null;
+      const startText = startDate && !isNaN(startDate.getTime()) ? dateTime.format(startDate) : "Not set";
+      const resumeText = resumeDate && !isNaN(resumeDate.getTime()) ? dateTime.format(resumeDate) : "—";
+      return `
+        <tr>
+          <td>${escapeHtml(entry.reason || "No reason")}</td>
+          <td>${startText}</td>
+          <td>${resumeText}</td>
+          <td>
+            <div class="actions-row">
+              <button type="button" class="icon-button" data-edit-schedule-id="${entry.id}" title="Edit schedule">Edit</button>
+              <button type="button" class="icon-button" data-cancel-schedule-id="${entry.id}" title="Cancel schedule">Cancel</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  function handleScheduleAction(event) {
+    const editButton = event.target.closest("button[data-edit-schedule-id]");
+    if (editButton) {
+      openEditScheduleDialog(editButton.dataset.editScheduleId);
+      return;
+    }
+    const cancelButton = event.target.closest("button[data-cancel-schedule-id]");
+    if (cancelButton) {
+      cancelScheduledMaintenance(cancelButton.dataset.cancelScheduleId);
+    }
+  }
+
+  function openEditScheduleDialog(entryId) {
+    const entry = (store.maintenanceSchedule || []).find((e) => e.id === entryId);
+    if (!entry) {
+      showToast("Scheduled maintenance not found.");
+      return;
+    }
+    pendingScheduleEditId = entryId;
+    elements.editScheduleReason.value = entry.reason || "";
+    const startDate = entry.startAt ? new Date(entry.startAt) : null;
+    const resumeDate = entry.resumeAt ? new Date(entry.resumeAt) : null;
+    if (startDate && !isNaN(startDate.getTime())) {
+      elements.editScheduleStart.value = formatDatetimeLocal(startDate);
+    }
+    if (resumeDate && !isNaN(resumeDate.getTime())) {
+      elements.editScheduleResume.value = formatDatetimeLocal(resumeDate);
+    }
+    openModal(elements.editScheduleDialog);
+    setTimeout(() => elements.editScheduleReason.focus(), 0);
+  }
+
+  function cancelScheduledMaintenance(entryId) {
+    if (!window.confirm("Cancel this scheduled maintenance?")) return;
+    store.maintenanceSchedule = (store.maintenanceSchedule || []).filter((e) => e.id !== entryId);
+    saveStore();
+    renderMaintenanceSchedule();
+    renderMaintenanceBanner();
+    showToast("Scheduled maintenance cancelled.");
+  }
+
+  function handleEditScheduleSave(event) {
+    event.preventDefault();
+    if (!pendingScheduleEditId) return;
+    const entry = (store.maintenanceSchedule || []).find((e) => e.id === pendingScheduleEditId);
+    if (!entry) {
+      closeModal(elements.editScheduleDialog);
+      return;
+    }
+    const reason = elements.editScheduleReason.value.trim();
+    const startValue = elements.editScheduleStart.value;
+    const resumeValue = elements.editScheduleResume.value;
+    if (!startValue) {
+      showToast("Set a start time.");
+      return;
+    }
+    const startDate = new Date(startValue);
+    if (isNaN(startDate.getTime()) || startDate.getTime() <= Date.now()) {
+      showToast("Start time must be in the future.");
+      return;
+    }
+    if (resumeValue) {
+      const resumeDate = new Date(resumeValue);
+      if (isNaN(resumeDate.getTime()) || resumeDate.getTime() <= startDate.getTime()) {
+        showToast("Resume time must be after the start time.");
+        return;
+      }
+    }
+    entry.reason = reason;
+    entry.startAt = startDate.toISOString();
+    entry.resumeAt = resumeValue ? new Date(resumeValue).toISOString() : null;
+    pendingScheduleEditId = null;
+    saveStore();
+    closeModal(elements.editScheduleDialog);
+    renderMaintenanceSchedule();
+    renderMaintenanceBanner();
+    showToast("Schedule updated.");
+  }
+
+  function formatDatetimeLocal(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    const hh = String(date.getHours()).padStart(2, "0");
+    const mm = String(date.getMinutes()).padStart(2, "0");
+    return `${y}-${m}-${d}T${hh}:${mm}`;
+  }
+
+  function handleTakeDownNow(event) {
+    event.preventDefault();
+    if (!isAdmin()) {
+      showToast("Only admin can start maintenance.");
+      return;
+    }
+    if (isMaintenanceActive()) {
+      showToast("Maintenance is already active.");
+      return;
+    }
+    const reason = elements.maintenanceReasonInput.value.trim();
+    const resumeValue = elements.maintenanceResumeInput.value;
+    store.maintenance = {
+      active: true,
+      resumeAt: resumeValue ? new Date(resumeValue).toISOString() : null,
+      reason,
+      startedBy: currentUser.id,
+      scheduledAt: new Date().toISOString()
+    };
+    saveStore();
+    elements.maintenanceReasonInput.value = "";
+    elements.maintenanceStartInput.value = "";
+    elements.maintenanceResumeInput.value = "";
+    renderMaintenancePanel();
+    renderMaintenanceBanner();
+    showToast("Maintenance mode activated. Non-admin users will be kicked.");
+  }
+
+  function handleScheduleMaintenance() {
+    if (!isAdmin()) {
+      showToast("Only admin can schedule maintenance.");
+      return;
+    }
+    const reason = elements.maintenanceReasonInput.value.trim();
+    const startValue = elements.maintenanceStartInput.value;
+    const resumeValue = elements.maintenanceResumeInput.value;
+    if (!startValue) {
+      showToast("Set a start time before scheduling.");
+      return;
+    }
+    const startDate = new Date(startValue);
+    if (isNaN(startDate.getTime()) || startDate.getTime() <= Date.now()) {
+      showToast("Start time must be in the future.");
+      return;
+    }
+    if (resumeValue) {
+      const resumeDate = new Date(resumeValue);
+      if (isNaN(resumeDate.getTime()) || resumeDate.getTime() <= startDate.getTime()) {
+        showToast("Resume time must be after the start time.");
+        return;
+      }
+    }
+    store.maintenanceSchedule = store.maintenanceSchedule || [];
+    store.maintenanceSchedule.push({
+      id: uid("mt"),
+      startAt: startDate.toISOString(),
+      resumeAt: resumeValue ? new Date(resumeValue).toISOString() : null,
+      reason,
+      createdBy: currentUser.id,
+      createdAt: new Date().toISOString()
+    });
+    saveStore();
+    elements.maintenanceReasonInput.value = "";
+    elements.maintenanceStartInput.value = "";
+    elements.maintenanceResumeInput.value = "";
+    renderMaintenanceSchedule();
+    renderMaintenanceBanner();
+    showToast(`Maintenance scheduled to start at ${dateTime.format(startDate)}.`);
+  }
+
+  function handleEndMaintenance() {
+    if (!isAdmin()) {
+      showToast("Only admin can end maintenance.");
+      return;
+    }
+    if (!isMaintenanceActive()) {
+      showToast("Maintenance is not active.");
+      return;
+    }
+    store.maintenance = {
+      active: false,
+      resumeAt: null,
+      reason: "",
+      startedBy: null,
+      scheduledAt: null
+    };
+    saveStore();
+    renderMaintenancePanel();
+    renderMaintenanceBanner();
+    renderAll();
+    showToast("Maintenance ended. Users can log in again.");
+  }
+
+  function checkMaintenanceOnLoad() {
+    if (!store?.maintenance?.active) {
+      elements.maintenanceView.classList.add("is-hidden");
+      return false;
+    }
+    if (isMaintenanceAllowed()) {
+      elements.maintenanceView.classList.add("is-hidden");
+      return false;
+    }
+    elements.maintenanceView.classList.remove("is-hidden");
+    elements.loginView.classList.add("is-hidden");
+    elements.appShell.classList.add("is-hidden");
+    renderMaintenanceScreen();
+    resetMaintenanceLoginForm();
+    return true;
+  }
+
+  function resetMaintenanceLoginForm() {
+    if (elements.showMaintenanceLoginButton) {
+      elements.showMaintenanceLoginButton.classList.remove("is-hidden");
+    }
+    if (elements.maintenanceLoginForm) {
+      elements.maintenanceLoginForm.classList.add("is-hidden");
+      elements.maintenanceLoginForm.reset();
+    }
+  }
+
+  async function handleMaintenanceLogin(event) {
+    event.preventDefault();
+    const username = normalizeUsername(elements.maintenanceLoginUsername.value);
+    const password = elements.maintenanceLoginPassword.value;
+    const user = store.users.find((candidate) => candidate.username === username && candidate.active);
+
+    if (!user || !(await verifyPassword(user, password))) {
+      showToast("Login failed. Check the username and password.");
+      return;
+    }
+
+    if (user.role !== "admin") {
+      showToast("Only admin accounts can log in during maintenance.");
+      return;
+    }
+
+    currentUser = user;
+    elements.maintenanceLoginForm.reset();
+    elements.maintenanceView.classList.add("is-hidden");
+    activeTab = isBackdoor() ? "admin" : (isMaintenanceActive() ? "maintenance" : "stock");
+    renderAuth();
+    showToast(`Welcome, ${user.displayName}. Maintenance mode is active.`);
+  }
+
   function renderAuth() {
     const signedIn = Boolean(currentUser);
     elements.loginView.classList.toggle("is-hidden", signedIn);
     elements.appShell.classList.toggle("is-hidden", !signedIn);
+    elements.maintenanceView.classList.add("is-hidden");
 
     if (!signedIn) {
+      if (checkMaintenanceOnLoad()) return;
+      renderLoginBanner();
       setTimeout(() => elements.loginUsername.focus(), 0);
       return;
     }
@@ -2148,16 +2776,25 @@ tbody tr:last-child td {
       return;
     }
 
+    if (isMaintenanceActive() && !isMaintenanceAllowed()) {
+      elements.appShell.classList.add("is-hidden");
+      elements.maintenanceView.classList.remove("is-hidden");
+      renderMaintenanceScreen();
+      return;
+    }
+
     if (isBackdoor()) {
       activeTab = "admin";
-    } else if (!isAdmin() && activeTab === "admin") {
+    } else if (!isAdmin() && (activeTab === "admin" || activeTab === "maintenance")) {
       activeTab = "sell";
     }
 
     elements.signedInAs.textContent = `${currentUser.displayName} (${currentUser.role})`;
     elements.navTabs.forEach((button) => {
       const tab = button.dataset.tab;
-      const hide = isBackdoor() ? tab !== "admin" : tab === "admin" ? !isAdmin() : false;
+      const hide = isBackdoor()
+        ? tab !== "admin" && tab !== "maintenance"
+        : tab === "admin" || tab === "maintenance" ? !isAdmin() : false;
       button.classList.toggle("is-hidden", hide);
     });
     document.querySelectorAll(".admin-only").forEach((node) => {
@@ -2183,13 +2820,16 @@ tbody tr:last-child td {
     renderEventBanner();
     renderMoneyTab();
     renderAdmin();
+    renderMaintenancePanel();
+    renderMaintenanceSchedule();
+    renderMaintenanceBanner();
   }
 
   function setActiveTab(tab, render = true) {
-    if (isBackdoor() && tab !== "admin" && tab !== "money") {
+    if (isBackdoor() && tab !== "admin" && tab !== "maintenance" && tab !== "money") {
       tab = "admin";
     }
-    if ((tab === "admin" || tab === "money") && !isAdmin()) {
+    if ((tab === "admin" || tab === "money" || tab === "maintenance") && !isAdmin()) {
       tab = "sell";
     }
     activeTab = tab;
@@ -2199,7 +2839,8 @@ tbody tr:last-child td {
       sell: "Selling",
       events: "Events",
       money: "Money",
-      admin: isBackdoor() ? "Backdoor access" : "Admin"
+      admin: isBackdoor() ? "Backdoor access" : "Admin",
+      maintenance: "Maintenance"
     };
     elements.pageTitle.textContent = titles[tab] || "Tuck Shop";
 

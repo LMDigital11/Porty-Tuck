@@ -25,6 +25,15 @@ interface StoreDocument {
     createdAt: string;
     lastSelfDestructAt: string | null;
   };
+  maintenance: {
+    active: boolean;
+    resumeAt: string | null;
+    reason: string;
+    startedBy: string | null;
+    scheduledAt: string | null;
+  };
+  maintenanceSchedule: any[];
+  maintenanceSchedule: any[];
 }
 
 interface Env {
@@ -123,6 +132,15 @@ function blankStore(): StoreDocument {
       createdAt: new Date().toISOString(),
       lastSelfDestructAt: null,
     },
+    maintenance: {
+      active: false,
+      resumeAt: null,
+      reason: "",
+      startedBy: null,
+      scheduledAt: null,
+    },
+    maintenanceSchedule: [],
+    maintenanceSchedule: [],
   };
 }
 
@@ -150,6 +168,12 @@ function normalizeStore(store: unknown): StoreDocument {
       ...base.meta,
       ...(source.meta ?? {}),
     },
+    maintenance: {
+      ...base.maintenance,
+      ...(source.maintenance ?? {}),
+    },
+    maintenanceSchedule: Array.isArray(source.maintenanceSchedule) ? source.maintenanceSchedule : [],
+    maintenanceSchedule: Array.isArray(source.maintenanceSchedule) ? source.maintenanceSchedule : [],
   };
 
   return next;
