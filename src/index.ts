@@ -27,6 +27,26 @@ interface Env {
 
 const STORE_KEY = "tuck-shop-manager-v1";
 
+async function ensureAppStateTable(db: D1Database): Promise<void> {
+  await db
+    .prepare(`
+      CREATE TABLE IF NOT EXISTS app_state (
+        id TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    .run();
+
+  await db
+    .prepare(`
+      CREATE INDEX IF NOT EXISTS app_state_updated_at_idx
+      ON app_state(updated_at)
+    `)
+    .run();
+}
+
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -35,6 +55,8 @@ function jsonResponse(data: unknown, status = 200): Response {
 }
 
 async function loadStoreFromDb(db: D1Database): Promise<StoreDocument | null> {
+  await ensureAppStateTable(db);
+
   const row = await db
     .prepare("SELECT data FROM app_state WHERE id = ?")
     .bind(STORE_KEY)
@@ -53,6 +75,8 @@ async function loadStoreFromDb(db: D1Database): Promise<StoreDocument | null> {
 }
 
 async function saveStoreToDb(db: D1Database, store: StoreDocument): Promise<void> {
+  await ensureAppStateTable(db);
+
   const payload = JSON.stringify(store);
   const existing = await db
     .prepare("SELECT 1 FROM app_state WHERE id = ?")
@@ -123,6 +147,13 @@ function normalizeStore(store: unknown): StoreDocument {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+
+    try {
+      await ensureAppStateTable(env.DB);
+    } catch (error) {
+      console.error("Failed to initialize app_state table:", error);
+      return jsonResponse({ error: "Database initialization failed" }, 500);
+    }
 
     // Serve the HTML at root and /index.html
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
