@@ -3973,16 +3973,16 @@ tbody tr:last-child td {
       return;
     }
 
-    pendingStockItemId = null;
-    pendingSaleItemId = item.id;
-    pendingAction = "sale";
-    elements.sellDialogTitle.textContent = `Add ${item.name}`;
-    elements.sellDialogMeta.textContent = `${availableQty} available.`;
-    elements.sellQuantity.value = "";
-    elements.sellQuantity.max = String(availableQty);
-    elements.sellQuantityDisplay.textContent = "0";
-    elements.sellForm.querySelector("button[type='submit']").textContent = "Add to basket";
-    openModal(elements.sellDialog);
+    const existingLine = basket.find((line) => line.itemId === item.id);
+    if (existingLine) {
+      existingLine.quantity += 1;
+    } else {
+      basket.push({ itemId: item.id, itemName: item.name, quantity: 1, sellPrice: item.sellPrice, buyPrice: item.buyPrice });
+    }
+
+    renderBasket();
+    renderSellGrid();
+    showToast(`${item.name} added to basket.`);
   }
 
   function handleRecordSale(event) {
