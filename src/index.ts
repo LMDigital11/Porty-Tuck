@@ -33,6 +33,11 @@ interface StoreDocument {
     startedBy: string | null;
     scheduledAt: string | null;
   };
+  lockout: {
+    active: boolean;
+    reason: string;
+    startedBy: string | null;
+  };
   maintenanceSchedule: any[];
 }
 
@@ -140,6 +145,11 @@ function blankStore(): StoreDocument {
       startedBy: null,
       scheduledAt: null,
     },
+    lockout: {
+      active: false,
+      reason: "",
+      startedBy: null,
+    },
     maintenanceSchedule: [],
   };
 }
@@ -172,6 +182,10 @@ function normalizeStore(store: unknown): StoreDocument {
     maintenance: {
       ...base.maintenance,
       ...(source.maintenance ?? {}),
+    },
+    lockout: {
+      ...base.lockout,
+      ...(source.lockout ?? {}),
     },
     maintenanceSchedule: Array.isArray(source.maintenanceSchedule) ? source.maintenanceSchedule : [],
   };

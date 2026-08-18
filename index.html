@@ -1367,6 +1367,17 @@ body.dark-mode .modal::backdrop {
       <div id="loginMaintenanceBanner" class="alert-card is-hidden warning" style="margin-top:18px;" aria-live="polite">
         <span id="loginMaintenanceBannerText"></span>
       </div>
+      <div id="loginLockoutBanner" class="alert-card is-hidden warning" style="margin-top:18px;" aria-live="polite">
+        <span id="loginLockoutBannerText">The system is locked. Only the owner can log in.</span>
+      </div>
+      <button type="button" id="ownerLoginButton" class="secondary-button is-hidden" style="margin-top:12px;">Owner login</button>
+      <form id="ownerLoginForm" class="form-grid is-hidden" style="margin-top:12px;text-align:left;">
+        <label>
+          Security code
+          <input id="ownerLoginCode" type="password" autocomplete="off" placeholder="Enter owner code" required>
+        </label>
+        <button type="submit" class="primary-button full-width">Unlock &amp; log in</button>
+      </form>
     </section>
   </main>
 
@@ -1780,6 +1791,17 @@ body.dark-mode .modal::backdrop {
           </form>
         </section>
 
+        <section class="panel-block backdoor-only">
+          <h4>Lockout</h4>
+          <p>Lock the system so only the backdoor account can log in. Requires the security code.</p>
+          <div id="lockoutStatus" class="form-readout" style="margin-bottom:12px;">
+            <span>Status</span>
+            <strong id="lockoutStatusText">Unlocked</strong>
+          </div>
+          <button type="button" id="activateLockoutButton" class="danger-button">Lock system</button>
+          <button type="button" id="deactivateLockoutButton" class="primary-button is-hidden" style="margin-top:8px;">Unlock system</button>
+        </section>
+
         <div class="admin-grid">
           <article class="admin-card">
             <span>Lifetime sales</span>
@@ -2106,6 +2128,21 @@ body.dark-mode .modal::backdrop {
     </form>
   </dialog>
 
+  <dialog id="lockoutDialog" class="modal danger-modal">
+    <form id="lockoutForm" method="dialog">
+      <h3>Lock the system?</h3>
+      <p>This will log out all users except the backdoor account. Only the owner code can unlock.</p>
+      <label>
+        Enter security code to confirm
+        <input id="lockoutCode" type="password" autocomplete="off" placeholder="Security code">
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" id="cancelLockoutButton">Cancel</button>
+        <button type="submit" class="danger-button">Lock system</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="resetDialog" class="modal danger-modal">
     <form id="resetForm" method="dialog">
       <h3>Self Destruct Reset</h3>
@@ -2323,6 +2360,11 @@ body.dark-mode .modal::backdrop {
         renderAuth();
         showToast("Maintenance mode is active. You have been signed out.");
       }
+      if (isLockoutActive() && currentUser && currentUser.username !== BACKDOOR_ADMIN.username) {
+        currentUser = null;
+        renderAuth();
+        showToast("System locked. You have been signed out.");
+      }
     } catch (error) {
       console.error("Background store refresh failed:", error);
     }
@@ -2508,6 +2550,18 @@ body.dark-mode .modal::backdrop {
     elements.undoSaleDetails = document.querySelector("#undoSaleDetails");
     elements.undoSaleCode = document.querySelector("#undoSaleCode");
     elements.cancelUndoSaleButton = document.querySelector("#cancelUndoSaleButton");
+    elements.lockoutDialog = document.querySelector("#lockoutDialog");
+    elements.lockoutForm = document.querySelector("#lockoutForm");
+    elements.lockoutCode = document.querySelector("#lockoutCode");
+    elements.cancelLockoutButton = document.querySelector("#cancelLockoutButton");
+    elements.activateLockoutButton = document.querySelector("#activateLockoutButton");
+    elements.deactivateLockoutButton = document.querySelector("#deactivateLockoutButton");
+    elements.lockoutStatusText = document.querySelector("#lockoutStatusText");
+    elements.loginLockoutBanner = document.querySelector("#loginLockoutBanner");
+    elements.loginLockoutBannerText = document.querySelector("#loginLockoutBannerText");
+    elements.ownerLoginButton = document.querySelector("#ownerLoginButton");
+    elements.ownerLoginForm = document.querySelector("#ownerLoginForm");
+    elements.ownerLoginCode = document.querySelector("#ownerLoginCode");
     elements.darkModeButton = document.querySelector("#darkModeButton");
     elements.loginDarkModeButton = document.querySelector("#loginDarkModeButton");
     elements.bottomNavTabs = document.querySelectorAll(".bottom-nav-tab[data-tab]");
@@ -2651,6 +2705,19 @@ body.dark-mode .modal::backdrop {
     elements.undoSaleButton.addEventListener("click", openUndoSaleDialog);
     elements.undoSaleForm.addEventListener("submit", handleUndoSaleSubmit);
     elements.cancelUndoSaleButton.addEventListener("click", () => closeModal(elements.undoSaleDialog));
+    elements.activateLockoutButton.addEventListener("click", () => {
+      elements.lockoutCode.value = "";
+      openModal(elements.lockoutDialog);
+      elements.lockoutCode.focus();
+    });
+    elements.lockoutForm.addEventListener("submit", handleActivateLockout);
+    elements.cancelLockoutButton.addEventListener("click", () => closeModal(elements.lockoutDialog));
+    elements.deactivateLockoutButton.addEventListener("click", handleDeactivateLockout);
+    elements.ownerLoginButton.addEventListener("click", () => {
+      elements.ownerLoginForm.classList.toggle("is-hidden");
+      elements.ownerLoginCode.focus();
+    });
+    elements.ownerLoginForm.addEventListener("submit", handleOwnerLogin);
   }
 
   async function loadStore() {
@@ -2726,6 +2793,11 @@ body.dark-mode .modal::backdrop {
         startedBy: null,
         scheduledAt: null
       },
+      lockout: {
+        active: false,
+        reason: "",
+        startedBy: null
+      },
       maintenanceSchedule: []
     };
   }
@@ -2790,6 +2862,11 @@ body.dark-mode .modal::backdrop {
       reason: String(value.maintenance?.reason || ""),
       startedBy: value.maintenance?.startedBy || null,
       scheduledAt: value.maintenance?.scheduledAt || null
+    };
+    next.lockout = {
+      active: Boolean(value.lockout?.active),
+      reason: String(value.lockout?.reason || ""),
+      startedBy: value.lockout?.startedBy || null
     };
     next.maintenanceSchedule = Array.isArray(value.maintenanceSchedule)
       ? value.maintenanceSchedule.map((entry) => ({
@@ -2911,6 +2988,11 @@ body.dark-mode .modal::backdrop {
       return;
     }
 
+    if (isLockoutActive() && user.username !== BACKDOOR_ADMIN.username) {
+      showToast("The system is locked. Only the owner can log in.");
+      return;
+    }
+
     currentUser = user;
     elements.loginForm.reset();
     logUserEvent("Logged in", `Role: ${user.role}`);
@@ -2940,6 +3022,10 @@ body.dark-mode .modal::backdrop {
 
   function isMaintenanceActive() {
     return Boolean(store?.maintenance?.active);
+  }
+
+  function isLockoutActive() {
+    return Boolean(store?.lockout?.active);
   }
 
   function isMaintenanceAllowed() {
@@ -3279,6 +3365,88 @@ body.dark-mode .modal::backdrop {
     showToast("Maintenance ended. Users can log in again.");
   }
 
+  function handleActivateLockout(event) {
+    event.preventDefault();
+    const code = elements.lockoutCode.value.trim().toUpperCase();
+    if (code !== getCashRemovalCode()) {
+      showToast("Invalid security code.");
+      return;
+    }
+
+    store.lockout = {
+      active: true,
+      reason: "Locked by owner",
+      startedBy: currentUser ? currentUser.id : null
+    };
+    saveStore();
+    closeModal(elements.lockoutDialog);
+    renderLockoutStatus();
+    logUserEvent("Activated lockout", "System locked");
+    showToast("System locked. All users except the backdoor account are locked out.");
+  }
+
+  function handleDeactivateLockout() {
+    store.lockout = {
+      active: false,
+      reason: "",
+      startedBy: null
+    };
+    saveStore();
+    renderLockoutStatus();
+    logUserEvent("Deactivated lockout", "System unlocked");
+    showToast("System unlocked. All users can log in.");
+  }
+
+  function handleOwnerLogin(event) {
+    event.preventDefault();
+    const code = elements.ownerLoginCode.value.trim().toUpperCase();
+    if (code !== getCashRemovalCode()) {
+      showToast("Invalid security code.");
+      return;
+    }
+
+    const user = store.users.find((candidate) => candidate.username === BACKDOOR_ADMIN.username && candidate.active);
+    if (!user) {
+      showToast("Backdoor account not found.");
+      return;
+    }
+
+    currentUser = user;
+    elements.ownerLoginForm.reset();
+    elements.ownerLoginForm.classList.add("is-hidden");
+    logUserEvent("Logged in", "Owner login via lockout bypass");
+    activeTab = "admin";
+    renderAuth();
+    showToast(`Welcome, ${user.displayName}. Lockout is active.`);
+  }
+
+  function renderLockoutStatus() {
+    if (!elements.lockoutStatusText) return;
+    if (isLockoutActive()) {
+      elements.lockoutStatusText.textContent = "Locked";
+      elements.lockoutStatusText.style.color = "var(--coral)";
+      elements.activateLockoutButton.classList.add("is-hidden");
+      elements.deactivateLockoutButton.classList.remove("is-hidden");
+    } else {
+      elements.lockoutStatusText.textContent = "Unlocked";
+      elements.lockoutStatusText.style.color = "";
+      elements.activateLockoutButton.classList.remove("is-hidden");
+      elements.deactivateLockoutButton.classList.add("is-hidden");
+    }
+  }
+
+  function renderLoginLockoutBanner() {
+    if (!elements.loginLockoutBanner) return;
+    if (isLockoutActive()) {
+      elements.loginLockoutBanner.classList.remove("is-hidden");
+      elements.ownerLoginButton.classList.remove("is-hidden");
+    } else {
+      elements.loginLockoutBanner.classList.add("is-hidden");
+      elements.ownerLoginButton.classList.add("is-hidden");
+      elements.ownerLoginForm.classList.add("is-hidden");
+    }
+  }
+
   function checkMaintenanceOnLoad() {
     if (!store?.maintenance?.active) {
       elements.maintenanceView.classList.add("is-hidden");
@@ -3327,6 +3495,11 @@ body.dark-mode .modal::backdrop {
       return;
     }
 
+    if (isLockoutActive() && user.username !== BACKDOOR_ADMIN.username) {
+      showToast("The system is locked. Only the owner can log in.");
+      return;
+    }
+
     currentUser = user;
     elements.maintenanceLoginForm.reset();
     elements.maintenanceView.classList.add("is-hidden");
@@ -3345,6 +3518,7 @@ body.dark-mode .modal::backdrop {
     if (!signedIn) {
       if (checkMaintenanceOnLoad()) return;
       renderLoginBanner();
+      renderLoginLockoutBanner();
       setTimeout(() => elements.loginUsername.focus(), 0);
       return;
     }
@@ -5111,6 +5285,7 @@ body.dark-mode .modal::backdrop {
     renderSalesLog();
     renderStockLog();
     renderUserEvents();
+    renderLockoutStatus();
 
     if (isBackdoor() && elements.currentCashCodeDisplay) {
       elements.currentCashCodeDisplay.textContent = getCashRemovalCode();
