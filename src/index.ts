@@ -8,6 +8,7 @@ interface StoreDocument {
   sales: any[];
   stockEvents: any[];
   events: any[];
+  userEvents: any[];
   lifetime: {
     revenue: number;
     cost: number;
@@ -32,7 +33,6 @@ interface StoreDocument {
     startedBy: string | null;
     scheduledAt: string | null;
   };
-  maintenanceSchedule: any[];
   maintenanceSchedule: any[];
 }
 
@@ -115,6 +115,7 @@ function blankStore(): StoreDocument {
     sales: [],
     stockEvents: [],
     events: [],
+    userEvents: [],
     lifetime: {
       revenue: 0,
       cost: 0,
@@ -140,7 +141,6 @@ function blankStore(): StoreDocument {
       scheduledAt: null,
     },
     maintenanceSchedule: [],
-    maintenanceSchedule: [],
   };
 }
 
@@ -156,6 +156,7 @@ function normalizeStore(store: unknown): StoreDocument {
     sales: Array.isArray(source.sales) ? source.sales : [],
     stockEvents: Array.isArray(source.stockEvents) ? source.stockEvents : [],
     events: Array.isArray(source.events) ? source.events : [],
+    userEvents: Array.isArray(source.userEvents) ? source.userEvents : [],
     lifetime: {
       ...base.lifetime,
       ...(source.lifetime ?? {}),
@@ -172,7 +173,6 @@ function normalizeStore(store: unknown): StoreDocument {
       ...base.maintenance,
       ...(source.maintenance ?? {}),
     },
-    maintenanceSchedule: Array.isArray(source.maintenanceSchedule) ? source.maintenanceSchedule : [],
     maintenanceSchedule: Array.isArray(source.maintenanceSchedule) ? source.maintenanceSchedule : [],
   };
 
@@ -217,6 +217,12 @@ export default {
         console.error("save failed", error);
         return jsonResponse({ error: "Invalid JSON body" }, 400);
       }
+    }
+
+    // Client IP endpoint (for user event logging)
+    if (request.method === "GET" && url.pathname === "/api/client-ip") {
+      const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "unknown";
+      return jsonResponse({ ip });
     }
 
     // SumUp transaction history proxy (avoids browser CORS)

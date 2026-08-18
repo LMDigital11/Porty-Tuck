@@ -1936,6 +1936,33 @@ body.dark-mode .modal::backdrop {
             </table>
           </div>
         </section>
+
+        <section class="panel-block">
+          <div class="section-heading tight">
+            <div>
+              <h4>User Activity Log</h4>
+              <p>Who did what and when, with IP addresses.</p>
+            </div>
+            <label class="search-field compact">
+              Search activity
+              <input id="userEventsSearch" type="search" placeholder="Filter by name, action...">
+            </label>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>User</th>
+                  <th>Action</th>
+                  <th>Details</th>
+                  <th>IP</th>
+                </tr>
+              </thead>
+              <tbody id="userEventsLogBody"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
       <section class="tab-panel is-hidden" id="maintenanceTab" data-panel="maintenance">
@@ -2237,6 +2264,7 @@ body.dark-mode .modal::backdrop {
   let pendingScheduleEditId = null;
   let sellSortMode = "default";
   let lastSaleForReceipt = null;
+  let clientIp = "unknown";
 
   const elements = {};
 
@@ -2245,6 +2273,7 @@ body.dark-mode .modal::backdrop {
   async function init() {
     cacheElements();
     store = await loadStore();
+    fetchClientIp();
     bindEvents();
     await updateLoginHint();
     renderAuth();
@@ -2440,6 +2469,8 @@ body.dark-mode .modal::backdrop {
     elements.maintenanceLoginUsername = document.querySelector("#maintenanceLoginUsername");
     elements.maintenanceLoginPassword = document.querySelector("#maintenanceLoginPassword");
     elements.salesLogSearch = document.querySelector("#salesLogSearch");
+    elements.userEventsSearch = document.querySelector("#userEventsSearch");
+    elements.userEventsLogBody = document.querySelector("#userEventsLogBody");
     elements.receiptDialog = document.querySelector("#receiptDialog");
     elements.receiptContent = document.querySelector("#receiptContent");
     elements.printReceiptButton = document.querySelector("#printReceiptButton");
@@ -2453,6 +2484,7 @@ body.dark-mode .modal::backdrop {
   function bindEvents() {
     elements.loginForm.addEventListener("submit", handleLogin);
     elements.logoutButton.addEventListener("click", () => {
+      logUserEvent("Logged out", "");
       currentUser = null;
       renderAuth();
       showToast("Logged out.");
@@ -2555,6 +2587,7 @@ body.dark-mode .modal::backdrop {
     });
 
     elements.salesLogSearch.addEventListener("input", renderSalesLog);
+    elements.userEventsSearch.addEventListener("input", renderUserEvents);
 
     document.querySelectorAll(".sort-button").forEach((button) => {
       button.addEventListener("click", () => {
@@ -2569,6 +2602,7 @@ body.dark-mode .modal::backdrop {
       button.addEventListener("click", () => setActiveTab(button.dataset.tab));
     });
     elements.bottomLogoutButton.addEventListener("click", () => {
+      logUserEvent("Logged out", "");
       currentUser = null;
       renderAuth();
       showToast("Logged out.");
@@ -2618,6 +2652,7 @@ body.dark-mode .modal::backdrop {
       sales: [],
       stockEvents: [],
       events: [],
+      userEvents: [],
       lifetime: {
         revenue: 0,
         cost: 0,
@@ -2653,7 +2688,6 @@ body.dark-mode .modal::backdrop {
         startedBy: null,
         scheduledAt: null
       },
-      maintenanceSchedule: [],
       maintenanceSchedule: []
     };
   }
@@ -2666,6 +2700,7 @@ body.dark-mode .modal::backdrop {
     next.sales = Array.isArray(value.sales) ? value.sales : [];
     next.stockEvents = Array.isArray(value.stockEvents) ? value.stockEvents : [];
     next.events = Array.isArray(value.events) ? value.events : [];
+    next.userEvents = Array.isArray(value.userEvents) ? value.userEvents : [];
     next.events = next.events
       .filter((event) => event && event.name)
       .map((event) => ({
@@ -2840,6 +2875,7 @@ body.dark-mode .modal::backdrop {
 
     currentUser = user;
     elements.loginForm.reset();
+    logUserEvent("Logged in", `Role: ${user.role}`);
 
     if (user.mustChangePassword) {
       elements.forcePasswordValue.value = "";
@@ -3134,6 +3170,7 @@ body.dark-mode .modal::backdrop {
     elements.maintenanceResumeInput.value = "";
     renderMaintenancePanel();
     renderMaintenanceBanner();
+    logUserEvent("Started maintenance", reason || "No reason given");
     showToast("Maintenance mode activated. Non-admin users will be kicked.");
   }
 
@@ -3176,6 +3213,7 @@ body.dark-mode .modal::backdrop {
     elements.maintenanceResumeInput.value = "";
     renderMaintenanceSchedule();
     renderMaintenanceBanner();
+    logUserEvent("Scheduled maintenance", `Starts ${dateTime.format(startDate)}`);
     showToast(`Maintenance scheduled to start at ${dateTime.format(startDate)}.`);
   }
 
@@ -3199,6 +3237,7 @@ body.dark-mode .modal::backdrop {
     renderMaintenancePanel();
     renderMaintenanceBanner();
     renderAll();
+    logUserEvent("Ended maintenance", "");
     showToast("Maintenance ended. Users can log in again.");
   }
 
@@ -3254,6 +3293,7 @@ body.dark-mode .modal::backdrop {
     elements.maintenanceLoginForm.reset();
     elements.maintenanceView.classList.add("is-hidden");
     activeTab = isBackdoor() ? "admin" : (isMaintenanceActive() ? "maintenance" : "stock");
+    logUserEvent("Logged in", "Maintenance mode login");
     renderAuth();
     showToast(`Welcome, ${user.displayName}. Maintenance mode is active.`);
   }
@@ -3448,6 +3488,7 @@ body.dark-mode .modal::backdrop {
     store.money.cash.lastUpdatedAt = new Date().toISOString();
     saveStore();
     renderMoneyTab();
+    logUserEvent("Updated cash total", `Set to ${money.format(numericValue)}`);
     showToast(`Cash total updated to ${money.format(numericValue)}.`);
   }
 
@@ -3483,6 +3524,7 @@ body.dark-mode .modal::backdrop {
     store.money.sumup.lastUpdatedAt = new Date().toISOString();
     saveStore();
     renderMoneyTab();
+    logUserEvent("Updated SumUp total", `Set to ${money.format(numericValue)}`);
     showToast(`SumUp total updated to ${money.format(numericValue)}.`);
   }
 
@@ -3535,6 +3577,7 @@ body.dark-mode .modal::backdrop {
       store.money.cash.lastUpdatedAt = new Date().toISOString();
       saveStore();
       renderMoneyTab();
+      logUserEvent("Removed cash", `${money.format(value)} removed. Till now ${money.format(updatedValue)}.`);
       showToast(`Cash removed. Till now holds ${money.format(updatedValue)}.`);
     } else if (pendingMoneyAction === "removeSumUp") {
       store.money = store.money || { cash: { actual: 0 }, sumup: { actual: 0, expectedAdjustment: 0 } };
@@ -3547,6 +3590,7 @@ body.dark-mode .modal::backdrop {
       const totalDifference = roundMoney(actualTotal - expected.totalExpected);
       saveStore();
       renderMoneyTab();
+      logUserEvent("Removed SumUp adjustment", `${money.format(value)} adjustment. Diff: ${money.format(totalDifference)}.`);
       showToast(`Expected SumUp reduced by ${money.format(value)}. Difference is ${money.format(totalDifference)}.`);
     }
 
@@ -3679,6 +3723,7 @@ body.dark-mode .modal::backdrop {
     saveStore();
     elements.currentCashCodeDisplay.textContent = newCode;
     elements.cashRemovalCodeInput.value = "";
+    logUserEvent("Updated security code", "Cash removal code changed");
     showToast(`Code updated to "${newCode}".`);
   }
 
@@ -3715,6 +3760,7 @@ body.dark-mode .modal::backdrop {
 
     saveStore();
     renderAll();
+    logUserEvent("Confirmed SumUp sale", `${sale.itemName} x${sale.quantity}, ${money.format(sale.revenue)}`);
     showToast(`SumUp sale confirmed. Stock deducted. Profit: ${money.format(sale.profit)}.`);
   }
 
@@ -3728,6 +3774,7 @@ body.dark-mode .modal::backdrop {
     }
     store.sales = store.sales.filter((s) => s.id !== saleId);
     saveStore();
+    logUserEvent("Cancelled SumUp sale", `${sale.itemName} x${sale.quantity}, ${money.format(sale.revenue)}`);
     renderMoneyTab();
     showToast("Pending sale cancelled.");
   }
@@ -3933,6 +3980,7 @@ body.dark-mode .modal::backdrop {
     saveStore();
     closeModal(elements.sumupApiDialog);
     renderSumupApiConfig();
+    logUserEvent("Updated SumUp API config", url ? "Configured" : "Cleared");
     showToast(url ? "SumUp API configuration saved." : "SumUp API configuration cleared.");
   }
 
@@ -4079,6 +4127,7 @@ body.dark-mode .modal::backdrop {
     clearEventForm();
     renderEvents();
     renderEventBanner();
+    logUserEvent(eventId ? "Updated event" : "Created event", name);
     showToast(eventId ? "Event updated." : "Event created.");
   }
 
@@ -4109,6 +4158,7 @@ body.dark-mode .modal::backdrop {
       saveStore();
       renderEvents();
       renderEventBanner();
+      logUserEvent("Started event", eventItem.name);
       showToast(`${eventItem.name} is now active.`);
       return;
     }
@@ -4119,6 +4169,7 @@ body.dark-mode .modal::backdrop {
       saveStore();
       renderEvents();
       renderEventBanner();
+      logUserEvent("Ended event", eventItem.name);
       showToast(`${eventItem.name} has been ended.`);
       return;
     }
@@ -4131,6 +4182,7 @@ body.dark-mode .modal::backdrop {
       saveStore();
       renderEvents();
       renderEventBanner();
+      logUserEvent("Deleted event", eventItem.name);
       showToast(`${eventItem.name} removed.`);
     }
   }
@@ -4183,6 +4235,7 @@ body.dark-mode .modal::backdrop {
         action: quantityChange > 0 ? "Added stock" : quantityChange < 0 ? "Adjusted stock" : "Edited item",
         quantity: quantityChange
       });
+      logUserEvent(quantityChange > 0 ? "Added stock" : quantityChange < 0 ? "Adjusted stock" : "Edited stock", `${item.name} (${quantityChange !== 0 ? (quantityChange > 0 ? "+" : "") + quantityChange : "details changed"})`);
       showToast(`${item.name} updated.`);
     } else {
       const item = {
@@ -4197,6 +4250,7 @@ body.dark-mode .modal::backdrop {
         action: "Created item",
         quantity: item.quantity
       });
+      logUserEvent("Created stock item", `${item.name} (qty: ${item.quantity}, sell: ${money.format(item.sellPrice)})`);
       showToast(`${item.name} added to stock.`);
     }
 
@@ -4224,6 +4278,7 @@ body.dark-mode .modal::backdrop {
       action: "Deleted item",
       quantity: -item.quantity
     });
+    logUserEvent("Deleted stock item", `${item.name}`);
 
     store.items = store.items.filter((i) => i.id !== itemId);
     saveStore();
@@ -4643,6 +4698,7 @@ body.dark-mode .modal::backdrop {
       renderBasket();
       renderSellGrid();
       renderAll();
+      logUserEvent("Recorded sale", `${sales.length} item(s), ${money.format(roundMoney(draft.total))} cash`);
       showReceiptDialog(draft);
     } else {
       for (const sale of sales) {
@@ -4655,6 +4711,7 @@ body.dark-mode .modal::backdrop {
       renderBasket();
       renderSellGrid();
       renderMoneyTab();
+      logUserEvent("Recorded sale", `${sales.length} item(s), ${money.format(roundMoney(draft.total))} SumUp`);
       openSumUpPayment(draft.total);
       showToast(`SumUp payment started for ${money.format(roundMoney(draft.total))}. Stock held until confirmed.`);
     }
@@ -4781,6 +4838,7 @@ body.dark-mode .modal::backdrop {
     saveStore();
     elements.createUserForm.reset();
     renderAdmin();
+    logUserEvent("Created account", `${displayName} (${username}, ${role})`);
 
     if (mustChange) {
       showToast(`${displayName} account created. Temporary password: ${tempPassword}`);
@@ -4815,6 +4873,7 @@ body.dark-mode .modal::backdrop {
     saveStore();
     elements.passwordValue.value = "";
     await updateLoginHint();
+    logUserEvent("Changed password", `For: ${user.displayName}`);
     showToast(`${user.displayName} password updated.`);
   }
 
@@ -4852,6 +4911,7 @@ body.dark-mode .modal::backdrop {
     currentUser = user;
     saveStore();
     closeModal(elements.forcePasswordDialog);
+    logUserEvent("Changed own password", "First login password change");
 
     activeTab = user.role === "admin" ? "stock" : "sell";
     renderAuth();
@@ -4877,6 +4937,7 @@ body.dark-mode .modal::backdrop {
     store = next;
     currentUser = store.users.find((user) => user.username === DEFAULT_ADMIN.username) || currentUser;
     saveStore();
+    logUserEvent("Self destruct reset", "All data wiped except users and API config");
     closeModal(elements.resetDialog);
     renderAuth();
     showToast("Reset complete. All users and security code were kept.");
@@ -4924,6 +4985,7 @@ body.dark-mode .modal::backdrop {
     renderUsersTable();
     renderSalesLog();
     renderStockLog();
+    renderUserEvents();
 
     if (isBackdoor() && elements.currentCashCodeDisplay) {
       elements.currentCashCodeDisplay.textContent = getCashRemovalCode();
@@ -5084,6 +5146,7 @@ body.dark-mode .modal::backdrop {
     closeModal(elements.suspendUserDialog);
     suspendTargetUserId = null;
     renderAdmin();
+    logUserEvent("Suspended user", `${user.displayName}: ${reason}`);
     showToast(`${user.displayName} has been suspended.`);
   }
 
@@ -5101,6 +5164,7 @@ body.dark-mode .modal::backdrop {
     user.suspendedReason = "";
     user.suspendedAt = null;
     saveStore();
+    logUserEvent("Reinstated user", `${user.displayName}`);
     renderAdmin();
     showToast(`${user.displayName} has been reinstated.`);
   }
@@ -5137,6 +5201,7 @@ body.dark-mode .modal::backdrop {
 
     store.users = store.users.filter((candidate) => candidate.id !== user.id);
     saveStore();
+    logUserEvent("Deleted user", `${user.displayName} (${user.username})`);
     renderAdmin();
     showToast(`User "${user.displayName}" removed.`);
   }
@@ -5189,6 +5254,32 @@ body.dark-mode .modal::backdrop {
     `).join("");
   }
 
+  function renderUserEvents() {
+    const events = store.userEvents || [];
+    const query = elements.userEventsSearch ? elements.userEventsSearch.value.trim().toLowerCase() : "";
+    let filtered = events;
+    if (query) {
+      filtered = events.filter((e) => {
+        return `${e.userName} ${e.action} ${e.details}`.toLowerCase().includes(query);
+      });
+    }
+
+    if (!filtered.length) {
+      elements.userEventsLogBody.innerHTML = `<tr><td colspan="5" class="empty-state">${query ? "No activity matches that search." : "No activity logged yet."}</td></tr>`;
+      return;
+    }
+
+    elements.userEventsLogBody.innerHTML = filtered.slice(0, 200).map((event) => `
+      <tr>
+        <td>${formatDate(event.createdAt)}</td>
+        <td>${escapeHtml(event.userName)}</td>
+        <td>${escapeHtml(event.action)}</td>
+        <td>${escapeHtml(event.details)}</td>
+        <td>${escapeHtml(event.ip)}</td>
+      </tr>
+    `).join("");
+  }
+
   function exportBackup() {
     if (!isAdmin()) {
       showToast("Only admin can make backups.");
@@ -5203,6 +5294,7 @@ body.dark-mode .modal::backdrop {
     link.click();
     link.remove();
     URL.revokeObjectURL(link.href);
+    logUserEvent("Exported backup", `Backup downloaded`);
     showToast("Backup downloaded.");
   }
 
@@ -5226,6 +5318,7 @@ body.dark-mode .modal::backdrop {
         store = next;
         currentUser = store.users.find((user) => user.id === currentUser.id) || null;
         saveStore();
+        logUserEvent("Imported backup", "Backup restored from file");
         event.target.value = "";
         renderAuth();
         showToast("Backup restored.");
@@ -5249,6 +5342,39 @@ body.dark-mode .modal::backdrop {
       userName: currentUser.displayName,
       createdAt: new Date().toISOString()
     });
+  }
+
+  async function fetchClientIp() {
+    try {
+      const response = await fetch(`${API_URL}/client-ip`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.ip) {
+          clientIp = data.ip;
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch client IP:", error);
+    }
+  }
+
+  function logUserEvent(action, details) {
+    if (!store.userEvents) {
+      store.userEvents = [];
+    }
+    store.userEvents.unshift({
+      id: uid("uevent"),
+      userId: currentUser ? currentUser.id : null,
+      userName: currentUser ? currentUser.displayName : "Unknown",
+      action,
+      details: details || "",
+      ip: clientIp,
+      createdAt: new Date().toISOString()
+    });
+    if (store.userEvents.length > 500) {
+      store.userEvents = store.userEvents.slice(0, 500);
+    }
+    saveStore();
   }
 
   function sortedItems() {

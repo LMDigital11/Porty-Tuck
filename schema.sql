@@ -1,9 +1,0 @@
-CREATE TABLE IF NOT EXISTS app_state (
-  id TEXT PRIMARY KEY,
-  data TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS app_state_updated_at_idx
-ON app_state(updated_at);
