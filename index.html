@@ -1541,6 +1541,12 @@ body.dark-mode .modal::backdrop {
       </section>
 
       <section class="tab-panel is-hidden" id="sellTab" data-panel="sell">
+        <div id="undoSaleBanner" class="alert-card warning is-hidden" style="margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+            <span><strong>Last cash sale can be undone.</strong> <span id="undoSaleTimer"></span></span>
+            <button type="button" id="undoSaleButton" class="danger-button">Undo last sale</button>
+          </div>
+        </div>
         <div class="section-heading">
           <div>
             <h3>Selling</h3>
@@ -2084,6 +2090,22 @@ body.dark-mode .modal::backdrop {
     </div>
   </dialog>
 
+  <dialog id="undoSaleDialog" class="modal danger-modal">
+    <form id="undoSaleForm" method="dialog">
+      <h3>Undo last cash sale?</h3>
+      <p id="undoSaleDetails"></p>
+      <p>This will restore the stock and remove the sale record.</p>
+      <label>
+        Enter security code to confirm
+        <input id="undoSaleCode" type="text" autocomplete="off" placeholder="Security code">
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" id="cancelUndoSaleButton">Cancel</button>
+        <button type="submit" class="danger-button">Undo sale</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="resetDialog" class="modal danger-modal">
     <form id="resetForm" method="dialog">
       <h3>Self Destruct Reset</h3>
@@ -2265,6 +2287,9 @@ body.dark-mode .modal::backdrop {
   let sellSortMode = "default";
   let lastSaleForReceipt = null;
   let clientIp = "unknown";
+  let pendingUndoSaleIds = [];
+  let undoSaleTimerId = null;
+  let undoSaleCountdownId = null;
 
   const elements = {};
 
@@ -2475,6 +2500,14 @@ body.dark-mode .modal::backdrop {
     elements.receiptContent = document.querySelector("#receiptContent");
     elements.printReceiptButton = document.querySelector("#printReceiptButton");
     elements.closeReceiptButton = document.querySelector("#closeReceiptButton");
+    elements.undoSaleBanner = document.querySelector("#undoSaleBanner");
+    elements.undoSaleTimer = document.querySelector("#undoSaleTimer");
+    elements.undoSaleButton = document.querySelector("#undoSaleButton");
+    elements.undoSaleDialog = document.querySelector("#undoSaleDialog");
+    elements.undoSaleForm = document.querySelector("#undoSaleForm");
+    elements.undoSaleDetails = document.querySelector("#undoSaleDetails");
+    elements.undoSaleCode = document.querySelector("#undoSaleCode");
+    elements.cancelUndoSaleButton = document.querySelector("#cancelUndoSaleButton");
     elements.darkModeButton = document.querySelector("#darkModeButton");
     elements.loginDarkModeButton = document.querySelector("#loginDarkModeButton");
     elements.bottomNavTabs = document.querySelectorAll(".bottom-nav-tab[data-tab]");
@@ -2485,6 +2518,7 @@ body.dark-mode .modal::backdrop {
     elements.loginForm.addEventListener("submit", handleLogin);
     elements.logoutButton.addEventListener("click", () => {
       logUserEvent("Logged out", "");
+      clearUndoSaleTimer();
       currentUser = null;
       renderAuth();
       showToast("Logged out.");
@@ -2603,6 +2637,7 @@ body.dark-mode .modal::backdrop {
     });
     elements.bottomLogoutButton.addEventListener("click", () => {
       logUserEvent("Logged out", "");
+      clearUndoSaleTimer();
       currentUser = null;
       renderAuth();
       showToast("Logged out.");
@@ -2613,6 +2648,9 @@ body.dark-mode .modal::backdrop {
 
     elements.printReceiptButton.addEventListener("click", printReceipt);
     elements.closeReceiptButton.addEventListener("click", () => closeModal(elements.receiptDialog));
+    elements.undoSaleButton.addEventListener("click", openUndoSaleDialog);
+    elements.undoSaleForm.addEventListener("submit", handleUndoSaleSubmit);
+    elements.cancelUndoSaleButton.addEventListener("click", () => closeModal(elements.undoSaleDialog));
   }
 
   async function loadStore() {
@@ -4700,6 +4738,9 @@ body.dark-mode .modal::backdrop {
       renderAll();
       logUserEvent("Recorded sale", `${sales.length} item(s), ${money.format(roundMoney(draft.total))} cash`);
       showReceiptDialog(draft);
+      const saleIds = sales.map((s) => s.id);
+      const summary = `${sales.length} item(s), ${money.format(roundMoney(draft.total))} cash`;
+      startUndoSaleTimer(saleIds, summary);
     } else {
       for (const sale of sales) {
         store.sales.unshift(sale);
@@ -4774,6 +4815,90 @@ body.dark-mode .modal::backdrop {
     win.document.close();
     closeModal(elements.receiptDialog);
     showToast("Receipt sent to printer.");
+  }
+
+  function startUndoSaleTimer(saleIds, saleSummary) {
+    clearUndoSaleTimer();
+    pendingUndoSaleIds = saleIds;
+    elements.undoSaleDetails.textContent = saleSummary;
+    elements.undoSaleBanner.classList.remove("is-hidden");
+    let remaining = 40;
+    elements.undoSaleTimer.textContent = `(${remaining}s)`;
+    undoSaleTimerId = setTimeout(() => {
+      clearUndoSaleTimer();
+    }, 40000);
+    undoSaleCountdownId = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearUndoSaleTimer();
+        return;
+      }
+      elements.undoSaleTimer.textContent = `(${remaining}s)`;
+    }, 1000);
+  }
+
+  function clearUndoSaleTimer() {
+    if (undoSaleTimerId) {
+      clearTimeout(undoSaleTimerId);
+      undoSaleTimerId = null;
+    }
+    if (undoSaleCountdownId) {
+      clearInterval(undoSaleCountdownId);
+      undoSaleCountdownId = null;
+    }
+    pendingUndoSaleIds = [];
+    elements.undoSaleBanner.classList.add("is-hidden");
+    elements.undoSaleTimer.textContent = "";
+  }
+
+  function openUndoSaleDialog() {
+    if (!pendingUndoSaleIds.length) {
+      showToast("No sale to undo.");
+      return;
+    }
+    elements.undoSaleCode.value = "";
+    openModal(elements.undoSaleDialog);
+    elements.undoSaleCode.focus();
+  }
+
+  function handleUndoSaleSubmit(event) {
+    event.preventDefault();
+    const code = elements.undoSaleCode.value.trim().toUpperCase();
+    if (code !== getCashRemovalCode()) {
+      showToast("Invalid security code.");
+      return;
+    }
+
+    const saleIds = [...pendingUndoSaleIds];
+    clearUndoSaleTimer();
+
+    const salesToUndo = store.sales.filter((s) => saleIds.includes(s.id));
+    if (!salesToUndo.length) {
+      closeModal(elements.undoSaleDialog);
+      showToast("Those sales could not be found.");
+      return;
+    }
+
+    for (const sale of salesToUndo) {
+      const item = store.items.find((i) => i.id === sale.itemId);
+      if (item) {
+        item.quantity += sale.quantity;
+        item.updatedAt = new Date().toISOString();
+      }
+      store.lifetime.revenue = roundMoney(store.lifetime.revenue - sale.revenue);
+      store.lifetime.cost = roundMoney(store.lifetime.cost - sale.cost);
+      store.lifetime.profit = roundMoney(store.lifetime.profit - sale.profit);
+      store.lifetime.sales = Math.max(0, store.lifetime.sales - 1);
+      store.lifetime.unitsSold = Math.max(0, store.lifetime.unitsSold - sale.quantity);
+    }
+
+    store.sales = store.sales.filter((s) => !saleIds.includes(s.id));
+
+    saveStore();
+    closeModal(elements.undoSaleDialog);
+    renderAll();
+    logUserEvent("Undid last sale", `${salesToUndo.length} sale(s), ${money.format(roundMoney(salesToUndo.reduce((sum, s) => sum + s.revenue, 0)))} reversed`);
+    showToast("Sale undone. Stock restored.");
   }
 
   function generateTempPassword() {
@@ -5255,6 +5380,7 @@ body.dark-mode .modal::backdrop {
   }
 
   function renderUserEvents() {
+    if (!elements.userEventsLogBody) return;
     const events = store.userEvents || [];
     const query = elements.userEventsSearch ? elements.userEventsSearch.value.trim().toLowerCase() : "";
     let filtered = events;
