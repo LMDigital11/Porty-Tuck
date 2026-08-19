@@ -2129,6 +2129,22 @@ body.dark-mode .modal::backdrop {
             </table>
           </div>
         </section>
+
+        <section class="panel-block">
+          <div class="section-heading tight">
+            <div>
+              <h4>Purge Old Logs</h4>
+              <p>Remove sales, stock activity, user activity, and events older than a chosen date.</p>
+            </div>
+          </div>
+          <div class="form-row" style="margin-top:8px;">
+            <label>
+              Remove data older than
+              <input id="purgeLogDate" type="date">
+            </label>
+            <button type="button" class="warning-button" id="purgeLogButton">Purge logs</button>
+          </div>
+        </section>
       </section>
 
       <section class="tab-panel is-hidden" id="maintenanceTab" data-panel="maintenance">
@@ -2308,6 +2324,32 @@ body.dark-mode .modal::backdrop {
       <div class="modal-actions">
         <button type="button" class="secondary-button" id="cancelBarcodeStockButton">Cancel</button>
         <button type="submit" class="primary-button">Add stock</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="purgeLogCodeDialog" class="modal">
+    <form id="purgeLogCodeForm" method="dialog">
+      <h3>Purge Old Logs</h3>
+      <p>Enter the security code to continue.</p>
+      <label>
+        Security code
+        <input id="purgeLogCode" type="password" autocomplete="off" required>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" id="cancelPurgeLogCodeButton">Cancel</button>
+        <button type="submit" class="warning-button">Verify</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="purgeLogConfirmDialog" class="modal danger-modal">
+    <form id="purgeLogConfirmForm" method="dialog">
+      <h3>Confirm Purge</h3>
+      <p id="purgeLogSummary"></p>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" id="cancelPurgeLogConfirmButton">Cancel</button>
+        <button type="submit" class="danger-button">Purge now</button>
       </div>
     </form>
   </dialog>
@@ -2710,6 +2752,13 @@ body.dark-mode .modal::backdrop {
     elements.barcodeScanDialog = document.querySelector("#barcodeScanDialog");
     elements.barcodeStockDialog = document.querySelector("#barcodeStockDialog");
     elements.barcodeStockForm = document.querySelector("#barcodeStockForm");
+    elements.purgeLogCodeDialog = document.querySelector("#purgeLogCodeDialog");
+    elements.purgeLogCodeForm = document.querySelector("#purgeLogCodeForm");
+    elements.purgeLogConfirmDialog = document.querySelector("#purgeLogConfirmDialog");
+    elements.purgeLogConfirmForm = document.querySelector("#purgeLogConfirmForm");
+    elements.purgeLogDate = document.querySelector("#purgeLogDate");
+    elements.purgeLogCode = document.querySelector("#purgeLogCode");
+    elements.purgeLogSummary = document.querySelector("#purgeLogSummary");
     elements.userEventsLogBody = document.querySelector("#userEventsLogBody");
     elements.receiptDialog = document.querySelector("#receiptDialog");
     elements.receiptContent = document.querySelector("#receiptContent");
@@ -2861,6 +2910,12 @@ body.dark-mode .modal::backdrop {
     document.getElementById("cancelBarcodeStockButton")?.addEventListener("click", () => closeModal(elements.barcodeStockDialog));
     document.getElementById("filterReportButton")?.addEventListener("click", renderReports);
     document.getElementById("exportReportCsvButton")?.addEventListener("click", exportReportCsv);
+
+    document.getElementById("purgeLogButton")?.addEventListener("click", openPurgeLogCodeDialog);
+    document.getElementById("cancelPurgeLogCodeButton")?.addEventListener("click", () => closeModal(elements.purgeLogCodeDialog));
+    document.getElementById("purgeLogCodeForm")?.addEventListener("submit", handlePurgeLogCodeSubmit);
+    document.getElementById("cancelPurgeLogConfirmButton")?.addEventListener("click", () => closeModal(elements.purgeLogConfirmDialog));
+    document.getElementById("purgeLogConfirmForm")?.addEventListener("submit", handlePurgeLogConfirmSubmit);
 
     document.querySelectorAll(".sort-button").forEach((button) => {
       button.addEventListener("click", () => {
@@ -4318,6 +4373,66 @@ body.dark-mode .modal::backdrop {
     showToast("CSV exported.");
   }
 
+  function openPurgeLogCodeDialog() {
+    const cutoff = elements.purgeLogDate.value;
+    if (!cutoff) {
+      showToast("Select a date first.");
+      return;
+    }
+    elements.purgeLogCode.value = "";
+    openModal(elements.purgeLogCodeDialog);
+    setTimeout(() => elements.purgeLogCode.focus(), 0);
+  }
+
+  async function handlePurgeLogCodeSubmit(event) {
+    event.preventDefault();
+    const code = elements.purgeLogCode.value.trim();
+    if (code !== getCashRemovalCode()) {
+      showToast("Incorrect security code.");
+      elements.purgeLogCode.value = "";
+      elements.purgeLogCode.focus();
+      return;
+    }
+    closeModal(elements.purgeLogCodeDialog);
+
+    const cutoff = elements.purgeLogDate.value + "T23:59:59";
+    const cutoffDate = new Date(cutoff);
+    const salesCount = store.sales.filter((s) => new Date(s.createdAt) < cutoffDate).length;
+    const stockCount = store.stockEvents.filter((e) => new Date(e.createdAt) < cutoffDate).length;
+    const userCount = store.userEvents.filter((e) => new Date(e.createdAt) < cutoffDate).length;
+    const eventCount = store.events.filter((e) => new Date(e.createdAt) < cutoffDate).length;
+    const total = salesCount + stockCount + userCount + eventCount;
+    elements.purgeLogSummary.innerHTML = `This will permanently remove:<br>
+      <strong>${salesCount}</strong> sales, <strong>${stockCount}</strong> stock events, <strong>${userCount}</strong> user events, <strong>${eventCount}</strong> general events<br>
+      <strong>${total}</strong> records older than <strong>${elements.purgeLogDate.value}</strong>.`;
+    openModal(elements.purgeLogConfirmDialog);
+  }
+
+  async function handlePurgeLogConfirmSubmit(event) {
+    event.preventDefault();
+    const cutoff = elements.purgeLogDate.value;
+    if (!cutoff) return;
+    const cutoffDate = new Date(cutoff + "T23:59:59");
+
+    const beforeSales = store.sales.length;
+    const beforeStock = store.stockEvents.length;
+    const beforeUser = store.userEvents.length;
+    const beforeEvents = store.events.length;
+
+    store.sales = store.sales.filter((s) => new Date(s.createdAt) >= cutoffDate);
+    store.stockEvents = store.stockEvents.filter((e) => new Date(e.createdAt) >= cutoffDate);
+    store.userEvents = store.userEvents.filter((e) => new Date(e.createdAt) >= cutoffDate);
+    store.events = store.events.filter((e) => new Date(e.createdAt) >= cutoffDate);
+
+    const removed = (beforeSales - store.sales.length) + (beforeStock - store.stockEvents.length) + (beforeUser - store.userEvents.length) + (beforeEvents - store.events.length);
+
+    logUserEvent("Purged old logs", `Removed ${removed} records older than ${cutoff}`);
+    await saveStore();
+    renderAdmin();
+    closeModal(elements.purgeLogConfirmDialog);
+    showToast(`Purged ${removed} old records.`);
+  }
+
   function getPendingSumupSales() {
     return store.sales.filter((sale) => sale.paymentMethod === "sumup" && sale.paymentStatus === "pending");
   }
@@ -5735,6 +5850,12 @@ body.dark-mode .modal::backdrop {
     renderStockLog();
     renderUserEvents();
     renderLockoutStatus();
+
+    if (elements.purgeLogDate && !elements.purgeLogDate.value) {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      elements.purgeLogDate.value = d.toISOString().split("T")[0];
+    }
 
     if (isBackdoor() && elements.currentCashCodeDisplay) {
       elements.currentCashCodeDisplay.textContent = getCashRemovalCode();
