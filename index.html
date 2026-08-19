@@ -747,6 +747,19 @@ tbody tr:last-child td {
   100% { box-shadow: 0 0 0 0 rgba(33, 110, 78, 0); }
 }
 
+@keyframes inputShake {
+  0%, 100% { transform: translateX(0); border-color: var(--red); box-shadow: 0 0 8px rgba(202, 66, 66, 0.5); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.input-shake {
+  animation: inputShake 0.45s ease-out;
+  border-color: var(--red) !important;
+}
+
 .sell-card-button:active:not(:disabled) {
   transform: scale(0.96);
   border-color: var(--green);
@@ -3152,6 +3165,13 @@ body.dark-mode .modal::backdrop {
 
     if (!user || !(await verifyPassword(user, password))) {
       showToast("Login failed. Check the username and password.");
+      elements.loginPassword.classList.remove("input-shake");
+      void elements.loginPassword.offsetWidth;
+      elements.loginPassword.classList.add("input-shake");
+      elements.loginPassword.select();
+      elements.loginPassword.addEventListener("animationend", () => {
+        elements.loginPassword.classList.remove("input-shake");
+      }, { once: true });
       return;
     }
 
