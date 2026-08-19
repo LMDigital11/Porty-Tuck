@@ -45,9 +45,7 @@ interface Env {
   DB: D1Database;
 }
 
-const STORE_KEY = "tuck-shop-manager-v1";
-
-const APP_STATE_TABLE_SQL = `
+const TABLE_SQL = `
   CREATE TABLE IF NOT EXISTS app_state (
     id TEXT PRIMARY KEY,
     data TEXT NOT NULL,
@@ -56,14 +54,31 @@ const APP_STATE_TABLE_SQL = `
   )
 `;
 
-const APP_STATE_INDEX_SQL = `
+const INDEX_SQL = `
   CREATE INDEX IF NOT EXISTS app_state_updated_at_idx
   ON app_state(updated_at)
 `;
 
-async function ensureAppStateTable(db: D1Database): Promise<void> {
-  await db.prepare(APP_STATE_TABLE_SQL).run();
-  await db.prepare(APP_STATE_INDEX_SQL).run();
+// Each section of the store is stored as its own row with this prefix
+const PREFIX = "tuck:";
+
+// The 7 sections stored as separate rows
+const SECTIONS = [
+  "users",
+  "items",
+  "sales",
+  "stockEvents",
+  "events",
+  "userEvents",
+  "config",
+] as const;
+
+// Legacy single-blob key (for migration)
+const LEGACY_KEY = "tuck-shop-manager-v1";
+
+async function ensureTable(db: D1Database): Promise<void> {
+  await db.prepare(TABLE_SQL).run();
+  await db.prepare(INDEX_SQL).run();
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -73,44 +88,104 @@ function jsonResponse(data: unknown, status = 200): Response {
   });
 }
 
-async function loadStoreFromDb(db: D1Database): Promise<StoreDocument | null> {
+// ── Migration: split old single-blob into separate rows ──
+
+async function migrateFromLegacyBlob(db: D1Database): Promise<void> {
   const row = await db
     .prepare("SELECT data FROM app_state WHERE id = ?")
-    .bind(STORE_KEY)
+    .bind(LEGACY_KEY)
     .first<{ data: string }>();
 
-  if (!row?.data) {
-    return null;
-  }
+  if (!row?.data) return;
 
   try {
-    const parsed = JSON.parse(row.data) as StoreDocument;
-    return parsed && typeof parsed === "object" ? parsed : null;
+    const legacy = JSON.parse(row.data) as StoreDocument;
+    if (!legacy || typeof legacy !== "object") return;
+    await saveSections(db, legacy);
+    // Delete the old blob after successful migration
+    await db.prepare("DELETE FROM app_state WHERE id = ?").bind(LEGACY_KEY).run();
   } catch {
-    return null;
+    // Leave the legacy blob in place if migration fails
   }
+}
+
+// ── Load: read all separate rows and combine ──
+
+async function loadSections(db: D1Database): Promise<Partial<StoreDocument>> {
+  const ids = SECTIONS.map((s) => `${PREFIX}${s}`);
+  const placeholders = ids.map(() => "?").join(", ");
+  const rows = await db
+    .prepare(`SELECT id, data FROM app_state WHERE id IN (${placeholders})`)
+    .bind(...ids)
+    .all<{ id: string; data: string }>();
+
+  const result: Record<string, any> = {};
+  for (const row of rows.results ?? []) {
+    const key = row.id.replace(PREFIX, "");
+    try {
+      result[key] = JSON.parse(row.data);
+    } catch {
+      // Skip malformed rows
+    }
+  }
+  return result as Partial<StoreDocument>;
+}
+
+async function loadStoreFromDb(db: D1Database): Promise<StoreDocument | null> {
+  // Check if we have section rows
+  const check = await db
+    .prepare(`SELECT 1 FROM app_state WHERE id = ?`)
+    .bind(`${PREFIX}config`)
+    .first();
+
+  if (check) {
+    // New format: load from separate rows
+    return (await loadSections(db)) as StoreDocument;
+  }
+
+  // Check for legacy single blob
+  const legacy = await db
+    .prepare(`SELECT 1 FROM app_state WHERE id = ?`)
+    .bind(LEGACY_KEY)
+    .first();
+
+  if (legacy) {
+    // Migrate the old blob into separate rows
+    await migrateFromLegacyBlob(db);
+    return (await loadSections(db)) as StoreDocument;
+  }
+
+  // No data at all
+  return null;
+}
+
+// ── Save: split store into separate rows ──
+
+async function saveSections(db: D1Database, store: StoreDocument): Promise<void> {
+  const statements: D1PreparedStatement[] = [];
+
+  for (const key of SECTIONS) {
+    const value = (store as any)[key];
+    const data = JSON.stringify(value ?? null);
+    const id = `${PREFIX}${key}`;
+
+    statements.push(
+      db.prepare(
+        `INSERT INTO app_state (id, data, updated_at)
+         VALUES (?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = CURRENT_TIMESTAMP`
+      ).bind(id, data)
+    );
+  }
+
+  await db.batch(statements);
 }
 
 async function saveStoreToDb(db: D1Database, store: StoreDocument): Promise<void> {
-  const payload = JSON.stringify(store);
-  const existing = await db
-    .prepare("SELECT 1 FROM app_state WHERE id = ?")
-    .bind(STORE_KEY)
-    .first();
-
-  if (existing) {
-    await db
-      .prepare("UPDATE app_state SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-      .bind(payload, STORE_KEY)
-      .run();
-    return;
-  }
-
-  await db
-    .prepare("INSERT INTO app_state (id, data, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)")
-    .bind(STORE_KEY, payload)
-    .run();
+  await saveSections(db, store);
 }
+
+// ── Blank store & normalizer (unchanged) ──
 
 function blankStore(): StoreDocument {
   return {
@@ -193,12 +268,14 @@ function normalizeStore(store: unknown): StoreDocument {
   return next;
 }
 
+// ── Main handler ──
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
     try {
-      await ensureAppStateTable(env.DB);
+      await ensureTable(env.DB);
     } catch (error) {
       console.error("Failed to initialize app_state table:", error);
       return jsonResponse({ error: "Database initialization failed" }, 500);
@@ -215,12 +292,13 @@ export default {
       });
     }
 
-    // API endpoints remain unchanged (no /api prefix needed, app already uses /api in code)
+    // ── API: Load store ──
     if (request.method === "GET" && url.pathname === "/api/load") {
       const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
       return jsonResponse({ store: normalizeStore(store) });
     }
 
+    // ── API: Save store ──
     if (request.method === "POST" && url.pathname === "/api/save") {
       try {
         const payload = await request.json<{ store?: unknown }>();
@@ -233,13 +311,13 @@ export default {
       }
     }
 
-    // Client IP endpoint (for user event logging)
+    // ── API: Client IP ──
     if (request.method === "GET" && url.pathname === "/api/client-ip") {
       const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "unknown";
       return jsonResponse({ ip });
     }
 
-    // SumUp transaction history proxy (avoids browser CORS)
+    // ── API: SumUp transaction history proxy ──
     if (request.method === "GET" && url.pathname === "/api/sumup/transactions") {
       const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
       const normalized = normalizeStore(store);
@@ -276,7 +354,7 @@ export default {
       }
     }
 
-    // SumUp balance calculator (transactions + payouts)
+    // ── API: SumUp balance calculator ──
     if (request.method === "GET" && url.pathname === "/api/sumup/balance") {
       const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
       const normalized = normalizeStore(store);
@@ -293,7 +371,6 @@ export default {
       };
 
       try {
-        // Fetch all transactions via pagination
         const allTx: any[] = [];
         let txUrl: string | null = `https://api.sumup.com/v2.1/merchants/${merchantCode}/transactions/history?limit=100&order=descending`;
         let txPages = 0;
@@ -317,7 +394,6 @@ export default {
           txPages++;
         }
 
-        // Fetch payouts for the last 2 years
         const now = new Date();
         const twoYearsAgo = new Date(now);
         twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
@@ -338,7 +414,6 @@ export default {
           payouts = [];
         }
 
-        // Calculate balance breakdown
         let grossSales = 0;
         let refunds = 0;
         let chargebacks = 0;
@@ -395,9 +470,21 @@ export default {
       }
     }
 
-    // Health check
+    // ── API: Debug — show all stored rows ──
+    if (request.method === "GET" && url.pathname === "/api/debug/rows") {
+      const all = await env.DB.prepare("SELECT id, data, updated_at FROM app_state ORDER BY id").all();
+      const rows = (all.results ?? []).map((r: any) => ({
+        id: r.id,
+        updated_at: r.updated_at,
+        data_size: r.data?.length ?? 0,
+        data_preview: r.data?.slice(0, 200) ?? "",
+      }));
+      return jsonResponse({ rows });
+    }
+
+    // ── Health check ──
     if (request.method === "GET" && url.pathname === "/health") {
-      return jsonResponse({ ok: true, database: "d1" });
+      return jsonResponse({ ok: true, database: "d1", storage: "multi-row" });
     }
 
     return jsonResponse({ error: "Not found" }, 404);
