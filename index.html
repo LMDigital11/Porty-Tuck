@@ -4945,7 +4945,7 @@ body.dark-mode .modal::backdrop {
   function openSumUpPayment(amount) {
     const pounds = Number(amount || 0);
     const sumUpAmount = pounds.toFixed(2);
-    const sumUpUrl = `sumupmerchant://pay/1.0?amount=${sumUpAmount}&currency=GBP`;
+    const sumUpUrl = `sumupmerchant://pay/1.0?amount=${sumUpAmount}&total=${sumUpAmount}&currency=GBP`;
     try {
       window.location.href = sumUpUrl;
       setTimeout(() => {
