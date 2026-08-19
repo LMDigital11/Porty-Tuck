@@ -4131,8 +4131,9 @@ body.dark-mode .modal::backdrop {
 
   function handleScanItemBarcode() {
     openBarcodeScanner((code) => {
-      elements.itemBarcode.value = code;
-      lookupBarcode(code);
+      const trimmed = code.trim();
+      elements.itemBarcode.value = trimmed;
+      lookupBarcode(trimmed);
     });
   }
 
@@ -4160,7 +4161,8 @@ body.dark-mode .modal::backdrop {
 
   function handleScanToAddStock() {
     openBarcodeScanner((code) => {
-      const item = store.items.find((i) => i.barcode && i.barcode === code);
+      const scanned = code.trim().toLowerCase();
+      const item = store.items.find((i) => i.barcode && i.barcode.trim().toLowerCase() === scanned);
       if (!item) {
         showToast("No stock item linked to barcode: " + code);
         return;
