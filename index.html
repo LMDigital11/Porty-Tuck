@@ -4945,15 +4945,15 @@ body.dark-mode .modal::backdrop {
   function openSumUpPayment(amount) {
     const pounds = Number(amount || 0);
     const sumUpAmount = pounds.toFixed(2);
-    const sumUpUrl = `sumup://pay?amount=${sumUpAmount}&currency=GBP`;
+    const sumUpUrl = `sumupmerchant://pay/1.0?amount=${sumUpAmount}&currency=GBP`;
     try {
-      const popup = window.open(sumUpUrl, "_blank", "noopener,noreferrer");
-      if (!popup) {
-        window.location.href = sumUpUrl;
-      }
+      window.location.href = sumUpUrl;
+      setTimeout(() => {
+        showToast("If the SumUp app did not open, make sure it is installed and try again.");
+      }, 2000);
     } catch (error) {
       console.error(error);
-      showToast("Could not launch SumUp payment. Check the reader setup.");
+      showToast("Could not launch SumUp. Make sure the SumUp app is installed.");
     }
   }
 
