@@ -88,27 +88,6 @@ function jsonResponse(data: unknown, status = 200): Response {
   });
 }
 
-// ── Migration: split old single-blob into separate rows ──
-
-async function migrateFromLegacyBlob(db: D1Database): Promise<void> {
-  const row = await db
-    .prepare("SELECT data FROM app_state WHERE id = ?")
-    .bind(LEGACY_KEY)
-    .first<{ data: string }>();
-
-  if (!row?.data) return;
-
-  try {
-    const legacy = JSON.parse(row.data) as StoreDocument;
-    if (!legacy || typeof legacy !== "object") return;
-    await saveSections(db, legacy);
-    // Delete the old blob after successful migration
-    await db.prepare("DELETE FROM app_state WHERE id = ?").bind(LEGACY_KEY).run();
-  } catch {
-    // Leave the legacy blob in place if migration fails
-  }
-}
-
 // ── Load: read all separate rows and combine ──
 
 async function loadSections(db: D1Database): Promise<Partial<StoreDocument>> {
@@ -123,7 +102,15 @@ async function loadSections(db: D1Database): Promise<Partial<StoreDocument>> {
   for (const row of rows.results ?? []) {
     const key = row.id.replace(PREFIX, "");
     try {
-      result[key] = JSON.parse(row.data);
+      const parsed = JSON.parse(row.data);
+      if (key === "config") {
+        // Config row contains all the non-array fields — spread them onto the result
+        if (parsed && typeof parsed === "object") {
+          Object.assign(result, parsed);
+        }
+      } else {
+        result[key] = parsed;
+      }
     } catch {
       // Skip malformed rows
     }
@@ -133,26 +120,58 @@ async function loadSections(db: D1Database): Promise<Partial<StoreDocument>> {
 
 async function loadStoreFromDb(db: D1Database): Promise<StoreDocument | null> {
   // Check if we have section rows
-  const check = await db
-    .prepare(`SELECT 1 FROM app_state WHERE id = ?`)
+  const configRow = await db
+    .prepare(`SELECT data FROM app_state WHERE id = ?`)
     .bind(`${PREFIX}config`)
-    .first();
+    .first<{ data: string }>();
 
-  if (check) {
-    // New format: load from separate rows
+  if (configRow) {
+    // Check if config is null/empty (old bug saved null for config)
+    let configData: any = null;
+    try { configData = JSON.parse(configRow.data); } catch { /* ignore */ }
+
+    if (configData && typeof configData === "object" && Object.keys(configData).length > 0) {
+      // Config has real data — load normally
+      return (await loadSections(db)) as StoreDocument;
+    }
+
+    // Config row exists but is empty — check for legacy blob to re-migrate
+    const legacy = await db
+      .prepare(`SELECT data FROM app_state WHERE id = ?`)
+      .bind(LEGACY_KEY)
+      .first<{ data: string }>();
+
+    if (legacy?.data) {
+      try {
+        const legacyStore = JSON.parse(legacy.data) as StoreDocument;
+        if (legacyStore && typeof legacyStore === "object") {
+          const normalized = normalizeStore(legacyStore);
+          await saveSections(db, normalized);
+          return normalized;
+        }
+      } catch { /* fall through */ }
+    }
+
+    // No legacy blob — load sections with defaults filling in the gaps
     return (await loadSections(db)) as StoreDocument;
   }
 
-  // Check for legacy single blob
+  // Check for legacy single blob (first ever migration)
   const legacy = await db
-    .prepare(`SELECT 1 FROM app_state WHERE id = ?`)
+    .prepare(`SELECT data FROM app_state WHERE id = ?`)
     .bind(LEGACY_KEY)
-    .first();
+    .first<{ data: string }>();
 
-  if (legacy) {
-    // Migrate the old blob into separate rows
-    await migrateFromLegacyBlob(db);
-    return (await loadSections(db)) as StoreDocument;
+  if (legacy?.data) {
+    try {
+      const legacyStore = JSON.parse(legacy.data) as StoreDocument;
+      if (legacyStore && typeof legacyStore === "object") {
+        const normalized = normalizeStore(legacyStore);
+        await saveSections(db, normalized);
+        await db.prepare("DELETE FROM app_state WHERE id = ?").bind(LEGACY_KEY).run();
+        return normalized;
+      }
+    } catch { /* fall through */ }
   }
 
   // No data at all
@@ -161,11 +180,44 @@ async function loadStoreFromDb(db: D1Database): Promise<StoreDocument | null> {
 
 // ── Save: split store into separate rows ──
 
+// Config fields that live outside the main arrays
+const CONFIG_KEYS = [
+  "version",
+  "lifetime",
+  "apiConfig",
+  "meta",
+  "maintenance",
+  "lockout",
+  "maintenanceSchedule",
+] as const;
+
+function extractConfig(store: StoreDocument): Record<string, unknown> {
+  const config: Record<string, unknown> = {};
+  for (const key of CONFIG_KEYS) {
+    config[key] = (store as any)[key];
+  }
+  return config;
+}
+
+function applyConfig(store: StoreDocument, config: Record<string, unknown> | null): void {
+  if (!config || typeof config !== "object") return;
+  for (const key of CONFIG_KEYS) {
+    if (config[key] !== undefined) {
+      (store as any)[key] = config[key];
+    }
+  }
+}
+
 async function saveSections(db: D1Database, store: StoreDocument): Promise<void> {
   const statements: D1PreparedStatement[] = [];
 
   for (const key of SECTIONS) {
-    const value = (store as any)[key];
+    let value: unknown;
+    if (key === "config") {
+      value = extractConfig(store);
+    } else {
+      value = (store as any)[key];
+    }
     const data = JSON.stringify(value ?? null);
     const id = `${PREFIX}${key}`;
 
