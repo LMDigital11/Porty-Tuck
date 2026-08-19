@@ -243,8 +243,8 @@ export default {
     if (request.method === "GET" && url.pathname === "/api/sumup/transactions") {
       const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
       const normalized = normalizeStore(store);
-      const apiKey = (normalized.apiConfig?.sumupApiKey || "").trim();
-      const merchantCode = (normalized.apiConfig?.sumupMerchantCode || "").trim();
+      const apiKey = (url.searchParams.get("api_key") || normalized.apiConfig?.sumupApiKey || "").trim();
+      const merchantCode = (url.searchParams.get("merchant_code") || normalized.apiConfig?.sumupMerchantCode || "").trim();
 
       if (!apiKey || !merchantCode) {
         return jsonResponse({ error: "SumUp API key or merchant code not configured." }, 400);
@@ -273,6 +273,125 @@ export default {
       } catch (error) {
         console.error("SumUp proxy error:", error);
         return jsonResponse({ error: "Failed to reach SumUp API." }, 502);
+      }
+    }
+
+    // SumUp balance calculator (transactions + payouts)
+    if (request.method === "GET" && url.pathname === "/api/sumup/balance") {
+      const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
+      const normalized = normalizeStore(store);
+      const apiKey = (normalized.apiConfig?.sumupApiKey || "").trim();
+      const merchantCode = (normalized.apiConfig?.sumupMerchantCode || "").trim();
+
+      if (!apiKey || !merchantCode) {
+        return jsonResponse({ error: "SumUp API key or merchant code not configured." }, 400);
+      }
+
+      const headers = {
+        "Accept": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      };
+
+      try {
+        // Fetch all transactions via pagination
+        const allTx: any[] = [];
+        let txUrl: string | null = `https://api.sumup.com/v2.1/merchants/${merchantCode}/transactions/history?limit=100&order=descending`;
+        let txPages = 0;
+
+        while (txUrl && txPages < 50) {
+          const resp = await fetch(txUrl, { method: "GET", headers });
+          if (!resp.ok) {
+            const errBody = await resp.text();
+            return jsonResponse({ error: `SumUp transactions API returned ${resp.status}: ${errBody}` }, 502);
+          }
+          const data = await resp.json<{ items?: any[]; links?: any[] }>();
+          if (Array.isArray(data.items)) {
+            allTx.push(...data.items);
+          }
+          const nextLink = Array.isArray(data.links)
+            ? data.links.find((l: any) => l.rel === "next")
+            : null;
+          txUrl = nextLink
+            ? `https://api.sumup.com/v2.1/merchants/${merchantCode}/transactions/history?${nextLink.href}`
+            : null;
+          txPages++;
+        }
+
+        // Fetch payouts for the last 2 years
+        const now = new Date();
+        const twoYearsAgo = new Date(now);
+        twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+        const payoutStartDate = twoYearsAgo.toISOString().split("T")[0];
+        const payoutEndDate = now.toISOString().split("T")[0];
+
+        let payouts: any[] = [];
+        try {
+          const payoutResp = await fetch(
+            `https://api.sumup.com/v1.0/merchants/${merchantCode}/payouts?start_date=${payoutStartDate}&end_date=${payoutEndDate}&limit=9999&order=desc`,
+            { method: "GET", headers }
+          );
+          if (payoutResp.ok) {
+            payouts = await payoutResp.json<any[]>();
+            if (!Array.isArray(payouts)) payouts = [];
+          }
+        } catch {
+          payouts = [];
+        }
+
+        // Calculate balance breakdown
+        let grossSales = 0;
+        let refunds = 0;
+        let chargebacks = 0;
+
+        for (const tx of allTx) {
+          const amount = Number(tx.amount || 0);
+          const type = String(tx.type || "").toUpperCase();
+          const status = String(tx.status || "").toUpperCase();
+
+          if (type === "PAYMENT" && status === "SUCCESSFUL") {
+            grossSales += amount;
+          } else if (type === "REFUND") {
+            refunds += amount;
+          } else if (type === "CHARGE_BACK") {
+            chargebacks += amount;
+          }
+        }
+
+        let totalPayouts = 0;
+        let totalFees = 0;
+        let payoutDeductions = 0;
+
+        for (const p of payouts) {
+          const amount = Number(p.amount || 0);
+          const fee = Number(p.fee || 0);
+          const pType = String(p.type || "").toUpperCase();
+          const pStatus = String(p.status || "").toUpperCase();
+
+          if (pType === "PAYOUT" && pStatus === "SUCCESSFUL") {
+            totalPayouts += amount;
+            totalFees += fee;
+          } else if (pType === "REFUND_DEDUCTION" || pType === "CHARGE_BACK_DEDUCTION" || pType === "DD_RETURN_DEDUCTION" || pType === "BALANCE_DEDUCTION") {
+            payoutDeductions += amount;
+          }
+        }
+
+        const pendingBalance = Math.round((grossSales - refunds - chargebacks - totalFees - totalPayouts) * 100) / 100;
+
+        return jsonResponse({
+          grossSales: Math.round(grossSales * 100) / 100,
+          refunds: Math.round(refunds * 100) / 100,
+          chargebacks: Math.round(chargebacks * 100) / 100,
+          fees: Math.round(totalFees * 100) / 100,
+          payouts: Math.round(totalPayouts * 100) / 100,
+          payoutDeductions: Math.round(payoutDeductions * 100) / 100,
+          pendingBalance,
+          transactionCount: allTx.length,
+          payoutCount: payouts.length,
+          fetchedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error("SumUp balance calc error:", error);
+        return jsonResponse({ error: "Failed to calculate SumUp balance." }, 502);
       }
     }
 
