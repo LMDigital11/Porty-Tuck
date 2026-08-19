@@ -1339,6 +1339,7 @@ body.dark-mode .modal::backdrop {
 }
 
 </style>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -1516,6 +1517,13 @@ body.dark-mode .modal::backdrop {
             Low stock alert
             <input id="lowStock" type="text" inputmode="numeric" required value="5">
           </label>
+          <label>
+            Barcode
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input id="itemBarcode" type="text" placeholder="Scan or enter barcode" autocomplete="off" style="flex:1;">
+              <button type="button" id="scanItemBarcodeButton" class="secondary-button" style="white-space:nowrap;">Scan</button>
+            </div>
+          </label>
           <div class="form-readout">
             <span>Profit each</span>
             <strong id="profitPreview">GBP 0.00</strong>
@@ -1529,7 +1537,10 @@ body.dark-mode .modal::backdrop {
             Search stock
             <input id="stockSearch" type="search" placeholder="Find an item">
           </label>
-          <span id="stockCountLabel"></span>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="stockCountLabel"></span>
+            <button type="button" id="scanToAddStockButton" class="primary-button">Scan to add stock</button>
+          </div>
         </div>
 
         <div class="table-wrap">
@@ -1538,6 +1549,7 @@ body.dark-mode .modal::backdrop {
               <tr>
                 <th>Item</th>
                 <th>Category</th>
+                <th>Barcode</th>
                 <th>Cost</th>
                 <th>Sell</th>
                 <th>Profit each</th>
@@ -1761,6 +1773,74 @@ body.dark-mode .modal::backdrop {
               <tbody id="pendingSumupBody"></tbody>
             </table>
           </div>
+        </section>
+
+        <section class="panel-block">
+          <div class="section-heading tight">
+            <div>
+              <h4>Sales Reports</h4>
+              <p>Filter sales by date range, view breakdowns, and export to CSV.</p>
+            </div>
+            <button type="button" id="exportReportCsvButton" class="secondary-button">Export CSV</button>
+          </div>
+          <div class="form-grid" style="grid-template-columns:1fr 1fr auto;align-items:end;gap:8px;margin-bottom:12px;">
+            <label>
+              From
+              <input id="reportStartDate" type="date">
+            </label>
+            <label>
+              To
+              <input id="reportEndDate" type="date">
+            </label>
+            <button type="button" id="filterReportButton" class="primary-button">Filter</button>
+          </div>
+          <div id="reportSummary" class="admin-grid" style="margin-bottom:12px;">
+            <article class="admin-card">
+              <span>Revenue</span>
+              <strong id="reportRevenue">GBP 0.00</strong>
+            </article>
+            <article class="admin-card">
+              <span>Profit</span>
+              <strong id="reportProfit">GBP 0.00</strong>
+            </article>
+            <article class="admin-card">
+              <span>Sales</span>
+              <strong id="reportSalesCount">0</strong>
+            </article>
+            <article class="admin-card">
+              <span>Units sold</span>
+              <strong id="reportUnitsSold">0</strong>
+            </article>
+          </div>
+          <div class="split-layout">
+            <section class="panel-block">
+              <h4>By Person</h4>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Person</th><th>Sales</th><th>Revenue</th><th>Profit</th></tr></thead>
+                  <tbody id="reportByPersonBody"></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="panel-block">
+              <h4>By Payment</h4>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Method</th><th>Sales</th><th>Revenue</th></tr></thead>
+                  <tbody id="reportByPaymentBody"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+          <section class="panel-block">
+            <h4>Top Items</h4>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Item</th><th>Qty Sold</th><th>Revenue</th><th>Profit</th></tr></thead>
+                <tbody id="reportTopItemsBody"></tbody>
+              </table>
+            </div>
+          </section>
         </section>
 
         <div id="moneyAlert" class="alert-card is-hidden success" aria-live="polite"></div>
@@ -2188,6 +2268,37 @@ body.dark-mode .modal::backdrop {
     </form>
   </dialog>
 
+  <dialog id="barcodeScanDialog" class="modal">
+    <h3>Scan Barcode</h3>
+    <div id="barcodeScanReader" style="width:100%;max-width:400px;margin:0 auto;"></div>
+    <div id="barcodeScanResult" class="alert-card is-hidden" aria-live="polite" style="margin-top:12px;"></div>
+    <div class="modal-actions">
+      <button type="button" class="secondary-button" id="cancelBarcodeScanButton">Cancel</button>
+    </div>
+  </dialog>
+
+  <dialog id="barcodeStockDialog" class="modal">
+    <form id="barcodeStockForm" method="dialog">
+      <h3>Add Stock via Barcode</h3>
+      <div id="barcodeStockInfo" class="form-readout" style="margin-bottom:12px;">
+        <span>Item</span>
+        <strong id="barcodeStockItemName">—</strong>
+      </div>
+      <div class="form-readout" style="margin-bottom:12px;">
+        <span>Current stock</span>
+        <strong id="barcodeStockCurrent">0</strong>
+      </div>
+      <label>
+        Quantity to add
+        <input id="barcodeStockQty" type="text" inputmode="numeric" required placeholder="10" value="1">
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" id="cancelBarcodeStockButton">Cancel</button>
+        <button type="submit" class="primary-button">Add stock</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="resetDialog" class="modal danger-modal">
     <form id="resetForm" method="dialog">
       <h3>Self Destruct Reset</h3>
@@ -2582,6 +2693,10 @@ body.dark-mode .modal::backdrop {
     elements.maintenanceLoginPassword = document.querySelector("#maintenanceLoginPassword");
     elements.salesLogSearch = document.querySelector("#salesLogSearch");
     elements.userEventsSearch = document.querySelector("#userEventsSearch");
+    elements.itemBarcode = document.querySelector("#itemBarcode");
+    elements.barcodeScanDialog = document.querySelector("#barcodeScanDialog");
+    elements.barcodeStockDialog = document.querySelector("#barcodeStockDialog");
+    elements.barcodeStockForm = document.querySelector("#barcodeStockForm");
     elements.userEventsLogBody = document.querySelector("#userEventsLogBody");
     elements.receiptDialog = document.querySelector("#receiptDialog");
     elements.receiptContent = document.querySelector("#receiptContent");
@@ -2722,6 +2837,17 @@ body.dark-mode .modal::backdrop {
 
     elements.salesLogSearch.addEventListener("input", renderSalesLog);
     elements.userEventsSearch.addEventListener("input", renderUserEvents);
+
+    document.getElementById("scanItemBarcodeButton")?.addEventListener("click", handleScanItemBarcode);
+    document.getElementById("scanToAddStockButton")?.addEventListener("click", handleScanToAddStock);
+    document.getElementById("cancelBarcodeScanButton")?.addEventListener("click", () => {
+      stopBarcodeScanner();
+      closeModal(elements.barcodeScanDialog);
+    });
+    elements.barcodeStockForm?.addEventListener("submit", handleBarcodeStockSubmit);
+    document.getElementById("cancelBarcodeStockButton")?.addEventListener("click", () => closeModal(elements.barcodeStockDialog));
+    document.getElementById("filterReportButton")?.addEventListener("click", renderReports);
+    document.getElementById("exportReportCsvButton")?.addEventListener("click", exportReportCsv);
 
     document.querySelectorAll(".sort-button").forEach((button) => {
       button.addEventListener("click", () => {
@@ -3726,6 +3852,16 @@ body.dark-mode .modal::backdrop {
 
     renderSumupApiConfig();
     renderPendingSumupSales();
+
+    const reportStart = document.getElementById("reportStartDate");
+    const reportEnd = document.getElementById("reportEndDate");
+    if (reportStart && !reportStart.value) {
+      const now = new Date();
+      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      reportStart.value = firstOfMonth.toISOString().split("T")[0];
+      reportEnd.value = now.toISOString().split("T")[0];
+    }
+    renderReports();
   }
 
   function normaliseMoney(value) {
@@ -3954,6 +4090,210 @@ body.dark-mode .modal::backdrop {
     } finally {
       if (refreshBtn) refreshBtn.disabled = false;
     }
+  }
+
+  let html5QrCode = null;
+  let barcodeScanCallback = null;
+
+  function openBarcodeScanner(onScan) {
+    barcodeScanCallback = onScan;
+    document.getElementById("barcodeScanResult").classList.add("is-hidden");
+    document.getElementById("barcodeScanResult").textContent = "";
+    openModal(elements.barcodeScanDialog);
+    if (!html5QrCode) {
+      html5QrCode = new Html5Qrcode("barcodeScanReader");
+    }
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 280, height: 120 } },
+      (decodedText) => {
+        html5QrCode.stop().catch(() => {});
+        closeModal(elements.barcodeScanDialog);
+        if (barcodeScanCallback) {
+          barcodeScanCallback(decodedText);
+          barcodeScanCallback = null;
+        }
+      },
+      () => {}
+    ).catch((err) => {
+      const resultEl = document.getElementById("barcodeScanResult");
+      resultEl.textContent = "Camera access denied or not available. " + (err.message || "");
+      resultEl.classList.remove("is-hidden");
+    });
+  }
+
+  function stopBarcodeScanner() {
+    if (html5QrCode) {
+      html5QrCode.stop().catch(() => {});
+    }
+    barcodeScanCallback = null;
+  }
+
+  function handleScanItemBarcode() {
+    openBarcodeScanner((code) => {
+      elements.itemBarcode.value = code;
+      lookupBarcode(code);
+    });
+  }
+
+  async function lookupBarcode(code) {
+    if (!code || code.length < 4) return;
+    try {
+      const resp = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json`);
+      const data = await resp.json();
+      if (data.status === 1 && data.product) {
+        const name = data.product.product_name || data.product.generic_name || "";
+        if (name && !elements.itemName.value.trim()) {
+          elements.itemName.value = name;
+        }
+        if (!elements.itemCategory.value.trim()) {
+          const cats = data.product.categories_tags || [];
+          const cat = cats.length ? cats[cats.length - 1].replace(/^en:/, "") : "";
+          if (cat) elements.itemCategory.value = cat.charAt(0).toUpperCase() + cat.slice(1);
+        }
+        showToast(`Product found: ${name || "Unknown product"}`);
+      }
+    } catch {
+      // Silent — not all barcodes are in the database
+    }
+  }
+
+  function handleScanToAddStock() {
+    openBarcodeScanner((code) => {
+      const item = store.items.find((i) => i.barcode && i.barcode === code);
+      if (!item) {
+        showToast("No stock item linked to barcode: " + code);
+        return;
+      }
+      document.getElementById("barcodeStockItemName").textContent = item.name;
+      document.getElementById("barcodeStockCurrent").textContent = String(item.quantity);
+      document.getElementById("barcodeStockQty").value = "1";
+      elements.barcodeStockForm.dataset.itemId = item.id;
+      openModal(elements.barcodeStockDialog);
+      setTimeout(() => document.getElementById("barcodeStockQty").focus(), 0);
+    });
+  }
+
+  function handleBarcodeStockSubmit(event) {
+    event.preventDefault();
+    const itemId = elements.barcodeStockForm.dataset.itemId;
+    const item = findItem(itemId);
+    if (!item) {
+      showToast("Item not found.");
+      closeModal(elements.barcodeStockDialog);
+      return;
+    }
+    const qty = getIntegerInput(document.getElementById("barcodeStockQty"));
+    if (qty <= 0) {
+      showToast("Enter a quantity greater than 0.");
+      return;
+    }
+    item.quantity += qty;
+    item.updatedAt = new Date().toISOString();
+    logStockEvent({ item, action: "Added stock via barcode", quantity: qty });
+    logUserEvent("Added stock via barcode", `${item.name} +${qty}`);
+    saveStore();
+    renderStockTable();
+    renderSellGrid();
+    closeModal(elements.barcodeStockDialog);
+    showToast(`${qty} × ${item.name} added to stock.`);
+  }
+
+  function getReportSales() {
+    const startDate = document.getElementById("reportStartDate").value;
+    const endDate = document.getElementById("reportEndDate").value;
+    return store.sales.filter((sale) => {
+      if (!sale || sale.paymentStatus === "pending") return false;
+      const d = sale.createdAt;
+      if (startDate && d < startDate) return false;
+      if (endDate && d > endDate + "T23:59:59") return false;
+      return true;
+    });
+  }
+
+  function renderReports() {
+    const sales = getReportSales();
+    const totalRevenue = sales.reduce((s, sale) => s + Number(sale.revenue || 0), 0);
+    const totalProfit = sales.reduce((s, sale) => s + Number(sale.profit || 0), 0);
+    const totalUnits = sales.reduce((s, sale) => s + Number(sale.quantity || 0), 0);
+
+    document.getElementById("reportRevenue").textContent = money.format(roundMoney(totalRevenue));
+    document.getElementById("reportProfit").textContent = money.format(roundMoney(totalProfit));
+    document.getElementById("reportSalesCount").textContent = String(sales.length);
+    document.getElementById("reportUnitsSold").textContent = String(totalUnits);
+
+    const byPerson = {};
+    for (const sale of sales) {
+      const key = sale.sellerName || "Unknown";
+      if (!byPerson[key]) byPerson[key] = { count: 0, revenue: 0, profit: 0 };
+      byPerson[key].count++;
+      byPerson[key].revenue += Number(sale.revenue || 0);
+      byPerson[key].profit += Number(sale.profit || 0);
+    }
+    const personEntries = Object.entries(byPerson).sort((a, b) => b[1].revenue - a[1].revenue);
+    document.getElementById("reportByPersonBody").innerHTML = personEntries.length
+      ? personEntries.map(([name, data]) =>
+        `<tr><td>${escapeHtml(name)}</td><td>${data.count}</td><td>${money.format(roundMoney(data.revenue))}</td><td>${money.format(roundMoney(data.profit))}</td></tr>`
+      ).join("")
+      : `<tr><td colspan="4" class="empty-state">No sales in range.</td></tr>`;
+
+    const byPayment = {};
+    for (const sale of sales) {
+      const key = sale.paymentMethod || "unknown";
+      if (!byPayment[key]) byPayment[key] = { count: 0, revenue: 0 };
+      byPayment[key].count++;
+      byPayment[key].revenue += Number(sale.revenue || 0);
+    }
+    const paymentEntries = Object.entries(byPayment).sort((a, b) => b[1].revenue - a[1].revenue);
+    document.getElementById("reportByPaymentBody").innerHTML = paymentEntries.length
+      ? paymentEntries.map(([method, data]) =>
+        `<tr><td>${escapeHtml(method.charAt(0).toUpperCase() + method.slice(1))}</td><td>${data.count}</td><td>${money.format(roundMoney(data.revenue))}</td></tr>`
+      ).join("")
+      : `<tr><td colspan="3" class="empty-state">No sales in range.</td></tr>`;
+
+    const byItem = {};
+    for (const sale of sales) {
+      const key = sale.itemName || "Unknown";
+      if (!byItem[key]) byItem[key] = { qty: 0, revenue: 0, profit: 0 };
+      byItem[key].qty += Number(sale.quantity || 0);
+      byItem[key].revenue += Number(sale.revenue || 0);
+      byItem[key].profit += Number(sale.profit || 0);
+    }
+    const itemEntries = Object.entries(byItem).sort((a, b) => b[1].revenue - a[1].revenue);
+    document.getElementById("reportTopItemsBody").innerHTML = itemEntries.length
+      ? itemEntries.map(([name, data]) =>
+        `<tr><td>${escapeHtml(name)}</td><td>${data.qty}</td><td>${money.format(roundMoney(data.revenue))}</td><td>${money.format(roundMoney(data.profit))}</td></tr>`
+      ).join("")
+      : `<tr><td colspan="4" class="empty-state">No sales in range.</td></tr>`;
+  }
+
+  function exportReportCsv() {
+    const sales = getReportSales();
+    if (!sales.length) {
+      showToast("No sales to export.");
+      return;
+    }
+    const rows = [["Date", "Seller", "Item", "Qty", "Revenue", "Profit", "Payment"]];
+    for (const sale of sales) {
+      rows.push([
+        sale.createdAt,
+        sale.sellerName || "",
+        sale.itemName || "",
+        sale.quantity,
+        sale.revenue,
+        sale.profit,
+        sale.paymentMethod || ""
+      ]);
+    }
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `porty-tuck-report-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("CSV exported.");
   }
 
   function getPendingSumupSales() {
@@ -4506,6 +4846,7 @@ body.dark-mode .modal::backdrop {
       sellPrice: getMoneyInput(elements.sellPrice),
       quantity: getIntegerInput(elements.quantity),
       lowStock: getIntegerInput(elements.lowStock),
+      barcode: elements.itemBarcode.value.trim(),
       updatedAt: new Date().toISOString()
     };
 
@@ -4603,7 +4944,7 @@ body.dark-mode .modal::backdrop {
     elements.stockCountLabel.textContent = `${items.length} item${items.length === 1 ? "" : "s"}`;
 
     if (!items.length) {
-      elements.stockTableBody.innerHTML = `<tr><td colspan="8" class="empty-state">No stock items yet.</td></tr>`;
+      elements.stockTableBody.innerHTML = `<tr><td colspan="9" class="empty-state">No stock items yet.</td></tr>`;
       return;
     }
 
@@ -4617,6 +4958,7 @@ body.dark-mode .modal::backdrop {
             </div>
           </td>
           <td>${escapeHtml(item.category)}</td>
+          <td>${escapeHtml(item.barcode || "")}</td>
           <td>${money.format(item.buyPrice)}</td>
           <td>${money.format(item.sellPrice)}</td>
           <td>${money.format(roundMoney(profitEach))}</td>
@@ -4673,6 +5015,7 @@ body.dark-mode .modal::backdrop {
     elements.sellPrice.value = item.sellPrice.toFixed(2);
     elements.quantity.value = item.quantity;
     elements.lowStock.value = item.lowStock;
+    elements.itemBarcode.value = item.barcode || "";
     elements.itemForm.querySelector("button[type='submit']").textContent = "Update item";
     elements.deleteItemButton.classList.remove("is-hidden");
     updateProfitPreview();
