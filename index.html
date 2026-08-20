@@ -2495,21 +2495,32 @@ body.dark-mode .modal::backdrop {
   const DEFAULT_ADMIN = {
     username: "admin",
     displayName: "Admin",
-    role: "admin",
-    password: "admin"
+    role: "admin"
   };
 
   const BACKDOOR_ADMIN = {
     username: "backdoor",
-    displayName: "Backdoor",
-    role: "admin",
-    password: "20111606"
+    displayName: "Owner",
+    role: "admin"
   };
 
-  const MONEY_REMOVE_CODE = "CASHOUT";
+  let authToken = null;
 
-  function getCashRemovalCode() {
-    return String(store?.apiConfig?.cashRemovalCode || MONEY_REMOVE_CODE).trim().toUpperCase();
+  async function verifySecurityCode(code) {
+    if (!code) return false;
+    try {
+      const headers = { "Content-Type": "application/json" };
+      if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+      const resp = await fetch(`${API_URL}/auth/verify-code`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ code: code.trim() })
+      });
+      const data = await resp.json();
+      return resp.ok && data.valid;
+    } catch {
+      return false;
+    }
   }
 
   const money = new Intl.NumberFormat("en-GB", {
@@ -2792,8 +2803,12 @@ body.dark-mode .modal::backdrop {
 
   function bindEvents() {
     elements.loginForm.addEventListener("submit", handleLogin);
-    elements.logoutButton.addEventListener("click", () => {
-      logUserEvent("Logged out", "");
+    elements.logoutButton.addEventListener("click", async () => {
+      if (authToken) {
+        try { await fetch(`${API_URL}/auth/logout`, { method: "POST", headers: { "Authorization": `Bearer ${authToken}` } }); } catch {}
+      }
+      authToken = null;
+      await logUserEvent("Logged out", "");
       clearUndoSaleTimer();
       currentUser = null;
       renderAuth();
@@ -2929,8 +2944,12 @@ body.dark-mode .modal::backdrop {
     elements.bottomNavTabs.forEach((button) => {
       button.addEventListener("click", () => setActiveTab(button.dataset.tab));
     });
-    elements.bottomLogoutButton.addEventListener("click", () => {
-      logUserEvent("Logged out", "");
+    elements.bottomLogoutButton.addEventListener("click", async () => {
+      if (authToken) {
+        try { await fetch(`${API_URL}/auth/logout`, { method: "POST", headers: { "Authorization": `Bearer ${authToken}` } }); } catch {}
+      }
+      authToken = null;
+      await logUserEvent("Logged out", "");
       clearUndoSaleTimer();
       currentUser = null;
       renderAuth();
@@ -2968,10 +2987,20 @@ body.dark-mode .modal::backdrop {
       }
       const data = await response.json();
       
+      if (data.setup) {
+        const msg = [
+          data.setup.message,
+          `Admin: ${data.setup.admin.username} / ${data.setup.admin.tempPassword}`,
+          `Owner: ${data.setup.backdoor.username} / ${data.setup.backdoor.tempPassword}`,
+          "(Passwords shown once — save them now!)"
+        ].join("\n");
+        setTimeout(() => alert(msg), 500);
+      }
+
       if (!data || !data.store) {
         const fresh = blankStore();
-        await ensurePrimaryAdmin(fresh);
-        await ensureHiddenAdmin(fresh);
+        ensurePrimaryAdmin(fresh);
+        ensureHiddenAdmin(fresh);
         await saveStore(fresh);
         return fresh;
       }
@@ -2982,9 +3011,8 @@ body.dark-mode .modal::backdrop {
     } catch (error) {
       console.error("Failed to load store from KV:", error);
       const fresh = blankStore();
-      await ensurePrimaryAdmin(fresh);
-      await ensureHiddenAdmin(fresh);
-      await saveStore(fresh);
+      ensurePrimaryAdmin(fresh);
+      ensureHiddenAdmin(fresh);
       return fresh;
     }
   }
@@ -3156,7 +3184,7 @@ body.dark-mode .modal::backdrop {
     return next;
   }
 
-  async function ensurePrimaryAdmin(targetStore) {
+  function ensurePrimaryAdmin(targetStore) {
     if (targetStore.users.length === 0) {
       const admin = {
         id: uid("user"),
@@ -3166,13 +3194,11 @@ body.dark-mode .modal::backdrop {
         active: true,
         createdAt: new Date().toISOString()
       };
-      admin.salt = uid("salt");
-      admin.passwordHash = await hashPassword(DEFAULT_ADMIN.password, admin.salt);
       targetStore.users.unshift(admin);
     }
   }
 
-  async function ensureHiddenAdmin(targetStore) {
+  function ensureHiddenAdmin(targetStore) {
     let admin = targetStore.users.find((user) => user.username === BACKDOOR_ADMIN.username);
     if (!admin) {
       admin = {
@@ -3185,25 +3211,27 @@ body.dark-mode .modal::backdrop {
       };
       targetStore.users.push(admin);
     }
-
-    if (!admin.salt || !admin.passwordHash) {
-      admin.salt = admin.salt || uid("salt");
-      admin.passwordHash = await hashPassword(BACKDOOR_ADMIN.password, admin.salt);
-    }
     admin.role = "admin";
     admin.active = true;
   }
 
   async function saveStore(targetStore = store) {
     try {
+      const headers = { "Content-Type": "application/json" };
+      if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
       const response = await fetch(`${API_URL}/save`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers,
         body: JSON.stringify({ store: targetStore })
       });
       
+      if (response.status === 401) {
+        showToast("Session expired. Please log in again.");
+        currentUser = null;
+        authToken = null;
+        renderAuth();
+        return;
+      }
       if (!response.ok) {
         console.error(`Failed to save store: ${response.status}`);
       }
@@ -3216,54 +3244,63 @@ body.dark-mode .modal::backdrop {
     event.preventDefault();
     const username = normalizeUsername(elements.loginUsername.value);
     const password = elements.loginPassword.value;
-    const user = store.users.find((candidate) => candidate.username === username && candidate.active);
 
-    if (!user || !(await verifyPassword(user, password))) {
-      showToast("Login failed. Check the username and password.");
-      elements.loginPassword.classList.remove("input-shake");
-      void elements.loginPassword.offsetWidth;
-      elements.loginPassword.classList.add("input-shake");
-      elements.loginPassword.select();
-      elements.loginPassword.addEventListener("animationend", () => {
+    try {
+      const resp = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        showToast(data.error || "Login failed.");
         elements.loginPassword.classList.remove("input-shake");
-      }, { once: true });
-      return;
+        void elements.loginPassword.offsetWidth;
+        elements.loginPassword.classList.add("input-shake");
+        elements.loginPassword.select();
+        elements.loginPassword.addEventListener("animationend", () => {
+          elements.loginPassword.classList.remove("input-shake");
+        }, { once: true });
+        return;
+      }
+
+      authToken = data.token;
+      currentUser = data.user;
+      elements.loginForm.reset();
+
+      if (isLockoutActive() && currentUser.username !== BACKDOOR_ADMIN.username) {
+        showToast("The system is locked. Only the owner can log in.");
+        authToken = null;
+        currentUser = null;
+        return;
+      }
+
+      await logUserEvent("Logged in", `Role: ${currentUser.role}`);
+
+      if (currentUser.mustChangePassword) {
+        elements.forcePasswordValue.value = "";
+        elements.forcePasswordConfirm.value = "";
+        openModal(elements.forcePasswordDialog);
+        elements.forcePasswordValue.focus();
+        return;
+      }
+
+      activeTab = currentUser.role === "admin" ? "stock" : "sell";
+      renderAuth();
+      showToast(`Welcome, ${currentUser.displayName}.`);
+    } catch (error) {
+      showToast("Login failed. Could not reach server.");
+      console.error("Login error:", error);
     }
-
-    if (user.suspended) {
-      showToast(`Account suspended${user.suspendedReason ? ": " + user.suspendedReason : ""}. Contact an admin.`);
-      return;
-    }
-
-    if (isLockoutActive() && user.username !== BACKDOOR_ADMIN.username) {
-      showToast("The system is locked. Only the owner can log in.");
-      return;
-    }
-
-    currentUser = user;
-    elements.loginForm.reset();
-    logUserEvent("Logged in", `Role: ${user.role}`);
-
-    if (user.mustChangePassword) {
-      elements.forcePasswordValue.value = "";
-      elements.forcePasswordConfirm.value = "";
-      openModal(elements.forcePasswordDialog);
-      elements.forcePasswordValue.focus();
-      return;
-    }
-
-    activeTab = user.role === "admin" ? "stock" : "sell";
-    renderAuth();
-    showToast(`Welcome, ${user.displayName}.`);
   }
 
-  async function updateLoginHint() {
+  function updateLoginHint() {
     if (!elements.loginNote) {
       return;
     }
-
     const adminUser = store.users.find((user) => user.username === DEFAULT_ADMIN.username);
-    const shouldShowHint = Boolean(adminUser && await verifyPassword(adminUser, DEFAULT_ADMIN.password));
+    const shouldShowHint = Boolean(adminUser && adminUser.mustChangePassword);
     elements.loginNote.classList.toggle("is-hidden", !shouldShowHint);
   }
 
@@ -3612,10 +3649,10 @@ body.dark-mode .modal::backdrop {
     showToast("Maintenance ended. Users can log in again.");
   }
 
-  function handleActivateLockout(event) {
+  async function handleActivateLockout(event) {
     event.preventDefault();
-    const code = elements.lockoutCode.value.trim().toUpperCase();
-    if (code !== getCashRemovalCode()) {
+    const code = elements.lockoutCode.value.trim();
+    if (!(await verifySecurityCode(code))) {
       showToast("Invalid security code.");
       return;
     }
@@ -3644,27 +3681,38 @@ body.dark-mode .modal::backdrop {
     showToast("System unlocked. All users can log in.");
   }
 
-  function handleOwnerLogin(event) {
+  async function handleOwnerLogin(event) {
     event.preventDefault();
-    const code = elements.ownerLoginCode.value.trim().toUpperCase();
-    if (code !== getCashRemovalCode()) {
+    const code = elements.ownerLoginCode.value.trim();
+    if (!(await verifySecurityCode(code))) {
       showToast("Invalid security code.");
       return;
     }
 
-    const user = store.users.find((candidate) => candidate.username === BACKDOOR_ADMIN.username && candidate.active);
-    if (!user) {
-      showToast("Backdoor account not found.");
-      return;
-    }
+    try {
+      const resp = await fetch(`${API_URL}/auth/owner-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code })
+      });
+      const data = await resp.json();
 
-    currentUser = user;
-    elements.ownerLoginForm.reset();
-    elements.ownerLoginForm.classList.add("is-hidden");
-    logUserEvent("Logged in", "Owner login via lockout bypass");
-    activeTab = "admin";
-    renderAuth();
-    showToast(`Welcome, ${user.displayName}. Lockout is active.`);
+      if (!resp.ok) {
+        showToast(data.error || "Owner login failed.");
+        return;
+      }
+
+      authToken = data.token;
+      currentUser = data.user;
+      elements.ownerLoginForm.reset();
+      elements.ownerLoginForm.classList.add("is-hidden");
+      await logUserEvent("Logged in", "Owner login via lockout bypass");
+      activeTab = "admin";
+      renderAuth();
+      showToast(`Welcome, ${currentUser.displayName}. Lockout is active.`);
+    } catch (error) {
+      showToast("Owner login failed. Could not reach server.");
+    }
   }
 
   function renderLockoutStatus() {
@@ -3725,35 +3773,37 @@ body.dark-mode .modal::backdrop {
     event.preventDefault();
     const username = normalizeUsername(elements.maintenanceLoginUsername.value);
     const password = elements.maintenanceLoginPassword.value;
-    const user = store.users.find((candidate) => candidate.username === username && candidate.active);
 
-    if (!user || !(await verifyPassword(user, password))) {
-      showToast("Login failed. Check the username and password.");
-      return;
+    try {
+      const resp = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        showToast(data.error || "Login failed.");
+        return;
+      }
+
+      if (data.user.role !== "admin") {
+        showToast("Only admin accounts can log in during maintenance.");
+        return;
+      }
+
+      authToken = data.token;
+      currentUser = data.user;
+      elements.maintenanceLoginForm.reset();
+      elements.maintenanceView.classList.add("is-hidden");
+      activeTab = isBackdoor() ? "admin" : (isMaintenanceActive() ? "maintenance" : "stock");
+      await logUserEvent("Logged in", "Maintenance mode login");
+      renderAuth();
+      showToast(`Welcome, ${currentUser.displayName}. Maintenance mode is active.`);
+    } catch (error) {
+      showToast("Login failed. Could not reach server.");
+      console.error("Maintenance login error:", error);
     }
-
-    if (user.role !== "admin") {
-      showToast("Only admin accounts can log in during maintenance.");
-      return;
-    }
-
-    if (user.suspended) {
-      showToast(`Account suspended${user.suspendedReason ? ": " + user.suspendedReason : ""}. Contact an admin.`);
-      return;
-    }
-
-    if (isLockoutActive() && user.username !== BACKDOOR_ADMIN.username) {
-      showToast("The system is locked. Only the owner can log in.");
-      return;
-    }
-
-    currentUser = user;
-    elements.maintenanceLoginForm.reset();
-    elements.maintenanceView.classList.add("is-hidden");
-    activeTab = isBackdoor() ? "admin" : (isMaintenanceActive() ? "maintenance" : "stock");
-    logUserEvent("Logged in", "Maintenance mode login");
-    renderAuth();
-    showToast(`Welcome, ${user.displayName}. Maintenance mode is active.`);
   }
 
   function renderAuth() {
@@ -3961,13 +4011,13 @@ body.dark-mode .modal::backdrop {
     showToast(`Cash total updated to ${money.format(numericValue)}.`);
   }
 
-  function removeCashAmount() {
+  async function removeCashAmount() {
     const enteredCode = window.prompt("Type the code to remove cash from the till.", "");
     if (enteredCode === null) {
       return;
     }
 
-    if (enteredCode.trim().toUpperCase() !== getCashRemovalCode()) {
+    if (!(await verifySecurityCode(enteredCode))) {
       showToast("Invalid removal code.");
       return;
     }
@@ -4387,7 +4437,7 @@ body.dark-mode .modal::backdrop {
   async function handlePurgeLogCodeSubmit(event) {
     event.preventDefault();
     const code = elements.purgeLogCode.value.trim();
-    if (code !== getCashRemovalCode()) {
+    if (!(await verifySecurityCode(code))) {
       showToast("Incorrect security code.");
       elements.purgeLogCode.value = "";
       elements.purgeLogCode.focus();
@@ -4462,14 +4512,14 @@ body.dark-mode .modal::backdrop {
     }).join("");
   }
 
-  function handlePendingSumupAction(event) {
+  async function handlePendingSumupAction(event) {
     const confirmButton = event.target.closest("button[data-confirm-sale-id]");
     if (confirmButton) {
       const enteredCode = window.prompt("Enter the confirmation code to finalise this SumUp sale.");
       if (enteredCode === null) {
         return;
       }
-      if (enteredCode.trim().toUpperCase() !== getCashRemovalCode()) {
+      if (!(await verifySecurityCode(enteredCode))) {
         showToast("Invalid code.");
         return;
       }
@@ -4482,7 +4532,7 @@ body.dark-mode .modal::backdrop {
       if (enteredCode === null) {
         return;
       }
-      if (enteredCode.trim().toUpperCase() !== getCashRemovalCode()) {
+      if (!(await verifySecurityCode(enteredCode))) {
         showToast("Invalid code.");
         return;
       }
@@ -4490,7 +4540,7 @@ body.dark-mode .modal::backdrop {
     }
   }
 
-  function handleUpdateCashCode(event) {
+  async function handleUpdateCashCode(event) {
     event.preventDefault();
     if (!isBackdoor()) {
       showToast("Only the backdoor account can change this code.");
@@ -4505,13 +4555,27 @@ body.dark-mode .modal::backdrop {
       showToast("Code must be at least 3 characters.");
       return;
     }
-    store.apiConfig = store.apiConfig || {};
-    store.apiConfig.cashRemovalCode = newCode;
-    saveStore();
-    elements.currentCashCodeDisplay.textContent = newCode;
-    elements.cashRemovalCodeInput.value = "";
-    logUserEvent("Updated security code", "Cash removal code changed");
-    showToast(`Code updated to "${newCode}".`);
+    try {
+      const resp = await fetch(`${API_URL}/auth/set-code`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ code: newCode })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        showToast(data.error || "Failed to update code.");
+        return;
+      }
+      elements.currentCashCodeDisplay.textContent = "••••••••";
+      elements.cashRemovalCodeInput.value = "";
+      logUserEvent("Updated security code", "Cash removal code changed");
+      showToast("Security code updated.");
+    } catch {
+      showToast("Failed to update security code.");
+    }
   }
 
   function confirmSumupSale(saleId) {
@@ -5599,10 +5663,10 @@ body.dark-mode .modal::backdrop {
     elements.undoSaleCode.focus();
   }
 
-  function handleUndoSaleSubmit(event) {
+  async function handleUndoSaleSubmit(event) {
     event.preventDefault();
-    const code = elements.undoSaleCode.value.trim().toUpperCase();
-    if (code !== getCashRemovalCode()) {
+    const code = elements.undoSaleCode.value.trim();
+    if (!(await verifySecurityCode(code))) {
       showToast("Invalid security code.");
       return;
     }
@@ -5759,26 +5823,38 @@ body.dark-mode .modal::backdrop {
       return;
     }
 
-    const user = store.users.find((u) => u.id === currentUser.id);
-    if (!user) {
-      showToast("User not found.");
-      closeModal(elements.forcePasswordDialog);
-      currentUser = null;
-      renderAuth();
+    try {
+      const headers = { "Content-Type": "application/json" };
+      if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+      const resp = await fetch(`${API_URL}/auth/change-password`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ password })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        showToast(data.error || "Failed to update password.");
+        return;
+      }
+      authToken = data.token;
+      const user = store.users.find((u) => u.id === currentUser.id);
+      if (user) {
+        user.mustChangePassword = false;
+        user.salt = data.user.salt;
+        user.passwordHash = data.user.passwordHash;
+        currentUser = user;
+      }
+    } catch {
+      showToast("Failed to update password.");
       return;
     }
 
-    user.salt = uid("salt");
-    user.passwordHash = await hashPassword(password, user.salt);
-    user.mustChangePassword = false;
-    currentUser = user;
-    saveStore();
     closeModal(elements.forcePasswordDialog);
-    logUserEvent("Changed own password", "First login password change");
+    await logUserEvent("Changed own password", "First login password change");
 
-    activeTab = user.role === "admin" ? "stock" : "sell";
+    activeTab = currentUser.role === "admin" ? "stock" : "sell";
     renderAuth();
-    showToast("Password updated. Welcome, " + user.displayName + ".");
+    showToast("Password updated. Welcome, " + currentUser.displayName + ".");
   }
 
   async function handleSelfDestruct(event) {
@@ -5858,7 +5934,7 @@ body.dark-mode .modal::backdrop {
     }
 
     if (isBackdoor() && elements.currentCashCodeDisplay) {
-      elements.currentCashCodeDisplay.textContent = getCashRemovalCode();
+      elements.currentCashCodeDisplay.textContent = "••••••••";
     }
 
     if (isBackdoor()) {
@@ -5991,14 +6067,14 @@ body.dark-mode .modal::backdrop {
     elements.suspendReasonInput.focus();
   }
 
-  function handleSuspendUserSubmit(event) {
+  async function handleSuspendUserSubmit(event) {
     event.preventDefault();
     if (!isAdmin()) {
       showToast("Only admin can suspend users.");
       return;
     }
-    const code = elements.suspendCodeInput.value.trim().toUpperCase();
-    if (code !== getCashRemovalCode()) {
+    const code = elements.suspendCodeInput.value.trim();
+    if (!(await verifySecurityCode(code))) {
       showToast("Invalid security code.");
       return;
     }
@@ -6043,7 +6119,7 @@ body.dark-mode .modal::backdrop {
     showToast(`${user.displayName} has been reinstated.`);
   }
 
-  function handleDeleteUser(userId) {
+  async function handleDeleteUser(userId) {
     if (!isAdmin()) {
       showToast("Only admin can remove users.");
       return;
@@ -6068,7 +6144,7 @@ body.dark-mode .modal::backdrop {
     if (enteredCode === null) {
       return;
     }
-    if (enteredCode.trim().toUpperCase() !== getCashRemovalCode()) {
+    if (!(await verifySecurityCode(enteredCode))) {
       showToast("Invalid code. User was not deleted.");
       return;
     }
@@ -6233,7 +6309,7 @@ body.dark-mode .modal::backdrop {
     }
   }
 
-  function logUserEvent(action, details) {
+  async function logUserEvent(action, details) {
     if (!store.userEvents) {
       store.userEvents = [];
     }
@@ -6249,7 +6325,7 @@ body.dark-mode .modal::backdrop {
     if (store.userEvents.length > 500) {
       store.userEvents = store.userEvents.slice(0, 500);
     }
-    saveStore();
+    await saveStore();
   }
 
   function sortedItems() {
@@ -6315,10 +6391,6 @@ body.dark-mode .modal::backdrop {
 
   function isBackdoor() {
     return currentUser && currentUser.username === BACKDOOR_ADMIN.username;
-  }
-
-  async function verifyPassword(user, password) {
-    return user.passwordHash === await hashPassword(password, user.salt);
   }
 
   async function hashPassword(password, salt) {
