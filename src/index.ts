@@ -193,6 +193,104 @@ async function pruneExpiredSessions(db: D1Database): Promise<void> {
   if (changed) await saveSessions(db, data);
 }
 
+async function removeSessionsForUser(db: D1Database, userId: string): Promise<void> {
+  const data = await loadSessions(db);
+  let changed = false;
+  for (const [key, session] of Object.entries(data.sessions)) {
+    if (session.userId === userId) {
+      delete data.sessions[key];
+      changed = true;
+    }
+  }
+  if (changed) await saveSessions(db, data);
+}
+
+// ── Rate limiting for login ──
+
+const LOGIN_MAX_ATTEMPTS = 10;
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+
+interface RateLimitEntry {
+  attempts: number;
+  firstAt: number;
+}
+
+interface RateLimitRow {
+  entries: Record<string, RateLimitEntry>;
+}
+
+async function loadRateLimit(db: D1Database): Promise<RateLimitRow> {
+  const row = await db
+    .prepare(`SELECT data FROM app_state WHERE id = ?`)
+    .bind(`${PREFIX}rateLimit`)
+    .first<{ data: string }>();
+  if (!row?.data) return { entries: {} };
+  try {
+    const parsed = JSON.parse(row.data);
+    return parsed && typeof parsed === "object" ? parsed : { entries: {} };
+  } catch {
+    return { entries: {} };
+  }
+}
+
+async function saveRateLimit(db: D1Database, data: RateLimitRow): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO app_state (id, data, updated_at)
+       VALUES (?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = CURRENT_TIMESTAMP`
+    )
+    .bind(`${PREFIX}rateLimit`, JSON.stringify(data))
+    .run();
+}
+
+async function checkRateLimit(db: D1Database, ip: string): Promise<{ allowed: boolean; retryAfterMs?: number }> {
+  const data = await loadRateLimit(db);
+  const entry = data.entries[ip];
+  if (!entry) return { allowed: true };
+
+  const now = Date.now();
+  if (now - entry.firstAt > LOGIN_LOCKOUT_MS) {
+    delete data.entries[ip];
+    await saveRateLimit(db, data);
+    return { allowed: true };
+  }
+
+  if (entry.attempts >= LOGIN_MAX_ATTEMPTS) {
+    const retryAfterMs = entry.firstAt + LOGIN_LOCKOUT_MS - now;
+    return { allowed: false, retryAfterMs: Math.max(0, retryAfterMs) };
+  }
+
+  return { allowed: true };
+}
+
+async function recordFailedLogin(db: D1Database, ip: string): Promise<void> {
+  const data = await loadRateLimit(db);
+  const now = Date.now();
+  const entry = data.entries[ip];
+
+  if (!entry || now - entry.firstAt > LOGIN_LOCKOUT_MS) {
+    data.entries[ip] = { attempts: 1, firstAt: now };
+  } else {
+    entry.attempts++;
+  }
+
+  const pruneBefore = now - LOGIN_LOCKOUT_MS * 2;
+  for (const [key, e] of Object.entries(data.entries)) {
+    if (e.firstAt < pruneBefore) delete data.entries[key];
+  }
+
+  await saveRateLimit(db, data);
+}
+
+async function clearRateLimit(db: D1Database, ip: string): Promise<void> {
+  const data = await loadRateLimit(db);
+  if (data.entries[ip]) {
+    delete data.entries[ip];
+    await saveRateLimit(db, data);
+  }
+}
+
 // ── Auth middleware ──
 
 async function requireAuth(
@@ -553,9 +651,16 @@ export default {
         const body = await request.json<{ username?: string; password?: string }>();
         const username = (body.username || "").trim().toLowerCase();
         const password = body.password || "";
+        const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "unknown";
 
         if (!username || !password) {
           return jsonResponse({ error: "Username and password are required." }, 400);
+        }
+
+        const rateCheck = await checkRateLimit(env.DB, ip);
+        if (!rateCheck.allowed) {
+          const retrySec = Math.ceil((rateCheck.retryAfterMs || 0) / 1000);
+          return jsonResponse({ error: `Too many failed attempts. Try again in ${retrySec} seconds.` }, 429);
         }
 
         const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
@@ -565,6 +670,7 @@ export default {
         );
 
         if (!user) {
+          await recordFailedLogin(env.DB, ip);
           return jsonResponse({ error: "Invalid username or password." }, 401);
         }
 
@@ -580,9 +686,11 @@ export default {
 
         const hash = await hashPassword(password, user.salt);
         if (hash !== user.passwordHash) {
+          await recordFailedLogin(env.DB, ip);
           return jsonResponse({ error: "Invalid username or password." }, 401);
         }
 
+        await clearRateLimit(env.DB, ip);
         const token = await createSession(env.DB, user.id);
 
         return jsonResponse({
@@ -768,8 +876,8 @@ export default {
 
         await saveStoreToDb(env.DB, normalized);
 
+        await removeSessionsForUser(env.DB, user.id);
         const newToken = await createSession(env.DB, user.id);
-        await removeSession(env.DB, request.headers.get("Authorization")!.slice(7).trim());
 
         return jsonResponse({
           ok: true,
@@ -971,6 +1079,9 @@ export default {
       const auth = await requireAuth(request, env.DB);
       if (!auth.ok) {
         return jsonResponse({ error: auth.error }, 401);
+      }
+      if (auth.user.username !== "backdoor") {
+        return jsonResponse({ error: "Owner access only." }, 403);
       }
 
       const all = await env.DB.prepare("SELECT id, data, updated_at FROM app_state ORDER BY id").all();

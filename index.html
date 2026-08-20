@@ -56,6 +56,26 @@ button:disabled {
   opacity: 0.55;
 }
 
+button.is-loading {
+  position: relative;
+  color: transparent !important;
+  pointer-events: none;
+}
+button.is-loading::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1.1em;
+  height: 1.1em;
+  margin: -0.55em 0 0 -0.55em;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .is-hidden {
   display: none !important;
 }
@@ -1374,7 +1394,7 @@ body.dark-mode .modal::backdrop {
             <button type="button" class="password-toggle" data-toggle="loginPassword" tabindex="-1">Show</button>
           </span>
         </label>
-        <button type="submit" class="primary-button full-width">Log in</button>
+        <button type="submit" id="loginSubmitBtn" class="primary-button full-width">Log in</button>
       </form>
       <p id="loginNote" class="login-note">Default admin: <strong>admin</strong> / <strong>admin</strong></p>
       <button type="button" id="loginDarkModeButton" class="ghost-button" style="margin-top:12px;font-size:0.8rem;" title="Toggle dark mode">🌙 Dark mode</button>
@@ -1390,7 +1410,7 @@ body.dark-mode .modal::backdrop {
           Security code
           <input id="ownerLoginCode" type="password" autocomplete="off" placeholder="Enter owner code" required>
         </label>
-        <button type="submit" class="primary-button full-width">Unlock &amp; log in</button>
+        <button type="submit" id="ownerLoginSubmitBtn" class="primary-button full-width">Unlock &amp; log in</button>
       </form>
     </section>
   </main>
@@ -1418,7 +1438,7 @@ body.dark-mode .modal::backdrop {
             <button type="button" class="password-toggle" data-toggle="maintenanceLoginPassword" tabindex="-1">Show</button>
           </span>
         </label>
-        <button type="submit" class="primary-button full-width">Log in</button>
+        <button type="submit" id="maintenanceLoginSubmitBtn" class="primary-button full-width">Log in</button>
       </form>
     </section>
   </main>
@@ -2504,7 +2524,18 @@ body.dark-mode .modal::backdrop {
     role: "admin"
   };
 
-  let authToken = null;
+  let authToken = sessionStorage.getItem("authToken");
+
+  function setAuthToken(token) {
+    authToken = token;
+    if (token) sessionStorage.setItem("authToken", token);
+    else sessionStorage.removeItem("authToken");
+  }
+
+  function clearAuthToken() {
+    authToken = null;
+    sessionStorage.removeItem("authToken");
+  }
 
   async function verifySecurityCode(code) {
     if (!code) return false;
@@ -2533,7 +2564,15 @@ body.dark-mode .modal::backdrop {
   });
 
   let store;
-  let currentUser = null;
+  let currentUser = (() => {
+    try { return JSON.parse(sessionStorage.getItem("currentUser")); } catch { return null; }
+  })();
+
+  function persistCurrentUser() {
+    if (currentUser) sessionStorage.setItem("currentUser", JSON.stringify(currentUser));
+    else sessionStorage.removeItem("currentUser");
+  }
+
   let activeTab = "stock";
   let pendingSaleItemId = null;
   let pendingStockItemId = null;
@@ -2579,11 +2618,13 @@ body.dark-mode .modal::backdrop {
       store = await migrateStore(data.store);
       if (isMaintenanceActive() && !isMaintenanceAllowed()) {
         currentUser = null;
+        persistCurrentUser();
         renderAuth();
         showToast("Maintenance mode is active. You have been signed out.");
       }
       if (isLockoutActive() && currentUser && currentUser.username !== BACKDOOR_ADMIN.username) {
         currentUser = null;
+        persistCurrentUser();
         renderAuth();
         showToast("System locked. You have been signed out.");
       }
@@ -2597,6 +2638,7 @@ body.dark-mode .modal::backdrop {
     elements.loginView = document.querySelector("#loginView");
     elements.appShell = document.querySelector("#appShell");
     elements.loginForm = document.querySelector("#loginForm");
+    elements.loginSubmitBtn = document.querySelector("#loginSubmitBtn");
     elements.loginUsername = document.querySelector("#loginUsername");
     elements.loginPassword = document.querySelector("#loginPassword");
     elements.loginNote = document.querySelector("#loginNote");
@@ -2755,6 +2797,7 @@ body.dark-mode .modal::backdrop {
     elements.forcePasswordConfirm = document.querySelector("#forcePasswordConfirm");
     elements.showMaintenanceLoginButton = document.querySelector("#showMaintenanceLoginButton");
     elements.maintenanceLoginForm = document.querySelector("#maintenanceLoginForm");
+    elements.maintenanceLoginSubmitBtn = document.querySelector("#maintenanceLoginSubmitBtn");
     elements.maintenanceLoginUsername = document.querySelector("#maintenanceLoginUsername");
     elements.maintenanceLoginPassword = document.querySelector("#maintenanceLoginPassword");
     elements.salesLogSearch = document.querySelector("#salesLogSearch");
@@ -2794,6 +2837,7 @@ body.dark-mode .modal::backdrop {
     elements.loginLockoutBannerText = document.querySelector("#loginLockoutBannerText");
     elements.ownerLoginButton = document.querySelector("#ownerLoginButton");
     elements.ownerLoginForm = document.querySelector("#ownerLoginForm");
+    elements.ownerLoginSubmitBtn = document.querySelector("#ownerLoginSubmitBtn");
     elements.ownerLoginCode = document.querySelector("#ownerLoginCode");
     elements.darkModeButton = document.querySelector("#darkModeButton");
     elements.loginDarkModeButton = document.querySelector("#loginDarkModeButton");
@@ -2807,10 +2851,11 @@ body.dark-mode .modal::backdrop {
       if (authToken) {
         try { await fetch(`${API_URL}/auth/logout`, { method: "POST", headers: { "Authorization": `Bearer ${authToken}` } }); } catch {}
       }
-      authToken = null;
+      clearAuthToken();
       await logUserEvent("Logged out", "");
       clearUndoSaleTimer();
       currentUser = null;
+      persistCurrentUser();
       renderAuth();
       showToast("Logged out.");
     });
@@ -2948,10 +2993,11 @@ body.dark-mode .modal::backdrop {
       if (authToken) {
         try { await fetch(`${API_URL}/auth/logout`, { method: "POST", headers: { "Authorization": `Bearer ${authToken}` } }); } catch {}
       }
-      authToken = null;
+      clearAuthToken();
       await logUserEvent("Logged out", "");
       clearUndoSaleTimer();
       currentUser = null;
+      persistCurrentUser();
       renderAuth();
       showToast("Logged out.");
     });
@@ -3228,7 +3274,8 @@ body.dark-mode .modal::backdrop {
       if (response.status === 401) {
         showToast("Session expired. Please log in again.");
         currentUser = null;
-        authToken = null;
+        persistCurrentUser();
+        clearAuthToken();
         renderAuth();
         return;
       }
@@ -3242,57 +3289,61 @@ body.dark-mode .modal::backdrop {
 
   async function handleLogin(event) {
     event.preventDefault();
-    const username = normalizeUsername(elements.loginUsername.value);
-    const password = elements.loginPassword.value;
+    await withLoading(elements.loginSubmitBtn, async () => {
+      const username = normalizeUsername(elements.loginUsername.value);
+      const password = elements.loginPassword.value;
 
-    try {
-      const resp = await fetch(`${API_URL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
-      });
-      const data = await resp.json();
+      try {
+        const resp = await fetch(`${API_URL}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await resp.json();
 
-      if (!resp.ok) {
-        showToast(data.error || "Login failed.");
-        elements.loginPassword.classList.remove("input-shake");
-        void elements.loginPassword.offsetWidth;
-        elements.loginPassword.classList.add("input-shake");
-        elements.loginPassword.select();
-        elements.loginPassword.addEventListener("animationend", () => {
+        if (!resp.ok) {
+          showToast(data.error || "Login failed.");
           elements.loginPassword.classList.remove("input-shake");
-        }, { once: true });
-        return;
+          void elements.loginPassword.offsetWidth;
+          elements.loginPassword.classList.add("input-shake");
+          elements.loginPassword.select();
+          elements.loginPassword.addEventListener("animationend", () => {
+            elements.loginPassword.classList.remove("input-shake");
+          }, { once: true });
+          return;
+        }
+
+        setAuthToken(data.token);
+        currentUser = data.user;
+        persistCurrentUser();
+        elements.loginForm.reset();
+
+        if (isLockoutActive() && currentUser.username !== BACKDOOR_ADMIN.username) {
+          showToast("The system is locked. Only the owner can log in.");
+          clearAuthToken();
+          currentUser = null;
+          persistCurrentUser();
+          return;
+        }
+
+        await logUserEvent("Logged in", `Role: ${currentUser.role}`);
+
+        if (currentUser.mustChangePassword) {
+          elements.forcePasswordValue.value = "";
+          elements.forcePasswordConfirm.value = "";
+          openModal(elements.forcePasswordDialog);
+          elements.forcePasswordValue.focus();
+          return;
+        }
+
+        activeTab = currentUser.role === "admin" ? "stock" : "sell";
+        renderAuth();
+        showToast(`Welcome, ${currentUser.displayName}.`);
+      } catch (error) {
+        showToast("Login failed. Could not reach server.");
+        console.error("Login error:", error);
       }
-
-      authToken = data.token;
-      currentUser = data.user;
-      elements.loginForm.reset();
-
-      if (isLockoutActive() && currentUser.username !== BACKDOOR_ADMIN.username) {
-        showToast("The system is locked. Only the owner can log in.");
-        authToken = null;
-        currentUser = null;
-        return;
-      }
-
-      await logUserEvent("Logged in", `Role: ${currentUser.role}`);
-
-      if (currentUser.mustChangePassword) {
-        elements.forcePasswordValue.value = "";
-        elements.forcePasswordConfirm.value = "";
-        openModal(elements.forcePasswordDialog);
-        elements.forcePasswordValue.focus();
-        return;
-      }
-
-      activeTab = currentUser.role === "admin" ? "stock" : "sell";
-      renderAuth();
-      showToast(`Welcome, ${currentUser.displayName}.`);
-    } catch (error) {
-      showToast("Login failed. Could not reach server.");
-      console.error("Login error:", error);
-    }
+    });
   }
 
   function updateLoginHint() {
@@ -3683,36 +3734,39 @@ body.dark-mode .modal::backdrop {
 
   async function handleOwnerLogin(event) {
     event.preventDefault();
-    const code = elements.ownerLoginCode.value.trim();
-    if (!(await verifySecurityCode(code))) {
-      showToast("Invalid security code.");
-      return;
-    }
-
-    try {
-      const resp = await fetch(`${API_URL}/auth/owner-login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code })
-      });
-      const data = await resp.json();
-
-      if (!resp.ok) {
-        showToast(data.error || "Owner login failed.");
+    await withLoading(elements.ownerLoginSubmitBtn, async () => {
+      const code = elements.ownerLoginCode.value.trim();
+      if (!(await verifySecurityCode(code))) {
+        showToast("Invalid security code.");
         return;
       }
 
-      authToken = data.token;
-      currentUser = data.user;
-      elements.ownerLoginForm.reset();
-      elements.ownerLoginForm.classList.add("is-hidden");
-      await logUserEvent("Logged in", "Owner login via lockout bypass");
-      activeTab = "admin";
-      renderAuth();
-      showToast(`Welcome, ${currentUser.displayName}. Lockout is active.`);
-    } catch (error) {
-      showToast("Owner login failed. Could not reach server.");
-    }
+      try {
+        const resp = await fetch(`${API_URL}/auth/owner-login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code })
+        });
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          showToast(data.error || "Owner login failed.");
+          return;
+        }
+
+        setAuthToken(data.token);
+        currentUser = data.user;
+        persistCurrentUser();
+        elements.ownerLoginForm.reset();
+        elements.ownerLoginForm.classList.add("is-hidden");
+        await logUserEvent("Logged in", "Owner login via lockout bypass");
+        activeTab = "admin";
+        renderAuth();
+        showToast(`Welcome, ${currentUser.displayName}. Lockout is active.`);
+      } catch (error) {
+        showToast("Owner login failed. Could not reach server.");
+      }
+    });
   }
 
   function renderLockoutStatus() {
@@ -3771,39 +3825,42 @@ body.dark-mode .modal::backdrop {
 
   async function handleMaintenanceLogin(event) {
     event.preventDefault();
-    const username = normalizeUsername(elements.maintenanceLoginUsername.value);
-    const password = elements.maintenanceLoginPassword.value;
+    await withLoading(elements.maintenanceLoginSubmitBtn, async () => {
+      const username = normalizeUsername(elements.maintenanceLoginUsername.value);
+      const password = elements.maintenanceLoginPassword.value;
 
-    try {
-      const resp = await fetch(`${API_URL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
-      });
-      const data = await resp.json();
+      try {
+        const resp = await fetch(`${API_URL}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await resp.json();
 
-      if (!resp.ok) {
-        showToast(data.error || "Login failed.");
-        return;
+        if (!resp.ok) {
+          showToast(data.error || "Login failed.");
+          return;
+        }
+
+        if (data.user.role !== "admin") {
+          showToast("Only admin accounts can log in during maintenance.");
+          return;
+        }
+
+        setAuthToken(data.token);
+        currentUser = data.user;
+        persistCurrentUser();
+        elements.maintenanceLoginForm.reset();
+        elements.maintenanceView.classList.add("is-hidden");
+        activeTab = isBackdoor() ? "admin" : (isMaintenanceActive() ? "maintenance" : "stock");
+        await logUserEvent("Logged in", "Maintenance mode login");
+        renderAuth();
+        showToast(`Welcome, ${currentUser.displayName}. Maintenance mode is active.`);
+      } catch (error) {
+        showToast("Login failed. Could not reach server.");
+        console.error("Maintenance login error:", error);
       }
-
-      if (data.user.role !== "admin") {
-        showToast("Only admin accounts can log in during maintenance.");
-        return;
-      }
-
-      authToken = data.token;
-      currentUser = data.user;
-      elements.maintenanceLoginForm.reset();
-      elements.maintenanceView.classList.add("is-hidden");
-      activeTab = isBackdoor() ? "admin" : (isMaintenanceActive() ? "maintenance" : "stock");
-      await logUserEvent("Logged in", "Maintenance mode login");
-      renderAuth();
-      showToast(`Welcome, ${currentUser.displayName}. Maintenance mode is active.`);
-    } catch (error) {
-      showToast("Login failed. Could not reach server.");
-      console.error("Maintenance login error:", error);
-    }
+    });
   }
 
   function renderAuth() {
@@ -5836,13 +5893,14 @@ body.dark-mode .modal::backdrop {
         showToast(data.error || "Failed to update password.");
         return;
       }
-      authToken = data.token;
+      setAuthToken(data.token);
       const user = store.users.find((u) => u.id === currentUser.id);
       if (user) {
         user.mustChangePassword = false;
         user.salt = data.user.salt;
         user.passwordHash = data.user.passwordHash;
         currentUser = user;
+        persistCurrentUser();
       }
     } catch {
       showToast("Failed to update password.");
@@ -5875,6 +5933,7 @@ body.dark-mode .modal::backdrop {
 
     store = next;
     currentUser = store.users.find((user) => user.username === DEFAULT_ADMIN.username) || currentUser;
+    persistCurrentUser();
     saveStore();
     logUserEvent("Self destruct reset", "All data wiped except users and API config");
     closeModal(elements.resetDialog);
@@ -6267,7 +6326,8 @@ body.dark-mode .modal::backdrop {
         const parsed = JSON.parse(String(reader.result));
         const next = await migrateStore(parsed);
         store = next;
-        currentUser = store.users.find((user) => user.id === currentUser.id) || null;
+    currentUser = store.users.find((user) => user.id === currentUser.id) || null;
+    persistCurrentUser();
         saveStore();
         logUserEvent("Imported backup", "Backup restored from file");
         event.target.value = "";
@@ -6489,6 +6549,18 @@ body.dark-mode .modal::backdrop {
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
+  }
+
+  async function withLoading(button, fn) {
+    if (!button) return fn();
+    button.classList.add("is-loading");
+    button.disabled = true;
+    try {
+      return await fn();
+    } finally {
+      button.classList.remove("is-loading");
+      button.disabled = false;
+    }
   }
 
   function showToast(message) {
