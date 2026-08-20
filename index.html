@@ -1771,6 +1771,45 @@ body.dark-mode .modal::backdrop {
         </div>
 
         <section class="panel-block">
+          <div class="section-heading tight">
+            <div>
+              <h4>Cash Drawer</h4>
+              <p>Reconcile the cash drawer by counting the physical cash and comparing it to expected totals.</p>
+            </div>
+            <button type="button" id="reconcileCashButton" class="primary-button">Reconcile</button>
+          </div>
+          <div id="cashDrawerLastReconciliation" class="form-readout" style="margin-bottom:12px;">
+            <span>Last reconciliation</span>
+            <strong id="cashDrawerLastText">No reconciliations yet</strong>
+          </div>
+          <div id="cashDrawerHistory" class="is-hidden">
+            <div class="section-heading tight" style="margin-top:12px;">
+              <div>
+                <h4>History</h4>
+              </div>
+              <button type="button" id="toggleCashDrawerHistoryButton" class="ghost-button">Show</button>
+            </div>
+            <div id="cashDrawerHistoryList" class="is-hidden" style="margin-top:12px;">
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Expected</th>
+                      <th>Counted</th>
+                      <th>Difference</th>
+                      <th>Counted by</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cashDrawerHistoryBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel-block">
           <h4>SumUp API</h4>
           <p>Configure and test a SumUp reporting endpoint to auto-fetch totals.</p>
           <div class="form-readout">
@@ -2483,6 +2522,34 @@ body.dark-mode .modal::backdrop {
     </form>
   </dialog>
 
+  <dialog id="cashReconcileDialog" class="modal">
+    <form id="cashReconcileForm" method="dialog">
+      <h3>Reconcile Cash Drawer</h3>
+      <p>Count the physical cash in the drawer and enter the total below.</p>
+      <div class="form-readout" style="margin-bottom:4px;">
+        <span>Expected cash</span>
+        <strong id="cashReconcileExpected">GBP 0.00</strong>
+      </div>
+      <label>
+        Cash counted
+        <input id="cashReconcileActualInput" type="number" step="0.01" min="0" placeholder="0.00" autocomplete="off" required>
+      </label>
+      <div class="form-readout">
+        <span>Difference</span>
+        <strong id="cashReconcileDifference">GBP 0.00</strong>
+      </div>
+      <label>
+        Notes (optional)
+        <input id="cashReconcileNotesInput" type="text" placeholder="e.g. End of day count" autocomplete="off">
+      </label>
+      <div id="cashReconcileAlert" class="alert-card is-hidden" aria-live="polite"></div>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" id="cancelCashReconcileButton">Cancel</button>
+        <button type="submit" class="primary-button">Confirm reconciliation</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="sumupApiDialog" class="modal">
     <form id="sumupApiForm" method="dialog">
       <h3>SumUp API Configuration</h3>
@@ -2724,6 +2791,20 @@ body.dark-mode .modal::backdrop {
     elements.removeSumupButton = document.querySelector("#removeSumupButton");
     elements.fetchSumupButton = document.querySelector("#fetchSumupButton");
     elements.moneyAlert = document.querySelector("#moneyAlert");
+    elements.reconcileCashButton = document.querySelector("#reconcileCashButton");
+    elements.cashDrawerLastText = document.querySelector("#cashDrawerLastText");
+    elements.cashDrawerHistory = document.querySelector("#cashDrawerHistory");
+    elements.cashDrawerHistoryBody = document.querySelector("#cashDrawerHistoryBody");
+    elements.toggleCashDrawerHistoryButton = document.querySelector("#toggleCashDrawerHistoryButton");
+    elements.cashDrawerHistoryList = document.querySelector("#cashDrawerHistoryList");
+    elements.cashReconcileDialog = document.querySelector("#cashReconcileDialog");
+    elements.cashReconcileForm = document.querySelector("#cashReconcileForm");
+    elements.cashReconcileExpected = document.querySelector("#cashReconcileExpected");
+    elements.cashReconcileActualInput = document.querySelector("#cashReconcileActualInput");
+    elements.cashReconcileDifference = document.querySelector("#cashReconcileDifference");
+    elements.cashReconcileNotesInput = document.querySelector("#cashReconcileNotesInput");
+    elements.cashReconcileAlert = document.querySelector("#cashReconcileAlert");
+    elements.cancelCashReconcileButton = document.querySelector("#cancelCashReconcileButton");
     elements.peopleProfitBody = document.querySelector("#peopleProfitBody");
     elements.usersTableBody = document.querySelector("#usersTableBody");
     elements.salesLogBody = document.querySelector("#salesLogBody");
@@ -2905,6 +2986,11 @@ body.dark-mode .modal::backdrop {
     elements.enterSumupButton.addEventListener("click", () => enterSumUpAmount());
     elements.removeSumupButton.addEventListener("click", () => removeSumUpAmount());
     elements.fetchSumupButton.addEventListener("click", () => fetchSumUpAmountFromApi());
+    elements.reconcileCashButton.addEventListener("click", openCashReconcileDialog);
+    elements.cancelCashReconcileButton.addEventListener("click", () => closeModal(elements.cashReconcileDialog));
+    elements.cashReconcileForm.addEventListener("submit", handleCashReconcileSubmit);
+    elements.cashReconcileActualInput.addEventListener("input", updateCashReconcileDifference);
+    elements.toggleCashDrawerHistoryButton.addEventListener("click", toggleCashDrawerHistory);
     elements.usersTableBody.addEventListener("click", handleUserAction);
     elements.selfDestructButton.addEventListener("click", () => {
       elements.resetConfirm.value = "";
@@ -3093,6 +3179,9 @@ body.dark-mode .modal::backdrop {
           actual: 0,
           expectedAdjustment: 0,
           lastUpdatedAt: null
+        },
+        cashDrawer: {
+          reconciliations: []
         }
       },
       apiConfig: {
@@ -3164,6 +3253,11 @@ body.dark-mode .modal::backdrop {
         actual: Number(value.money?.sumup?.actual || 0),
         expectedAdjustment: Number(value.money?.sumup?.expectedAdjustment || 0),
         lastUpdatedAt: value.money?.sumup?.lastUpdatedAt || null
+      },
+      cashDrawer: {
+        reconciliations: Array.isArray(value.money?.cashDrawer?.reconciliations)
+          ? value.money.cashDrawer.reconciliations
+          : []
       }
     };
     next.apiConfig = {
@@ -4041,6 +4135,7 @@ body.dark-mode .modal::backdrop {
 
     renderSumupApiConfig();
     renderPendingSumupSales();
+    renderCashDrawerSection();
 
     const reportStart = document.getElementById("reportStartDate");
     const reportEnd = document.getElementById("reportEndDate");
@@ -4051,6 +4146,105 @@ body.dark-mode .modal::backdrop {
       reportEnd.value = now.toISOString().split("T")[0];
     }
     renderReports();
+  }
+
+  function openCashReconcileDialog() {
+    const expected = getExpectedMoneyBreakdown();
+    elements.cashReconcileExpected.textContent = money.format(expected.cashExpected);
+    elements.cashReconcileActualInput.value = "";
+    elements.cashReconcileNotesInput.value = "";
+    elements.cashReconcileDifference.textContent = money.format(0);
+    elements.cashReconcileAlert.classList.add("is-hidden");
+    elements.cashReconcileAlert.textContent = "";
+    openModal(elements.cashReconcileDialog);
+    setTimeout(() => elements.cashReconcileActualInput.focus(), 0);
+  }
+
+  function updateCashReconcileDifference() {
+    const expected = getExpectedMoneyBreakdown();
+    const actual = normaliseMoney(elements.cashReconcileActualInput.value);
+    const diff = roundMoney(actual - expected.cashExpected);
+    elements.cashReconcileDifference.textContent = money.format(diff);
+    elements.cashReconcileDifference.style.color = diff === 0 ? "" : "var(--coral)";
+  }
+
+  function handleCashReconcileSubmit(event) {
+    event.preventDefault();
+    const expected = getExpectedMoneyBreakdown();
+    const actual = normaliseMoney(elements.cashReconcileActualInput.value);
+    const diff = roundMoney(actual - expected.cashExpected);
+    const notes = (elements.cashReconcileNotesInput.value || "").trim();
+
+    if (!store.money) store.money = { cash: { actual: 0 }, sumup: { actual: 0, expectedAdjustment: 0 }, cashDrawer: { reconciliations: [] } };
+    if (!store.money.cashDrawer) store.money.cashDrawer = { reconciliations: [] };
+    if (!Array.isArray(store.money.cashDrawer.reconciliations)) store.money.cashDrawer.reconciliations = [];
+
+    store.money.cashDrawer.reconciliations.unshift({
+      id: uid("recon"),
+      expected: expected.cashExpected,
+      actual,
+      difference: diff,
+      notes,
+      countedBy: currentUser ? currentUser.displayName : "Unknown",
+      createdAt: new Date().toISOString()
+    });
+
+    if (store.money.cashDrawer.reconciliations.length > 100) {
+      store.money.cashDrawer.reconciliations = store.money.cashDrawer.reconciliations.slice(0, 100);
+    }
+
+    saveStore();
+    closeModal(elements.cashReconcileDialog);
+    renderMoneyTab();
+
+    const summary = diff === 0
+      ? `Counted ${money.format(actual)}. Drawer is balanced.`
+      : `Counted ${money.format(actual)}. Difference: ${money.format(diff)}.`;
+    logUserEvent("Reconciled cash drawer", summary);
+    showToast(summary);
+  }
+
+  function toggleCashDrawerHistory() {
+    const list = elements.cashDrawerHistoryList;
+    const btn = elements.toggleCashDrawerHistoryButton;
+    const isHidden = list.classList.contains("is-hidden");
+    list.classList.toggle("is-hidden");
+    btn.textContent = isHidden ? "Hide" : "Show";
+  }
+
+  function renderCashDrawerSection() {
+    const recs = store.money?.cashDrawer?.reconciliations || [];
+    const hasHistory = recs.length > 0;
+
+    elements.cashDrawerHistory.classList.toggle("is-hidden", !hasHistory);
+
+    if (recs.length > 0) {
+      const last = recs[0];
+      const diff = roundMoney(last.difference);
+      const dateStr = formatDate(last.createdAt);
+      if (diff === 0) {
+        elements.cashDrawerLastText.textContent = `${dateStr} — balanced (${last.countedBy})`;
+      } else {
+        elements.cashDrawerLastText.textContent = `${dateStr} — ${money.format(diff)} ${diff > 0 ? "over" : "short"} (${last.countedBy})`;
+      }
+      elements.cashDrawerLastText.style.color = diff === 0 ? "" : "var(--coral)";
+
+      elements.cashDrawerHistoryBody.innerHTML = recs.map((r) => {
+        const d = roundMoney(r.difference);
+        const diffClass = d === 0 ? "" : ' style="color:var(--coral)"';
+        return `<tr>
+          <td>${escapeHtml(formatDate(r.createdAt))}</td>
+          <td>${money.format(roundMoney(r.expected))}</td>
+          <td>${money.format(roundMoney(r.actual))}</td>
+          <td${diffClass}>${money.format(d)}</td>
+          <td>${escapeHtml(r.countedBy || "")}</td>
+          <td>${escapeHtml(r.notes || "")}</td>
+        </tr>`;
+      }).join("");
+    } else {
+      elements.cashDrawerLastText.textContent = "No reconciliations yet";
+      elements.cashDrawerLastText.style.color = "";
+    }
   }
 
   function normaliseMoney(value) {
