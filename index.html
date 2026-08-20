@@ -2499,6 +2499,10 @@ body.dark-mode .modal::backdrop {
         Merchant Code
         <input id="sumupMerchantCodeInput" type="text" placeholder="MH4H92C7" autocomplete="off">
       </label>
+      <label>
+        Affiliate Key
+        <input id="sumupAffiliateKeyInput" type="text" placeholder="Your affiliate key" autocomplete="off">
+      </label>
       <div id="sumupApiTestResult" class="alert-card is-hidden" aria-live="polite"></div>
       <div class="modal-actions">
         <button type="button" class="secondary-button" id="cancelSumupApiButton">Cancel</button>
@@ -2743,6 +2747,7 @@ body.dark-mode .modal::backdrop {
     elements.sumupApiUrlInput = document.querySelector("#sumupApiUrlInput");
     elements.sumupApiKeyInput = document.querySelector("#sumupApiKeyInput");
     elements.sumupMerchantCodeInput = document.querySelector("#sumupMerchantCodeInput");
+    elements.sumupAffiliateKeyInput = document.querySelector("#sumupAffiliateKeyInput");
     elements.sumupApiTestResult = document.querySelector("#sumupApiTestResult");
     elements.cancelSumupApiButton = document.querySelector("#cancelSumupApiButton");
     elements.testSumupApiDialogButton = document.querySelector("#testSumupApiDialogButton");
@@ -3094,6 +3099,7 @@ body.dark-mode .modal::backdrop {
         sumupApiUrl: "",
         sumupApiKey: "",
         sumupMerchantCode: "",
+        affiliateKey: "",
         cashRemovalCode: "CASHOUT"
       },
       meta: {
@@ -3164,6 +3170,7 @@ body.dark-mode .modal::backdrop {
       sumupApiUrl: String(value.apiConfig?.sumupApiUrl || ""),
       sumupApiKey: String(value.apiConfig?.sumupApiKey || ""),
       sumupMerchantCode: String(value.apiConfig?.sumupMerchantCode || ""),
+      affiliateKey: String(value.apiConfig?.affiliateKey || ""),
       cashRemovalCode: String(value.apiConfig?.cashRemovalCode || "CASHOUT")
     };
     next.meta = {
@@ -4767,9 +4774,11 @@ body.dark-mode .modal::backdrop {
     const url = store.apiConfig?.sumupApiUrl || "";
     const apiKey = store.apiConfig?.sumupApiKey || "";
     const merchantCode = store.apiConfig?.sumupMerchantCode || "";
+    const affiliateKey = store.apiConfig?.affiliateKey || "";
     elements.sumupApiUrlInput.value = url;
     elements.sumupApiKeyInput.value = apiKey;
     elements.sumupMerchantCodeInput.value = merchantCode;
+    elements.sumupAffiliateKeyInput.value = affiliateKey;
     elements.sumupApiTestResult.classList.add("is-hidden");
     elements.sumupApiTestResult.textContent = "";
     openModal(elements.sumupApiDialog);
@@ -4857,6 +4866,7 @@ body.dark-mode .modal::backdrop {
     const url = elements.sumupApiUrlInput.value.trim();
     const apiKey = elements.sumupApiKeyInput.value.trim();
     const merchantCode = elements.sumupMerchantCodeInput.value.trim();
+    const affiliateKey = elements.sumupAffiliateKeyInput.value.trim();
 
     if (url) {
       try {
@@ -4871,6 +4881,7 @@ body.dark-mode .modal::backdrop {
     store.apiConfig.sumupApiUrl = url;
     store.apiConfig.sumupApiKey = apiKey;
     store.apiConfig.sumupMerchantCode = merchantCode;
+    store.apiConfig.affiliateKey = affiliateKey;
     saveStore();
     closeModal(elements.sumupApiDialog);
     renderSumupApiConfig();
@@ -5630,7 +5641,11 @@ body.dark-mode .modal::backdrop {
   function openSumUpPayment(amount) {
     const pounds = Number(amount || 0);
     const sumUpAmount = pounds.toFixed(2);
-    const sumUpUrl = `sumupmerchant://pay/1.0?amount=${sumUpAmount}&total=${sumUpAmount}&currency=GBP&title=Porty%20Tuck%20Sale`;
+    const affiliateKey = (store.apiConfig?.affiliateKey || "").trim();
+    let sumUpUrl = `sumupmerchant://pay/1.0?amount=${sumUpAmount}&total=${sumUpAmount}&currency=GBP&title=Porty%20Tuck%20Sale`;
+    if (affiliateKey) {
+      sumUpUrl += `&affiliate-key=${encodeURIComponent(affiliateKey)}`;
+    }
     try {
       window.location.href = sumUpUrl;
       setTimeout(() => {

@@ -20,6 +20,7 @@ interface StoreDocument {
     sumupApiUrl: string;
     sumupApiKey: string;
     sumupMerchantCode: string;
+    affiliateKey: string;
     cashRemovalCode: string;
   };
   meta: {
@@ -535,6 +536,7 @@ function blankStore(): StoreDocument {
       sumupApiUrl: "",
       sumupApiKey: "",
       sumupMerchantCode: "",
+      affiliateKey: "",
       cashRemovalCode: "",
     },
     meta: {
