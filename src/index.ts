@@ -914,7 +914,37 @@ export default {
 
       try {
         const payload = await request.json<{ store?: unknown }>();
-        const normalized = normalizeStore(payload?.store ?? blankStore());
+        const incoming = normalizeStore(payload?.store ?? blankStore());
+
+        const existing = (await loadStoreFromDb(env.DB)) ?? blankStore();
+        const normalized = normalizeStore(existing);
+
+        const preserved = incoming.users.map((incUser: any) => {
+          const existingUser = normalized.users.find((u: any) => u.id === incUser.id);
+          if (existingUser && existingUser.salt && existingUser.passwordHash) {
+            return {
+              ...incUser,
+              salt: existingUser.salt,
+              passwordHash: existingUser.passwordHash,
+            };
+          }
+          return incUser;
+        });
+
+        normalized.users = preserved;
+        normalized.items = incoming.items;
+        normalized.sales = incoming.sales;
+        normalized.stockEvents = incoming.stockEvents;
+        normalized.events = incoming.events;
+        normalized.userEvents = incoming.userEvents;
+        normalized.lifetime = incoming.lifetime;
+        normalized.money = incoming.money;
+        normalized.apiConfig = incoming.apiConfig;
+        normalized.meta = incoming.meta;
+        normalized.maintenance = incoming.maintenance;
+        normalized.lockout = incoming.lockout;
+        normalized.maintenanceSchedule = incoming.maintenanceSchedule;
+
         await saveStoreToDb(env.DB, normalized);
         return jsonResponse({ ok: true, store: normalized });
       } catch (error) {
