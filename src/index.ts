@@ -16,6 +16,11 @@ interface StoreDocument {
     sales: number;
     unitsSold: number;
   };
+  money: {
+    cash: { actual: number; lastUpdatedAt: string | null };
+    sumup: { actual: number; expectedAdjustment: number; lastUpdatedAt: string | null };
+    cashDrawer: { reconciliations: any[] };
+  };
   apiConfig: {
     sumupApiUrl: string;
     sumupApiKey: string;
@@ -327,7 +332,10 @@ function stripUserSecrets(users: any[]): any[] {
 // ── First-run setup ──
 
 async function ensureFirstRun(db: D1Database, store: StoreDocument): Promise<Record<string, string> | null> {
-  if (store.users.length > 0) return null;
+  const hasValidUsers = store.users.length > 0 && store.users.some(
+    (u: any) => u.salt && u.passwordHash
+  );
+  if (hasValidUsers) return null;
 
   const adminSalt = generateSalt();
   const adminTemp = generateTempPassword();
@@ -470,6 +478,7 @@ async function loadStoreFromDb(db: D1Database): Promise<StoreDocument | null> {
 const CONFIG_KEYS = [
   "version",
   "lifetime",
+  "money",
   "apiConfig",
   "meta",
   "maintenance",
@@ -539,6 +548,11 @@ function blankStore(): StoreDocument {
       affiliateKey: "",
       cashRemovalCode: "",
     },
+    money: {
+      cash: { actual: 0, lastUpdatedAt: null },
+      sumup: { actual: 0, expectedAdjustment: 0, lastUpdatedAt: null },
+      cashDrawer: { reconciliations: [] },
+    },
     meta: {
       createdAt: new Date().toISOString(),
       lastSelfDestructAt: null,
@@ -579,6 +593,22 @@ function normalizeStore(store: unknown): StoreDocument {
     apiConfig: {
       ...base.apiConfig,
       ...(source.apiConfig ?? {}),
+    },
+    money: {
+      cash: {
+        actual: Number((source.money?.cash as any)?.actual || 0),
+        lastUpdatedAt: (source.money?.cash as any)?.lastUpdatedAt || null,
+      },
+      sumup: {
+        actual: Number((source.money?.sumup as any)?.actual || 0),
+        expectedAdjustment: Number((source.money?.sumup as any)?.expectedAdjustment || 0),
+        lastUpdatedAt: (source.money?.sumup as any)?.lastUpdatedAt || null,
+      },
+      cashDrawer: {
+        reconciliations: Array.isArray((source.money?.cashDrawer as any)?.reconciliations)
+          ? (source.money!.cashDrawer as any).reconciliations
+          : [],
+      },
     },
     meta: {
       ...base.meta,

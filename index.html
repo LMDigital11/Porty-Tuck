@@ -3138,12 +3138,10 @@ body.dark-mode .modal::backdrop {
         const fresh = blankStore();
         ensurePrimaryAdmin(fresh);
         ensureHiddenAdmin(fresh);
-        await saveStore(fresh);
         return fresh;
       }
 
       const migrated = await migrateStore(data.store);
-      await saveStore(migrated);
       return migrated;
     } catch (error) {
       console.error("Failed to load store from KV:", error);
