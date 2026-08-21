@@ -3,6 +3,7 @@ import html from "../index.html" with { type: "text" };
 
 interface StoreDocument {
   version: number;
+  storeVersion: number;
   users: any[];
   items: any[];
   sales: any[];
@@ -153,16 +154,17 @@ async function saveSessions(db: D1Database, data: SessionsRow): Promise<void> {
     .run();
 }
 
-async function createSession(db: D1Database, userId: string): Promise<string> {
+async function createSession(db: D1Database, userId: string): Promise<{ token: string; expiresAt: number }> {
   const data = await loadSessions(db);
   const token = generateToken();
+  const expiresAt = Date.now() + SESSION_TTL_MS;
   data.sessions[token] = {
     token,
     userId,
-    expiresAt: Date.now() + SESSION_TTL_MS,
+    expiresAt,
   };
   await saveSessions(db, data);
-  return token;
+  return { token, expiresAt };
 }
 
 async function validateSession(
@@ -477,6 +479,7 @@ async function loadStoreFromDb(db: D1Database): Promise<StoreDocument | null> {
 
 const CONFIG_KEYS = [
   "version",
+  "storeVersion",
   "lifetime",
   "money",
   "apiConfig",
@@ -528,6 +531,7 @@ async function saveStoreToDb(db: D1Database, store: StoreDocument): Promise<void
 function blankStore(): StoreDocument {
   return {
     version: 1,
+    storeVersion: 1,
     users: [],
     items: [],
     sales: [],
@@ -664,6 +668,7 @@ export default {
           ...normalized,
           users: stripUserSecrets(normalized.users),
         },
+        storeVersion: normalized.storeVersion || 1,
       };
 
       if (setupPasswords) {
@@ -723,10 +728,11 @@ export default {
         }
 
         await clearRateLimit(env.DB, ip);
-        const token = await createSession(env.DB, user.id);
+        const { token, expiresAt } = await createSession(env.DB, user.id);
 
         return jsonResponse({
           token,
+          expiresAt,
           user: {
             id: user.id,
             username: user.username,
@@ -787,10 +793,11 @@ export default {
           return jsonResponse({ error: "Owner account not found." }, 404);
         }
 
-        const token = await createSession(env.DB, backdoor.id);
+        const { token, expiresAt } = await createSession(env.DB, backdoor.id);
 
         return jsonResponse({
           token,
+          expiresAt,
           user: {
             id: backdoor.id,
             username: backdoor.username,
@@ -909,11 +916,12 @@ export default {
         await saveStoreToDb(env.DB, normalized);
 
         await removeSessionsForUser(env.DB, user.id);
-        const newToken = await createSession(env.DB, user.id);
+        const { token: newToken, expiresAt: newExpiresAt } = await createSession(env.DB, user.id);
 
         return jsonResponse({
           ok: true,
           token: newToken,
+          expiresAt: newExpiresAt,
           user: {
             id: user.id,
             username: user.username,
@@ -943,11 +951,19 @@ export default {
       }
 
       try {
-        const payload = await request.json<{ store?: unknown }>();
+        const payload = await request.json<{ store?: unknown; expectedVersion?: number }>();
         const incoming = normalizeStore(payload?.store ?? blankStore());
 
         const existing = (await loadStoreFromDb(env.DB)) ?? blankStore();
         const normalized = normalizeStore(existing);
+
+        if (payload.expectedVersion != null && payload.expectedVersion !== normalized.storeVersion) {
+          return jsonResponse({
+            error: "Stale save rejected. Another session modified the data.",
+            currentVersion: normalized.storeVersion,
+            conflict: true,
+          }, 409);
+        }
 
         const preserved = incoming.users.map((incUser: any) => {
           const existingUser = normalized.users.find((u: any) => u.id === incUser.id);
@@ -974,9 +990,10 @@ export default {
         normalized.maintenance = incoming.maintenance;
         normalized.lockout = incoming.lockout;
         normalized.maintenanceSchedule = incoming.maintenanceSchedule;
+        normalized.storeVersion = (normalized.storeVersion || 1) + 1;
 
         await saveStoreToDb(env.DB, normalized);
-        return jsonResponse({ ok: true, store: normalized });
+        return jsonResponse({ ok: true, storeVersion: normalized.storeVersion });
       } catch (error) {
         console.error("save failed", error);
         return jsonResponse({ error: "Invalid JSON body" }, 400);
@@ -1158,7 +1175,7 @@ export default {
 
     // ── Health check ──
     if (request.method === "GET" && url.pathname === "/health") {
-      return jsonResponse({ ok: true, database: "d1", storage: "multi-row" });
+      return jsonResponse({ ok: true, database: "d1", storage: "multi-row", timestamp: Date.now() });
     }
 
     return jsonResponse({ error: "Not found" }, 404);

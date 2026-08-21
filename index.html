@@ -1371,10 +1371,95 @@ body.dark-mode .modal::backdrop {
   }
 }
 
+.status-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  padding: 10px 16px;
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  animation: bannerSlide 200ms ease;
+}
+
+@keyframes bannerSlide {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+.status-banner.is-hidden {
+  display: none;
+}
+
+.status-banner.banner-save-failure {
+  background: #d32f2f;
+  color: #fff;
+}
+
+.status-banner.banner-offline {
+  background: #e65100;
+  color: #fff;
+}
+
+.status-banner.banner-health-down {
+  background: #b71c1c;
+  color: #fff;
+}
+
+.status-banner.banner-low-stock {
+  background: var(--amber, #f59e0b);
+  color: #1a1a2e;
+}
+
+.status-banner button {
+  background: rgba(255,255,255,0.25);
+  border: 1px solid rgba(255,255,255,0.4);
+  color: inherit;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.status-banner button:hover {
+  background: rgba(255,255,255,0.4);
+}
+
+.rate-limit-timer {
+  color: #d32f2f;
+  font-size: 0.82rem;
+  margin-top: 6px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.rate-limit-timer.is-hidden {
+  display: none;
+}
+
 </style>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body>
+  <div id="saveFailureBanner" class="status-banner banner-save-failure is-hidden" role="alert">
+    <span>⚠ Failed to save data. Changes may be lost.</span>
+    <button onclick="scheduleSave(store, true)">Retry now</button>
+    <button onclick="document.getElementById('saveFailureBanner').classList.add('is-hidden')">Dismiss</button>
+  </div>
+  <div id="offlineBanner" class="status-banner banner-offline is-hidden" role="alert">
+    <span>📡 You are offline. Changes will sync when reconnected.</span>
+  </div>
+  <div id="healthDownBanner" class="status-banner banner-health-down is-hidden" role="alert">
+    <span>⚠ Server unreachable. Some features may not work.</span>
+  </div>
+  <div id="lowStockBanner" class="status-banner banner-low-stock is-hidden" role="status"></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <div id="eventBanner" class="event-banner is-hidden" role="status" aria-live="polite"></div>
 
@@ -1396,6 +1481,7 @@ body.dark-mode .modal::backdrop {
         </label>
         <button type="submit" id="loginSubmitBtn" class="primary-button full-width">Log in</button>
       </form>
+      <div id="rateLimitTimer" class="rate-limit-timer is-hidden"></div>
       <p id="loginNote" class="login-note">Default admin: <strong>admin</strong> / <strong>admin</strong></p>
       <button type="button" id="loginDarkModeButton" class="ghost-button" style="margin-top:12px;font-size:0.8rem;" title="Toggle dark mode">🌙 Dark mode</button>
       <div id="loginMaintenanceBanner" class="alert-card is-hidden warning" style="margin-top:18px;" aria-live="polite">
@@ -2663,6 +2749,13 @@ body.dark-mode .modal::backdrop {
   let pendingUndoSaleIds = [];
   let undoSaleTimerId = null;
   let undoSaleCountdownId = null;
+  let remoteStoreVersion = null;
+  let sessionExpiresAt = null;
+  let sessionExpiryTimerId = null;
+  let healthCheckTimerId = null;
+  let rateLimitTimerId = null;
+  let rateLimitUntil = 0;
+  let debounceSaveTimerId = null;
 
   const elements = {};
 
@@ -2681,6 +2774,9 @@ body.dark-mode .modal::backdrop {
       if (elements.loginDarkModeButton) elements.loginDarkModeButton.textContent = "☀️ Dark mode";
     }
     updateProfitPreview();
+    startHealthCheck();
+    if (currentUser && authToken) startSessionExpiryTimer();
+    checkBackupReminder();
     setInterval(refreshStore, 10000);
   }
 
@@ -2690,6 +2786,7 @@ body.dark-mode .modal::backdrop {
       if (!response.ok) return;
       const data = await response.json();
       if (!data || !data.store) return;
+      remoteStoreVersion = data.storeVersion ?? remoteStoreVersion;
       store = await migrateStore(data.store);
       if (isMaintenanceActive() && !isMaintenanceAllowed()) {
         currentUser = null;
@@ -2934,6 +3031,11 @@ body.dark-mode .modal::backdrop {
     elements.loginDarkModeButton = document.querySelector("#loginDarkModeButton");
     elements.bottomNavTabs = document.querySelectorAll(".bottom-nav-tab[data-tab]");
     elements.bottomLogoutButton = document.querySelector("#bottomLogoutButton");
+    elements.rateLimitTimer = document.querySelector("#rateLimitTimer");
+    elements.saveFailureBanner = document.querySelector("#saveFailureBanner");
+    elements.offlineBanner = document.querySelector("#offlineBanner");
+    elements.healthDownBanner = document.querySelector("#healthDownBanner");
+    elements.lowStockBanner = document.querySelector("#lowStockBanner");
   }
 
   function bindEvents() {
@@ -2943,6 +3045,8 @@ body.dark-mode .modal::backdrop {
         try { await fetch(`${API_URL}/auth/logout`, { method: "POST", headers: { "Authorization": `Bearer ${authToken}` } }); } catch {}
       }
       clearAuthToken();
+      clearInterval(sessionExpiryTimerId);
+      sessionExpiresAt = null;
       await logUserEvent("Logged out", "");
       clearUndoSaleTimer();
       currentUser = null;
@@ -3091,6 +3195,8 @@ body.dark-mode .modal::backdrop {
         try { await fetch(`${API_URL}/auth/logout`, { method: "POST", headers: { "Authorization": `Bearer ${authToken}` } }); } catch {}
       }
       clearAuthToken();
+      clearInterval(sessionExpiryTimerId);
+      sessionExpiresAt = null;
       await logUserEvent("Logged out", "");
       clearUndoSaleTimer();
       currentUser = null;
@@ -3122,40 +3228,48 @@ body.dark-mode .modal::backdrop {
     elements.ownerLoginForm.addEventListener("submit", handleOwnerLogin);
   }
 
-  async function loadStore() {
-    try {
-      const response = await fetch(`${API_URL}/load`);
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-      const data = await response.json();
-      
-      if (data.setup) {
-        const msg = [
-          data.setup.message,
-          `Admin: ${data.setup.admin.username} / ${data.setup.admin.tempPassword}`,
-          `Owner: ${data.setup.backdoor.username} / ${data.setup.backdoor.tempPassword}`,
-          "(Passwords shown once — save them now!)"
-        ].join("\n");
-        setTimeout(() => alert(msg), 500);
-      }
+  async function loadStore(retries = 3, delay = 1000) {
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const response = await fetch(`${API_URL}/load`);
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+        const data = await response.json();
+        remoteStoreVersion = data.storeVersion ?? 1;
 
-      if (!data || !data.store) {
-        const fresh = blankStore();
-        ensurePrimaryAdmin(fresh);
-        ensureHiddenAdmin(fresh);
-        return fresh;
-      }
+        if (data.setup) {
+          const msg = [
+            data.setup.message,
+            `Admin: ${data.setup.admin.username} / ${data.setup.admin.tempPassword}`,
+            `Owner: ${data.setup.backdoor.username} / ${data.setup.backdoor.tempPassword}`,
+            "(Passwords shown once — save them now!)"
+          ].join("\n");
+          setTimeout(() => alert(msg), 500);
+        }
 
-      const migrated = await migrateStore(data.store);
-      return migrated;
-    } catch (error) {
-      console.error("Failed to load store from KV:", error);
-      const fresh = blankStore();
-      ensurePrimaryAdmin(fresh);
-      ensureHiddenAdmin(fresh);
-      return fresh;
+        if (!data || !data.store) {
+          const fresh = blankStore();
+          ensurePrimaryAdmin(fresh);
+          ensureHiddenAdmin(fresh);
+          return fresh;
+        }
+
+        const migrated = await migrateStore(data.store);
+        return migrated;
+      } catch (error) {
+        console.error(`Failed to load store (attempt ${attempt + 1}/${retries}):`, error);
+        if (attempt < retries - 1) {
+          const backoff = delay * Math.pow(2, attempt);
+          await new Promise(r => setTimeout(r, backoff));
+        }
+      }
     }
+    console.error("All load retries exhausted");
+    const fresh = blankStore();
+    ensurePrimaryAdmin(fresh);
+    ensureHiddenAdmin(fresh);
+    return fresh;
   }
 
   function blankStore() {
@@ -3366,16 +3480,30 @@ body.dark-mode .modal::backdrop {
     admin.active = true;
   }
 
-  async function saveStore(targetStore = store) {
+  function scheduleSave(targetStore = store, immediate = false) {
+    if (immediate) {
+      clearTimeout(debounceSaveTimerId);
+      doSave(targetStore);
+      return;
+    }
+    clearTimeout(debounceSaveTimerId);
+    debounceSaveTimerId = setTimeout(() => doSave(targetStore), 500);
+  }
+
+  async function doSave(targetStore = store) {
     try {
       const headers = { "Content-Type": "application/json" };
       if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+      const body = { store: targetStore };
+      if (remoteStoreVersion != null) {
+        body.expectedVersion = remoteStoreVersion;
+      }
       const response = await fetch(`${API_URL}/save`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ store: targetStore })
+        body: JSON.stringify(body)
       });
-      
+
       if (response.status === 401) {
         showToast("Session expired. Please log in again.");
         currentUser = null;
@@ -3384,13 +3512,136 @@ body.dark-mode .modal::backdrop {
         renderAuth();
         return;
       }
-      if (!response.ok) {
-        console.error(`Failed to save store: ${response.status}`);
+      if (response.status === 409) {
+        const data = await response.json();
+        showToast("Data conflict — reloading from server.");
+        console.warn("Stale save rejected, reloading.", data);
+        store = await loadStore(3, 500);
+        renderAll();
+        return;
       }
+      if (!response.ok) {
+        throw new Error(`Save failed: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.storeVersion != null) remoteStoreVersion = data.storeVersion;
+      hideSaveFailureBanner();
+      flushOfflineQueue();
     } catch (error) {
       console.error("Failed to save store:", error);
+      if (!navigator.onLine) {
+        queueOfflineSave(targetStore);
+      }
+      showSaveFailureBanner();
     }
   }
+
+  function queueOfflineSave(targetStore) {
+    try {
+      const pending = JSON.parse(localStorage.getItem("tuck-offline-queue") || "[]");
+      pending.push({ store: targetStore, timestamp: Date.now() });
+      if (pending.length > 20) pending.splice(0, pending.length - 20);
+      localStorage.setItem("tuck-offline-queue", JSON.stringify(pending));
+    } catch {}
+  }
+
+  async function flushOfflineQueue() {
+    try {
+      const pending = JSON.parse(localStorage.getItem("tuck-offline-queue") || "[]");
+      if (!pending.length) return;
+      const latest = pending[pending.length - 1];
+      localStorage.removeItem("tuck-offline-queue");
+      await doSave(latest.store);
+    } catch {}
+  }
+
+  function showSaveFailureBanner() {
+    const banner = document.getElementById("saveFailureBanner");
+    if (banner) banner.classList.remove("is-hidden");
+  }
+
+  function hideSaveFailureBanner() {
+    const banner = document.getElementById("saveFailureBanner");
+    if (banner) banner.classList.add("is-hidden");
+  }
+
+  function showRateLimitTimer(seconds) {
+    rateLimitUntil = Date.now() + seconds * 1000;
+    elements.rateLimitTimer.classList.remove("is-hidden");
+    clearInterval(rateLimitTimerId);
+    rateLimitTimerId = setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((rateLimitUntil - Date.now()) / 1000));
+      if (remaining <= 0) {
+        clearInterval(rateLimitTimerId);
+        elements.rateLimitTimer.classList.add("is-hidden");
+        return;
+      }
+      elements.rateLimitTimer.textContent = `Too many attempts. Try again in ${remaining}s.`;
+    }, 250);
+  }
+
+  function startSessionExpiryTimer() {
+    clearInterval(sessionExpiryTimerId);
+    if (!sessionExpiresAt) return;
+    const WARNING_MS = 5 * 60 * 1000;
+    sessionExpiryTimerId = setInterval(() => {
+      if (!currentUser || !sessionExpiresAt) { clearInterval(sessionExpiryTimerId); return; }
+      const remaining = sessionExpiresAt - Date.now();
+      if (remaining <= 0) {
+        clearInterval(sessionExpiryTimerId);
+        showToast("Session expired. Please log in again.");
+        clearAuthToken();
+        currentUser = null;
+        persistCurrentUser();
+        renderAuth();
+      } else if (remaining <= WARNING_MS) {
+        const mins = Math.ceil(remaining / 60000);
+        showToast(`Session expires in ${mins} minute${mins === 1 ? "" : "s"}. Save your work.`);
+      }
+    }, 30000);
+  }
+
+  function startHealthCheck() {
+    clearInterval(healthCheckTimerId);
+    healthCheckTimerId = setInterval(async () => {
+      try {
+        const resp = await fetch("/health");
+        const data = await resp.json();
+        if (data.ok) {
+          elements.healthDownBanner.classList.add("is-hidden");
+          if (navigator.onLine) elements.offlineBanner.classList.add("is-hidden");
+        } else {
+          elements.healthDownBanner.classList.remove("is-hidden");
+        }
+      } catch {
+        if (!navigator.onLine) {
+          elements.offlineBanner.classList.remove("is-hidden");
+        } else {
+          elements.healthDownBanner.classList.remove("is-hidden");
+        }
+      }
+    }, 30000);
+  }
+
+  function renderLowStockBanner() {
+    if (!elements.lowStockBanner || !store) return;
+    const lowItems = store.items.filter((item) => item.stock > 0 && item.stock <= (item.lowStock || 0));
+    if (lowItems.length === 0) {
+      elements.lowStockBanner.classList.add("is-hidden");
+      return;
+    }
+    const names = lowItems.map((i) => `${i.name} (${i.stock})`).join(", ");
+    elements.lowStockBanner.innerHTML = `<span>📦 Low stock: ${escapeHtml(names)}</span>`;
+    elements.lowStockBanner.classList.remove("is-hidden");
+  }
+
+  window.addEventListener("online", () => {
+    elements.offlineBanner.classList.add("is-hidden");
+    flushOfflineQueue();
+  });
+  window.addEventListener("offline", () => {
+    elements.offlineBanner.classList.remove("is-hidden");
+  });
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -3407,6 +3658,10 @@ body.dark-mode .modal::backdrop {
         const data = await resp.json();
 
         if (!resp.ok) {
+          if (resp.status === 429) {
+            const retrySec = parseInt((data.error || "").match(/(\d+)\s*seconds/)?.[1] || "60", 10);
+            showRateLimitTimer(retrySec);
+          }
           showToast(data.error || "Login failed.");
           elements.loginPassword.classList.remove("input-shake");
           void elements.loginPassword.offsetWidth;
@@ -3419,9 +3674,11 @@ body.dark-mode .modal::backdrop {
         }
 
         setAuthToken(data.token);
+        if (data.expiresAt) sessionExpiresAt = data.expiresAt;
         currentUser = data.user;
         persistCurrentUser();
         elements.loginForm.reset();
+        startSessionExpiryTimer();
 
         if (isLockoutActive() && currentUser.username !== BACKDOOR_ADMIN.username) {
           showToast("The system is locked. Only the owner can log in.");
@@ -3656,7 +3913,7 @@ body.dark-mode .modal::backdrop {
   function cancelScheduledMaintenance(entryId) {
     if (!window.confirm("Cancel this scheduled maintenance?")) return;
     store.maintenanceSchedule = (store.maintenanceSchedule || []).filter((e) => e.id !== entryId);
-    saveStore();
+    scheduleSave();
     renderMaintenanceSchedule();
     renderMaintenanceBanner();
     showToast("Scheduled maintenance cancelled.");
@@ -3693,7 +3950,7 @@ body.dark-mode .modal::backdrop {
     entry.startAt = startDate.toISOString();
     entry.resumeAt = resumeValue ? new Date(resumeValue).toISOString() : null;
     pendingScheduleEditId = null;
-    saveStore();
+    scheduleSave();
     closeModal(elements.editScheduleDialog);
     renderMaintenanceSchedule();
     renderMaintenanceBanner();
@@ -3728,7 +3985,7 @@ body.dark-mode .modal::backdrop {
       startedBy: currentUser.id,
       scheduledAt: new Date().toISOString()
     };
-    saveStore();
+    scheduleSave();
     elements.maintenanceReasonInput.value = "";
     elements.maintenanceStartInput.value = "";
     elements.maintenanceResumeInput.value = "";
@@ -3771,7 +4028,7 @@ body.dark-mode .modal::backdrop {
       createdBy: currentUser.id,
       createdAt: new Date().toISOString()
     });
-    saveStore();
+    scheduleSave();
     elements.maintenanceReasonInput.value = "";
     elements.maintenanceStartInput.value = "";
     elements.maintenanceResumeInput.value = "";
@@ -3797,7 +4054,7 @@ body.dark-mode .modal::backdrop {
       startedBy: null,
       scheduledAt: null
     };
-    saveStore();
+    scheduleSave();
     renderMaintenancePanel();
     renderMaintenanceBanner();
     renderAll();
@@ -3818,7 +4075,7 @@ body.dark-mode .modal::backdrop {
       reason: "Locked by owner",
       startedBy: currentUser ? currentUser.id : null
     };
-    saveStore();
+    scheduleSave();
     closeModal(elements.lockoutDialog);
     renderLockoutStatus();
     logUserEvent("Activated lockout", "System locked");
@@ -3831,7 +4088,7 @@ body.dark-mode .modal::backdrop {
       reason: "",
       startedBy: null
     };
-    saveStore();
+    scheduleSave();
     renderLockoutStatus();
     logUserEvent("Deactivated lockout", "System unlocked");
     showToast("System unlocked. All users can log in.");
@@ -3860,10 +4117,12 @@ body.dark-mode .modal::backdrop {
         }
 
         setAuthToken(data.token);
+        if (data.expiresAt) sessionExpiresAt = data.expiresAt;
         currentUser = data.user;
         persistCurrentUser();
         elements.ownerLoginForm.reset();
         elements.ownerLoginForm.classList.add("is-hidden");
+        startSessionExpiryTimer();
         await logUserEvent("Logged in", "Owner login via lockout bypass");
         activeTab = "admin";
         renderAuth();
@@ -3953,10 +4212,12 @@ body.dark-mode .modal::backdrop {
         }
 
         setAuthToken(data.token);
+        if (data.expiresAt) sessionExpiresAt = data.expiresAt;
         currentUser = data.user;
         persistCurrentUser();
         elements.maintenanceLoginForm.reset();
         elements.maintenanceView.classList.add("is-hidden");
+        startSessionExpiryTimer();
         activeTab = isBackdoor() ? "admin" : (isMaintenanceActive() ? "maintenance" : "stock");
         await logUserEvent("Logged in", "Maintenance mode login");
         renderAuth();
@@ -4035,6 +4296,7 @@ body.dark-mode .modal::backdrop {
     renderMaintenancePanel();
     renderMaintenanceSchedule();
     renderMaintenanceBanner();
+    renderLowStockBanner();
   }
 
   function setActiveTab(tab, render = true) {
@@ -4197,7 +4459,7 @@ body.dark-mode .modal::backdrop {
       store.money.cashDrawer.reconciliations = store.money.cashDrawer.reconciliations.slice(0, 100);
     }
 
-    saveStore();
+    scheduleSave();
     closeModal(elements.cashReconcileDialog);
     renderMoneyTab();
 
@@ -4267,7 +4529,7 @@ body.dark-mode .modal::backdrop {
     store.money.cash = store.money.cash || { actual: 0 };
     store.money.cash.actual = numericValue;
     store.money.cash.lastUpdatedAt = new Date().toISOString();
-    saveStore();
+    scheduleSave();
     renderMoneyTab();
     logUserEvent("Updated cash total", `Set to ${money.format(numericValue)}`);
     showToast(`Cash total updated to ${money.format(numericValue)}.`);
@@ -4303,7 +4565,7 @@ body.dark-mode .modal::backdrop {
     store.money.sumup = store.money.sumup || { actual: 0 };
     store.money.sumup.actual = numericValue;
     store.money.sumup.lastUpdatedAt = new Date().toISOString();
-    saveStore();
+    scheduleSave();
     renderMoneyTab();
     logUserEvent("Updated SumUp total", `Set to ${money.format(numericValue)}`);
     showToast(`SumUp total updated to ${money.format(numericValue)}.`);
@@ -4356,7 +4618,7 @@ body.dark-mode .modal::backdrop {
       const updatedValue = Math.max(0, normaliseMoney(store.money.cash.actual) - value);
       store.money.cash.actual = updatedValue;
       store.money.cash.lastUpdatedAt = new Date().toISOString();
-      saveStore();
+      scheduleSave();
       renderMoneyTab();
       logUserEvent("Removed cash", `${money.format(value)} removed. Till now ${money.format(updatedValue)}.`);
       showToast(`Cash removed. Till now holds ${money.format(updatedValue)}.`);
@@ -4369,7 +4631,7 @@ body.dark-mode .modal::backdrop {
       const expected = getExpectedMoneyBreakdown();
       const actualTotal = Number(store.money.cash.actual || 0) + Number(store.money.sumup.actual || 0);
       const totalDifference = roundMoney(actualTotal - expected.totalExpected);
-      saveStore();
+      scheduleSave();
       renderMoneyTab();
       logUserEvent("Removed SumUp adjustment", `${money.format(value)} adjustment. Diff: ${money.format(totalDifference)}.`);
       showToast(`Expected SumUp reduced by ${money.format(value)}. Difference is ${money.format(totalDifference)}.`);
@@ -4414,7 +4676,7 @@ body.dark-mode .modal::backdrop {
       store.money.sumup = store.money.sumup || { actual: 0 };
       store.money.sumup.actual = roundMoney(total);
       store.money.sumup.lastUpdatedAt = new Date().toISOString();
-      saveStore();
+      scheduleSave();
       renderMoneyTab();
       showToast(`SumUp total synced from the API: ${money.format(store.money.sumup.actual)}.`);
     } catch (error) {
@@ -4581,7 +4843,7 @@ body.dark-mode .modal::backdrop {
     item.updatedAt = new Date().toISOString();
     logStockEvent({ item, action: "Added stock via barcode", quantity: qty });
     logUserEvent("Added stock via barcode", `${item.name} +${qty}`);
-    saveStore();
+    scheduleSave();
     renderStockTable();
     renderSellGrid();
     closeModal(elements.barcodeStockDialog);
@@ -4739,7 +5001,7 @@ body.dark-mode .modal::backdrop {
     const removed = (beforeSales - store.sales.length) + (beforeStock - store.stockEvents.length) + (beforeUser - store.userEvents.length) + (beforeEvents - store.events.length);
 
     logUserEvent("Purged old logs", `Removed ${removed} records older than ${cutoff}`);
-    await saveStore();
+    await scheduleSave();
     renderAdmin();
     closeModal(elements.purgeLogConfirmDialog);
     showToast(`Purged ${removed} old records.`);
@@ -4871,7 +5133,7 @@ body.dark-mode .modal::backdrop {
     store.lifetime.unitsSold += sale.quantity;
     recordSaleForActiveEvent(sale);
 
-    saveStore();
+    scheduleSave();
     renderAll();
     logUserEvent("Confirmed SumUp sale", `${sale.itemName} x${sale.quantity}, ${money.format(sale.revenue)}`);
     showToast(`SumUp sale confirmed. Stock deducted. Profit: ${money.format(sale.profit)}.`);
@@ -4886,7 +5148,7 @@ body.dark-mode .modal::backdrop {
       return;
     }
     store.sales = store.sales.filter((s) => s.id !== saleId);
-    saveStore();
+    scheduleSave();
     logUserEvent("Cancelled SumUp sale", `${sale.itemName} x${sale.quantity}, ${money.format(sale.revenue)}`);
     renderMoneyTab();
     showToast("Pending sale cancelled.");
@@ -5080,7 +5342,7 @@ body.dark-mode .modal::backdrop {
     store.apiConfig.sumupApiKey = apiKey;
     store.apiConfig.sumupMerchantCode = merchantCode;
     store.apiConfig.affiliateKey = affiliateKey;
-    saveStore();
+    scheduleSave();
     closeModal(elements.sumupApiDialog);
     renderSumupApiConfig();
     logUserEvent("Updated SumUp API config", url ? "Configured" : "Cleared");
@@ -5226,7 +5488,7 @@ body.dark-mode .modal::backdrop {
       });
     }
 
-    saveStore();
+    scheduleSave();
     clearEventForm();
     renderEvents();
     renderEventBanner();
@@ -5258,7 +5520,7 @@ body.dark-mode .modal::backdrop {
       eventItem.endedAt = null;
       eventItem.summary = { sales: 0, units: 0, revenue: 0, profit: 0 };
       eventItem.sales = [];
-      saveStore();
+      scheduleSave();
       renderEvents();
       renderEventBanner();
       logUserEvent("Started event", eventItem.name);
@@ -5269,7 +5531,7 @@ body.dark-mode .modal::backdrop {
     if (button.dataset.eventAction === "end") {
       eventItem.status = "ended";
       eventItem.endedAt = new Date().toISOString();
-      saveStore();
+      scheduleSave();
       renderEvents();
       renderEventBanner();
       logUserEvent("Ended event", eventItem.name);
@@ -5282,7 +5544,7 @@ body.dark-mode .modal::backdrop {
         return;
       }
       store.events = store.events.filter((candidate) => candidate.id !== eventItem.id);
-      saveStore();
+      scheduleSave();
       renderEvents();
       renderEventBanner();
       logUserEvent("Deleted event", eventItem.name);
@@ -5358,7 +5620,7 @@ body.dark-mode .modal::backdrop {
       showToast(`${item.name} added to stock.`);
     }
 
-    saveStore();
+    scheduleSave();
     clearItemForm();
     renderAll();
   }
@@ -5385,7 +5647,7 @@ body.dark-mode .modal::backdrop {
     logUserEvent("Deleted stock item", `${item.name}`);
 
     store.items = store.items.filter((i) => i.id !== itemId);
-    saveStore();
+    scheduleSave();
     clearItemForm();
     renderAll();
     showToast(`${item.name} has been deleted.`);
@@ -5626,7 +5888,7 @@ body.dark-mode .modal::backdrop {
       item.quantity += quantity;
       item.updatedAt = new Date().toISOString();
       logStockEvent({ item, action: "Added stock", quantity });
-      saveStore();
+      scheduleSave();
       pendingStockItemId = null;
       pendingAction = null;
       closeModal(elements.sellDialog);
@@ -5797,7 +6059,7 @@ body.dark-mode .modal::backdrop {
         store.lifetime.unitsSold += sale.quantity;
         recordSaleForActiveEvent(sale);
       }
-      saveStore();
+      scheduleSave();
       basket = [];
       pendingSaleDraft = null;
       closeModal(elements.paymentDialog);
@@ -5813,7 +6075,7 @@ body.dark-mode .modal::backdrop {
       for (const sale of sales) {
         store.sales.unshift(sale);
       }
-      saveStore();
+      scheduleSave();
       basket = [];
       pendingSaleDraft = null;
       closeModal(elements.paymentDialog);
@@ -5966,7 +6228,7 @@ body.dark-mode .modal::backdrop {
 
     store.sales = store.sales.filter((s) => !saleIds.includes(s.id));
 
-    saveStore();
+    scheduleSave();
     closeModal(elements.undoSaleDialog);
     renderAll();
     logUserEvent("Undid last sale", `${salesToUndo.length} sale(s), ${money.format(roundMoney(salesToUndo.reduce((sum, s) => sum + s.revenue, 0)))} reversed`);
@@ -6032,7 +6294,7 @@ body.dark-mode .modal::backdrop {
       createdAt: new Date().toISOString()
     });
 
-    saveStore();
+    scheduleSave();
     elements.createUserForm.reset();
     renderAdmin();
     logUserEvent("Created account", `${displayName} (${username}, ${role})`);
@@ -6071,7 +6333,7 @@ body.dark-mode .modal::backdrop {
       user.passwordHash = await hashPassword(password, user.salt);
     }
     user.mustChangePassword = mustChange;
-    saveStore();
+    scheduleSave();
     elements.passwordValue.value = "";
     await updateLoginHint();
     logUserEvent("Changed password", `For: ${user.displayName}${mustChange ? " (must change on next login)" : ""}`);
@@ -6111,6 +6373,7 @@ body.dark-mode .modal::backdrop {
         return;
       }
       setAuthToken(data.token);
+      if (data.expiresAt) sessionExpiresAt = data.expiresAt;
       const user = store.users.find((u) => u.id === currentUser.id);
       if (user) {
         user.mustChangePassword = false;
@@ -6125,6 +6388,7 @@ body.dark-mode .modal::backdrop {
     }
 
     closeModal(elements.forcePasswordDialog);
+    startSessionExpiryTimer();
     await logUserEvent("Changed own password", "First login password change");
 
     activeTab = currentUser.role === "admin" ? "stock" : "sell";
@@ -6151,7 +6415,7 @@ body.dark-mode .modal::backdrop {
     store = next;
     currentUser = store.users.find((user) => user.username === DEFAULT_ADMIN.username) || currentUser;
     persistCurrentUser();
-    saveStore();
+    scheduleSave();
     logUserEvent("Self destruct reset", "All data wiped except users and API config");
     closeModal(elements.resetDialog);
     renderAuth();
@@ -6374,7 +6638,7 @@ body.dark-mode .modal::backdrop {
     user.suspended = true;
     user.suspendedReason = reason;
     user.suspendedAt = new Date().toISOString();
-    saveStore();
+    scheduleSave();
     closeModal(elements.suspendUserDialog);
     suspendTargetUserId = null;
     renderAdmin();
@@ -6395,7 +6659,7 @@ body.dark-mode .modal::backdrop {
     user.suspended = false;
     user.suspendedReason = "";
     user.suspendedAt = null;
-    saveStore();
+    scheduleSave();
     logUserEvent("Reinstated user", `${user.displayName}`);
     renderAdmin();
     showToast(`${user.displayName} has been reinstated.`);
@@ -6432,7 +6696,7 @@ body.dark-mode .modal::backdrop {
     }
 
     store.users = store.users.filter((candidate) => candidate.id !== user.id);
-    saveStore();
+    scheduleSave();
     logUserEvent("Deleted user", `${user.displayName} (${user.username})`);
     renderAdmin();
     showToast(`User "${user.displayName}" removed.`);
@@ -6527,8 +6791,22 @@ body.dark-mode .modal::backdrop {
     link.click();
     link.remove();
     URL.revokeObjectURL(link.href);
+    localStorage.setItem("tuck-last-backup-time", Date.now().toString());
+    localStorage.setItem("tuck-last-backup-sales", String(store.lifetime.sales));
     logUserEvent("Exported backup", `Backup downloaded`);
     showToast("Backup downloaded.");
+  }
+
+  function checkBackupReminder() {
+    if (!store || !currentUser || !isAdmin()) return;
+    const lastBackupTime = parseInt(localStorage.getItem("tuck-last-backup-time") || "0", 10);
+    const lastBackupSales = parseInt(localStorage.getItem("tuck-last-backup-sales") || "0", 10);
+    const daysSince = lastBackupTime ? (Date.now() - lastBackupTime) / (1000 * 60 * 60 * 24) : Infinity;
+    const salesSince = store.lifetime.sales - lastBackupSales;
+    if (daysSince > 7 || salesSince > 50) {
+      const reason = !lastBackupTime ? "No backup recorded" : daysSince > 7 ? `${Math.floor(daysSince)} days since last backup` : `${salesSince} sales since last backup`;
+      showToast(`Backup reminder: ${reason}. Export a backup from the Money tab.`);
+    }
   }
 
   function importBackup(event) {
@@ -6551,7 +6829,7 @@ body.dark-mode .modal::backdrop {
         store = next;
     currentUser = store.users.find((user) => user.id === currentUser.id) || null;
     persistCurrentUser();
-        saveStore();
+        scheduleSave();
         logUserEvent("Imported backup", "Backup restored from file");
         event.target.value = "";
         renderAuth();
@@ -6608,7 +6886,7 @@ body.dark-mode .modal::backdrop {
     if (store.userEvents.length > 500) {
       store.userEvents = store.userEvents.slice(0, 500);
     }
-    await saveStore();
+    await scheduleSave();
   }
 
   function sortedItems() {
