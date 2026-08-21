@@ -2058,7 +2058,11 @@ body.dark-mode .modal::backdrop {
               </label>
               <label>
                 New password
-                <input id="passwordValue" type="password" required minlength="4">
+                <input id="passwordValue" type="password" minlength="4" placeholder="Leave blank to keep current">
+              </label>
+              <label class="checkbox-field">
+                <input id="passwordMustChange" type="checkbox">
+                Require password change on next login
               </label>
               <button type="submit" class="secondary-button full-width">Update password</button>
             </form>
@@ -2785,6 +2789,7 @@ body.dark-mode .modal::backdrop {
     elements.passwordForm = document.querySelector("#passwordForm");
     elements.passwordUser = document.querySelector("#passwordUser");
     elements.passwordValue = document.querySelector("#passwordValue");
+    elements.passwordMustChange = document.querySelector("#passwordMustChange");
     elements.enterCashButton = document.querySelector("#enterCashButton");
     elements.removeCashButton = document.querySelector("#removeCashButton");
     elements.enterSumupButton = document.querySelector("#enterSumupButton");
@@ -2981,6 +2986,7 @@ body.dark-mode .modal::backdrop {
 
     elements.createUserForm.addEventListener("submit", handleCreateUser);
     elements.passwordForm.addEventListener("submit", handlePasswordChange);
+    elements.passwordUser.addEventListener("change", syncPasswordMustChange);
     elements.enterCashButton.addEventListener("click", () => enterCashAmount());
     elements.removeCashButton.addEventListener("click", () => removeCashAmount());
     elements.enterSumupButton.addEventListener("click", () => enterSumUpAmount());
@@ -6053,19 +6059,23 @@ body.dark-mode .modal::backdrop {
     }
 
     const password = elements.passwordValue.value;
-    if (password.length < 4) {
+    const mustChange = elements.passwordMustChange.checked;
+
+    if (password && password.length < 4) {
       showToast("Use at least 4 characters.");
       return;
     }
 
-    user.salt = uid("salt");
-    user.passwordHash = await hashPassword(password, user.salt);
-    user.mustChangePassword = false;
+    if (password) {
+      user.salt = uid("salt");
+      user.passwordHash = await hashPassword(password, user.salt);
+    }
+    user.mustChangePassword = mustChange;
     saveStore();
     elements.passwordValue.value = "";
     await updateLoginHint();
-    logUserEvent("Changed password", `For: ${user.displayName}`);
-    showToast(`${user.displayName} password updated.`);
+    logUserEvent("Changed password", `For: ${user.displayName}${mustChange ? " (must change on next login)" : ""}`);
+    showToast(`${user.displayName} password updated${mustChange ? ". They will be prompted to change it on next login." : "."}`);
   }
 
   async function handleForcePasswordSubmit(event) {
@@ -6219,6 +6229,12 @@ body.dark-mode .modal::backdrop {
     if (store.users.some((user) => user.id === selected)) {
       elements.passwordUser.value = selected;
     }
+    syncPasswordMustChange();
+  }
+
+  function syncPasswordMustChange() {
+    const user = store.users.find((u) => u.id === elements.passwordUser.value);
+    elements.passwordMustChange.checked = user ? Boolean(user.mustChangePassword) : false;
   }
 
   function renderPeopleProfit() {
