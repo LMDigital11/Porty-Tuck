@@ -89,7 +89,7 @@ button.is-loading::after {
   padding: 13px 16px;
   border: 1px solid rgba(33, 110, 78, 0.22);
   border-radius: var(--radius);
-  background: #ffffff;
+  background: var(--panel);
   box-shadow: var(--shadow);
   color: var(--ink);
   transform: translateY(-20px);
@@ -437,7 +437,7 @@ select {
   min-height: 43px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--panel);
   color: var(--ink);
   padding: 10px 11px;
   outline: none;
@@ -475,6 +475,7 @@ select:focus {
 .secondary-button,
 .ghost-button,
 .danger-button,
+.warning-button,
 .icon-button,
 .import-button {
   min-height: 42px;
@@ -483,12 +484,17 @@ select:focus {
   padding: 10px 14px;
   font-weight: 800;
   text-align: center;
-  transition: background 160ms ease, border-color 160ms ease, transform 100ms ease;
+  transition: background 160ms ease, border-color 160ms ease, filter 160ms ease, transform 100ms ease, color 160ms ease;
 }
 
 .primary-button {
   background: var(--green);
   color: #fff;
+  border-color: var(--green);
+}
+
+.primary-button:hover {
+  filter: brightness(1.1);
 }
 
 .primary-button:active {
@@ -498,16 +504,18 @@ select:focus {
 .secondary-button,
 .import-button {
   border-color: var(--line);
-  background: #fff;
+  background: var(--panel);
   color: var(--ink);
 }
 
 .secondary-button:hover,
+.import-button:hover,
 .icon-button:hover {
   background: var(--soft);
 }
 
-.secondary-button:active {
+.secondary-button:active,
+.import-button:active {
   transform: scale(0.97);
 }
 
@@ -515,38 +523,70 @@ select:focus {
   border-color: transparent;
   background: transparent;
   color: var(--muted);
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.ghost-button:hover {
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.ghost-button:active {
+  transform: scale(0.97);
 }
 
 .danger-button {
   background: var(--coral);
   color: #fff;
+  border-color: var(--coral);
 }
 
 .danger-button:hover {
   filter: brightness(1.1);
 }
 
+.danger-button:active {
+  transform: scale(0.97);
+}
+
 .warning-button {
   background: var(--amber);
   color: #fff;
+  border-color: var(--amber);
 }
 
 .warning-button:hover {
   filter: brightness(1.1);
 }
 
+.warning-button:active {
+  transform: scale(0.97);
+}
+
 .icon-button {
   min-height: 36px;
   padding: 8px 10px;
   border-color: var(--line);
-  background: #fff;
+  background: var(--panel);
   color: var(--ink);
+  font-weight: 700;
+}
+
+.icon-button:active {
+  transform: scale(0.97);
 }
 
 .icon-button.sell-action {
   border-color: rgba(33, 110, 78, 0.25);
   background: var(--green-soft);
   color: var(--green);
+}
+
+.icon-button.sell-action:hover {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
 }
 
 .full-width {
@@ -565,6 +605,46 @@ select:focus {
   inset: 0;
   opacity: 0;
   cursor: pointer;
+}
+
+.event-banner-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, transform 100ms ease;
+}
+
+.event-banner-button:hover {
+  background: var(--soft);
+  border-color: var(--green);
+}
+
+.event-banner-button:active {
+  transform: scale(0.98);
+}
+
+.event-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.event-banner-copy strong {
+  color: var(--green);
+}
+
+.event-banner-copy span {
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 .table-toolbar {
@@ -826,7 +906,7 @@ tbody tr:last-child td {
   place-items: center;
   min-height: 64px;
   border-radius: 10px;
-  background: #fff;
+  background: var(--panel);
   font-size: 2rem;
   font-weight: 800;
   color: var(--green);
@@ -841,16 +921,21 @@ tbody tr:last-child td {
 .keypad-button {
   min-height: 48px;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fff;
+  border-radius: var(--radius);
+  background: var(--panel);
   color: var(--ink);
   font-size: 1rem;
   font-weight: 800;
-  transition: background 100ms ease, transform 100ms ease;
+  transition: background 160ms ease, border-color 160ms ease, transform 100ms ease;
+  cursor: pointer;
+}
+
+.keypad-button:hover {
+  background: var(--soft);
 }
 
 .keypad-button:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 
 .keypad-button.keypad-action {
@@ -909,7 +994,7 @@ tbody tr:last-child td {
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--panel);
   transition: background 100ms ease;
 }
 
@@ -1205,6 +1290,20 @@ body.dark-mode .nav-tab.is-active {
   border-color: rgba(77, 186, 130, 0.25);
 }
 
+body.dark-mode .status-banner button {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+body.dark-mode .event-banner-button {
+  border-color: var(--line);
+}
+
+body.dark-mode .event-banner-button:hover {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+
 body.dark-mode .modal::backdrop {
   background: rgba(0, 0, 0, 0.6);
 }
@@ -1223,8 +1322,8 @@ body.dark-mode .modal::backdrop {
   color: var(--muted);
   font-size: 0.8rem;
   cursor: pointer;
-  border-radius: 4px;
-  transition: color 120ms ease;
+  border-radius: var(--radius);
+  transition: color 160ms ease, background 160ms ease;
 }
 
 .password-toggle:hover {
@@ -1250,15 +1349,21 @@ body.dark-mode .modal::backdrop {
   background: var(--panel);
   color: var(--ink);
   font-size: 0.8rem;
-  transition: background 120ms ease, border-color 120ms ease;
+  font-weight: 600;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 100ms ease;
+  cursor: pointer;
 }
 
 .sort-button:hover {
   background: var(--soft);
 }
 
+.sort-button:active {
+  transform: scale(0.97);
+}
+
 .sort-button.is-active {
-  border-color: rgba(33, 110, 78, 0.35);
+  border-color: var(--green);
   background: var(--green-soft);
   color: var(--green);
   font-weight: 700;
@@ -1322,12 +1427,12 @@ body.dark-mode .modal::backdrop {
     gap: 2px;
     padding: 6px 2px;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius);
     background: transparent;
     color: var(--muted);
     font-size: 0.6rem;
     font-weight: 600;
-    transition: color 120ms ease, background 120ms ease;
+    transition: color 160ms ease, background 160ms ease;
     cursor: pointer;
   }
 
@@ -1421,11 +1526,13 @@ body.dark-mode .modal::backdrop {
   background: rgba(255,255,255,0.25);
   border: 1px solid rgba(255,255,255,0.4);
   color: inherit;
-  padding: 4px 12px;
-  border-radius: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius);
   cursor: pointer;
   font-size: 0.82rem;
-  font-weight: 600;
+  font-weight: 700;
+  min-height: 32px;
+  transition: background 160ms ease, transform 100ms ease;
 }
 
 .status-banner button:hover {
@@ -6697,8 +6804,7 @@ body.dark-mode .modal::backdrop {
         let actionButtons = "";
         if (!isSelf) {
           const roleBtnLabel = user.role === "admin" ? "Make seller" : "Make admin";
-          const roleBtnClass = user.role === "admin" ? "secondary-button" : "secondary-button";
-          actionButtons = `<button type="button" class="${roleBtnClass} toggle-role-button" data-user-id="${user.id}">${roleBtnLabel}</button>`;
+          actionButtons = `<button type="button" class="secondary-button toggle-role-button" data-user-id="${user.id}">${roleBtnLabel}</button>`;
           if (user.suspended) {
             actionButtons += ` <button type="button" class="secondary-button reinstate-user-button" data-user-id="${user.id}">Reinstate</button>`;
           } else {
