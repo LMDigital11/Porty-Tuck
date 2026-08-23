@@ -2194,6 +2194,7 @@ body.dark-mode .modal::backdrop {
                   <th>Role</th>
                   <th>Status</th>
                   <th>Created</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="usersTableBody"></tbody>
@@ -6695,10 +6696,13 @@ body.dark-mode .modal::backdrop {
           : "";
         let actionButtons = "";
         if (!isSelf) {
+          const roleBtnLabel = user.role === "admin" ? "Make seller" : "Make admin";
+          const roleBtnClass = user.role === "admin" ? "secondary-button" : "secondary-button";
+          actionButtons = `<button type="button" class="${roleBtnClass} toggle-role-button" data-user-id="${user.id}">${roleBtnLabel}</button>`;
           if (user.suspended) {
-            actionButtons = `<button type="button" class="secondary-button reinstate-user-button" data-user-id="${user.id}">Reinstate</button>`;
+            actionButtons += ` <button type="button" class="secondary-button reinstate-user-button" data-user-id="${user.id}">Reinstate</button>`;
           } else {
-            actionButtons = `<button type="button" class="warning-button suspend-user-button" data-user-id="${user.id}">Suspend</button>`;
+            actionButtons += ` <button type="button" class="warning-button suspend-user-button" data-user-id="${user.id}">Suspend</button>`;
             if (user.username !== DEFAULT_ADMIN.username) {
               actionButtons += ` <button type="button" class="danger-button delete-user-button" data-user-id="${user.id}">Delete</button>`;
             }
@@ -6719,6 +6723,11 @@ body.dark-mode .modal::backdrop {
   let suspendTargetUserId = null;
 
   function handleUserAction(event) {
+    const toggleRoleBtn = event.target.closest("button.toggle-role-button");
+    if (toggleRoleBtn) {
+      handleToggleRole(toggleRoleBtn.dataset.userId);
+      return;
+    }
     const suspendBtn = event.target.closest("button.suspend-user-button");
     if (suspendBtn) {
       openSuspendDialog(suspendBtn.dataset.userId);
@@ -6807,6 +6816,32 @@ body.dark-mode .modal::backdrop {
     logUserEvent("Reinstated user", `${user.displayName}`);
     renderAdmin();
     showToast(`${user.displayName} has been reinstated.`);
+  }
+
+  function handleToggleRole(userId) {
+    if (!isAdmin()) {
+      showToast("Only admin can change roles.");
+      return;
+    }
+    const user = store.users.find((c) => c.id === userId);
+    if (!user) {
+      showToast("User not found.");
+      return;
+    }
+    if (currentUser && currentUser.id === user.id) {
+      showToast("You cannot change your own role.");
+      return;
+    }
+    const newRole = user.role === "admin" ? "seller" : "admin";
+    const confirmMsg = `Change "${user.displayName}" from ${user.role} to ${newRole}?`;
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+    user.role = newRole;
+    scheduleSave();
+    logUserEvent("Changed user role", `${user.displayName} → ${newRole}`);
+    renderAdmin();
+    showToast(`${user.displayName} is now ${newRole}.`);
   }
 
   async function handleDeleteUser(userId) {
