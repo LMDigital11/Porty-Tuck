@@ -3200,7 +3200,10 @@ body.dark-mode .modal::backdrop {
     document.getElementById("purgeLogCodeForm")?.addEventListener("submit", handlePurgeLogCodeSubmit);
     document.getElementById("cancelPurgeLogConfirmButton")?.addEventListener("click", () => closeModal(elements.purgeLogConfirmDialog));
     document.getElementById("purgeLogConfirmForm")?.addEventListener("submit", handlePurgeLogConfirmSubmit);
-    if (elements.purgeLogDate) elements.purgeLogDate.addEventListener("change", renderPurgePreview);
+    if (elements.purgeLogDate) {
+      elements.purgeLogDate.addEventListener("change", renderPurgePreview);
+      elements.purgeLogDate.addEventListener("input", renderPurgePreview);
+    }
     ["purgeLogSales", "purgeLogStockEvents", "purgeLogUserEvents", "purgeLogEvents"].forEach((id) => {
       document.getElementById(id)?.addEventListener("change", renderPurgePreview);
     });
