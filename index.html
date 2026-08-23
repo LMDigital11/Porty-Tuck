@@ -5026,7 +5026,10 @@ body.dark-mode .modal::backdrop {
     if (counts.stock) parts.push(`${counts.stock} stock`);
     if (counts.user) parts.push(`${counts.user} user`);
     if (counts.events) parts.push(`${counts.events} events`);
-    el.textContent = total > 0 ? `${total} records will be removed (${parts.join(", ")})` : "No matching records found.";
+    const debugInfo = `Totals in store: ${store.sales.length} sales, ${store.stockEvents.length} stock, ${store.userEvents.length} user, ${store.events.length} events`;
+    el.textContent = total > 0
+      ? `${total} records will be removed (${parts.join(", ")})`
+      : `No matching records. ${debugInfo}`;
   }
 
   async function handlePurgeLogCodeSubmit(event) {
@@ -6609,6 +6612,7 @@ body.dark-mode .modal::backdrop {
       d.setDate(d.getDate() - 30);
       elements.purgeLogDate.value = d.toISOString().split("T")[0];
     }
+    renderPurgePreview();
 
     if (isBackdoor() && elements.currentCashCodeDisplay) {
       elements.currentCashCodeDisplay.textContent = "••••••••";
