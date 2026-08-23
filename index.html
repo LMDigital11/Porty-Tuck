@@ -2309,7 +2309,8 @@ body.dark-mode .modal::backdrop {
                 Events
               </label>
             </div>
-            <button type="button" class="danger-button" id="purgeLogButton" style="margin-top:12px;">Purge logs</button>
+            <p id="purgeLogPreview" style="margin-top:6px;font-size:0.85rem;color:var(--muted,#888);min-height:1.2em;"></p>
+            <button type="button" class="danger-button" id="purgeLogButton" style="margin-top:4px;">Purge logs</button>
           </div>
         </section>
       </section>
@@ -3199,6 +3200,10 @@ body.dark-mode .modal::backdrop {
     document.getElementById("purgeLogCodeForm")?.addEventListener("submit", handlePurgeLogCodeSubmit);
     document.getElementById("cancelPurgeLogConfirmButton")?.addEventListener("click", () => closeModal(elements.purgeLogConfirmDialog));
     document.getElementById("purgeLogConfirmForm")?.addEventListener("submit", handlePurgeLogConfirmSubmit);
+    if (elements.purgeLogDate) elements.purgeLogDate.addEventListener("change", renderPurgePreview);
+    ["purgeLogSales", "purgeLogStockEvents", "purgeLogUserEvents", "purgeLogEvents"].forEach((id) => {
+      document.getElementById(id)?.addEventListener("change", renderPurgePreview);
+    });
 
     document.querySelectorAll(".sort-button").forEach((button) => {
       button.addEventListener("click", () => {
@@ -4975,9 +4980,53 @@ body.dark-mode .modal::backdrop {
       showToast("Select a date first.");
       return;
     }
+    const counts = getPurgeCounts(cutoff);
+    const total = counts.sales + counts.stock + counts.user + counts.events;
+    if (total === 0) {
+      showToast("No records found older than that date.");
+      return;
+    }
     elements.purgeLogCode.value = "";
     openModal(elements.purgeLogCodeDialog);
     setTimeout(() => elements.purgeLogCode.focus(), 0);
+  }
+
+  function getPurgeCounts(dateStr) {
+    const cutoffTs = new Date(dateStr + "T23:59:59Z").getTime();
+    const doSales = elements.purgeLogSales.checked;
+    const doStock = elements.purgeLogStockEvents.checked;
+    const doUser = elements.purgeLogUserEvents.checked;
+    const doEvents = elements.purgeLogEvents.checked;
+    const salesCount = doSales ? store.sales.filter((s) => {
+      const ts = s.createdAt ? new Date(s.createdAt).getTime() : 0;
+      return ts > 0 && ts < cutoffTs;
+    }).length : 0;
+    const stockCount = doStock ? store.stockEvents.filter((e) => {
+      const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+      return ts > 0 && ts < cutoffTs;
+    }).length : 0;
+    const userCount = doUser ? store.userEvents.filter((e) => {
+      const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+      return ts > 0 && ts < cutoffTs;
+    }).length : 0;
+    const eventCount = doEvents ? store.events.filter((e) => {
+      const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+      return ts > 0 && ts < cutoffTs;
+    }).length : 0;
+    return { sales: salesCount, stock: stockCount, user: userCount, events: eventCount };
+  }
+
+  function renderPurgePreview() {
+    const el = document.getElementById("purgeLogPreview");
+    if (!el || !elements.purgeLogDate.value) { if (el) el.textContent = ""; return; }
+    const counts = getPurgeCounts(elements.purgeLogDate.value);
+    const total = counts.sales + counts.stock + counts.user + counts.events;
+    const parts = [];
+    if (counts.sales) parts.push(`${counts.sales} sales`);
+    if (counts.stock) parts.push(`${counts.stock} stock`);
+    if (counts.user) parts.push(`${counts.user} user`);
+    if (counts.events) parts.push(`${counts.events} events`);
+    el.textContent = total > 0 ? `${total} records will be removed (${parts.join(", ")})` : "No matching records found.";
   }
 
   async function handlePurgeLogCodeSubmit(event) {
@@ -4991,8 +5040,7 @@ body.dark-mode .modal::backdrop {
     }
     closeModal(elements.purgeLogCodeDialog);
 
-    const cutoff = elements.purgeLogDate.value + "T23:59:59";
-    const cutoffDate = new Date(cutoff);
+    const cutoffTs = new Date(elements.purgeLogDate.value + "T23:59:59Z").getTime();
     const doSales = elements.purgeLogSales.checked;
     const doStock = elements.purgeLogStockEvents.checked;
     const doUser = elements.purgeLogUserEvents.checked;
@@ -5003,10 +5051,22 @@ body.dark-mode .modal::backdrop {
       return;
     }
 
-    const salesCount = doSales ? store.sales.filter((s) => new Date(s.createdAt) < cutoffDate).length : 0;
-    const stockCount = doStock ? store.stockEvents.filter((e) => new Date(e.createdAt) < cutoffDate).length : 0;
-    const userCount = doUser ? store.userEvents.filter((e) => new Date(e.createdAt) < cutoffDate).length : 0;
-    const eventCount = doEvents ? store.events.filter((e) => new Date(e.createdAt) < cutoffDate).length : 0;
+    const salesCount = doSales ? store.sales.filter((s) => {
+      const ts = s.createdAt ? new Date(s.createdAt).getTime() : 0;
+      return ts > 0 && ts < cutoffTs;
+    }).length : 0;
+    const stockCount = doStock ? store.stockEvents.filter((e) => {
+      const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+      return ts > 0 && ts < cutoffTs;
+    }).length : 0;
+    const userCount = doUser ? store.userEvents.filter((e) => {
+      const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+      return ts > 0 && ts < cutoffTs;
+    }).length : 0;
+    const eventCount = doEvents ? store.events.filter((e) => {
+      const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+      return ts > 0 && ts < cutoffTs;
+    }).length : 0;
     const total = salesCount + stockCount + userCount + eventCount;
 
     if (total === 0) {
@@ -5030,7 +5090,7 @@ body.dark-mode .modal::backdrop {
     event.preventDefault();
     const cutoff = elements.purgeLogDate.value;
     if (!cutoff) return;
-    const cutoffDate = new Date(cutoff + "T23:59:59");
+    const cutoffTs = new Date(cutoff + "T23:59:59Z").getTime();
     const doSales = elements.purgeLogSales.checked;
     const doStock = elements.purgeLogStockEvents.checked;
     const doUser = elements.purgeLogUserEvents.checked;
@@ -5040,22 +5100,34 @@ body.dark-mode .modal::backdrop {
 
     if (doSales) {
       const before = store.sales.length;
-      store.sales = store.sales.filter((s) => new Date(s.createdAt) >= cutoffDate);
+      store.sales = store.sales.filter((s) => {
+        const ts = s.createdAt ? new Date(s.createdAt).getTime() : 0;
+        return ts === 0 || ts >= cutoffTs;
+      });
       removed += before - store.sales.length;
     }
     if (doStock) {
       const before = store.stockEvents.length;
-      store.stockEvents = store.stockEvents.filter((e) => new Date(e.createdAt) >= cutoffDate);
+      store.stockEvents = store.stockEvents.filter((e) => {
+        const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+        return ts === 0 || ts >= cutoffTs;
+      });
       removed += before - store.stockEvents.length;
     }
     if (doUser) {
       const before = store.userEvents.length;
-      store.userEvents = store.userEvents.filter((e) => new Date(e.createdAt) >= cutoffDate);
+      store.userEvents = store.userEvents.filter((e) => {
+        const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+        return ts === 0 || ts >= cutoffTs;
+      });
       removed += before - store.userEvents.length;
     }
     if (doEvents) {
       const before = store.events.length;
-      store.events = store.events.filter((e) => new Date(e.createdAt) >= cutoffDate);
+      store.events = store.events.filter((e) => {
+        const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+        return ts === 0 || ts >= cutoffTs;
+      });
       removed += before - store.events.length;
     }
 
