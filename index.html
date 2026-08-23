@@ -2283,15 +2283,33 @@ body.dark-mode .modal::backdrop {
           <div class="section-heading tight">
             <div>
               <h4>Purge Old Logs</h4>
-              <p>Remove sales, stock activity, user activity, and events older than a chosen date.</p>
+              <p>Remove data older than a chosen date. Select which log types to purge.</p>
             </div>
           </div>
-          <div class="form-row" style="margin-top:8px;">
+          <div style="margin-top:8px;">
             <label>
               Remove data older than
               <input id="purgeLogDate" type="date">
             </label>
-            <button type="button" class="danger-button" id="purgeLogButton">Purge logs</button>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;">
+              <label class="checkbox-field">
+                <input id="purgeLogSales" type="checkbox" checked>
+                Sales
+              </label>
+              <label class="checkbox-field">
+                <input id="purgeLogStockEvents" type="checkbox" checked>
+                Stock activity
+              </label>
+              <label class="checkbox-field">
+                <input id="purgeLogUserEvents" type="checkbox" checked>
+                User activity
+              </label>
+              <label class="checkbox-field">
+                <input id="purgeLogEvents" type="checkbox" checked>
+                Events
+              </label>
+            </div>
+            <button type="button" class="danger-button" id="purgeLogButton" style="margin-top:12px;">Purge logs</button>
           </div>
         </section>
       </section>
@@ -2999,6 +3017,10 @@ body.dark-mode .modal::backdrop {
     elements.purgeLogConfirmDialog = document.querySelector("#purgeLogConfirmDialog");
     elements.purgeLogConfirmForm = document.querySelector("#purgeLogConfirmForm");
     elements.purgeLogDate = document.querySelector("#purgeLogDate");
+    elements.purgeLogSales = document.querySelector("#purgeLogSales");
+    elements.purgeLogStockEvents = document.querySelector("#purgeLogStockEvents");
+    elements.purgeLogUserEvents = document.querySelector("#purgeLogUserEvents");
+    elements.purgeLogEvents = document.querySelector("#purgeLogEvents");
     elements.purgeLogCode = document.querySelector("#purgeLogCode");
     elements.purgeLogSummary = document.querySelector("#purgeLogSummary");
     elements.userEventsLogBody = document.querySelector("#userEventsLogBody");
@@ -4971,13 +4993,35 @@ body.dark-mode .modal::backdrop {
 
     const cutoff = elements.purgeLogDate.value + "T23:59:59";
     const cutoffDate = new Date(cutoff);
-    const salesCount = store.sales.filter((s) => new Date(s.createdAt) < cutoffDate).length;
-    const stockCount = store.stockEvents.filter((e) => new Date(e.createdAt) < cutoffDate).length;
-    const userCount = store.userEvents.filter((e) => new Date(e.createdAt) < cutoffDate).length;
-    const eventCount = store.events.filter((e) => new Date(e.createdAt) < cutoffDate).length;
+    const doSales = elements.purgeLogSales.checked;
+    const doStock = elements.purgeLogStockEvents.checked;
+    const doUser = elements.purgeLogUserEvents.checked;
+    const doEvents = elements.purgeLogEvents.checked;
+
+    if (!doSales && !doStock && !doUser && !doEvents) {
+      showToast("Select at least one log type.");
+      return;
+    }
+
+    const salesCount = doSales ? store.sales.filter((s) => new Date(s.createdAt) < cutoffDate).length : 0;
+    const stockCount = doStock ? store.stockEvents.filter((e) => new Date(e.createdAt) < cutoffDate).length : 0;
+    const userCount = doUser ? store.userEvents.filter((e) => new Date(e.createdAt) < cutoffDate).length : 0;
+    const eventCount = doEvents ? store.events.filter((e) => new Date(e.createdAt) < cutoffDate).length : 0;
     const total = salesCount + stockCount + userCount + eventCount;
+
+    if (total === 0) {
+      showToast("No records found older than that date.");
+      return;
+    }
+
+    const types = [];
+    if (doSales && salesCount) types.push(`${salesCount} sales`);
+    if (doStock && stockCount) types.push(`${stockCount} stock events`);
+    if (doUser && userCount) types.push(`${userCount} user events`);
+    if (doEvents && eventCount) types.push(`${eventCount} general events`);
+
     elements.purgeLogSummary.innerHTML = `This will permanently remove:<br>
-      <strong>${salesCount}</strong> sales, <strong>${stockCount}</strong> stock events, <strong>${userCount}</strong> user events, <strong>${eventCount}</strong> general events<br>
+      <strong>${types.join(", ")}</strong><br>
       <strong>${total}</strong> records older than <strong>${elements.purgeLogDate.value}</strong>.`;
     openModal(elements.purgeLogConfirmDialog);
   }
@@ -4987,20 +5031,41 @@ body.dark-mode .modal::backdrop {
     const cutoff = elements.purgeLogDate.value;
     if (!cutoff) return;
     const cutoffDate = new Date(cutoff + "T23:59:59");
+    const doSales = elements.purgeLogSales.checked;
+    const doStock = elements.purgeLogStockEvents.checked;
+    const doUser = elements.purgeLogUserEvents.checked;
+    const doEvents = elements.purgeLogEvents.checked;
 
-    const beforeSales = store.sales.length;
-    const beforeStock = store.stockEvents.length;
-    const beforeUser = store.userEvents.length;
-    const beforeEvents = store.events.length;
+    let removed = 0;
 
-    store.sales = store.sales.filter((s) => new Date(s.createdAt) >= cutoffDate);
-    store.stockEvents = store.stockEvents.filter((e) => new Date(e.createdAt) >= cutoffDate);
-    store.userEvents = store.userEvents.filter((e) => new Date(e.createdAt) >= cutoffDate);
-    store.events = store.events.filter((e) => new Date(e.createdAt) >= cutoffDate);
+    if (doSales) {
+      const before = store.sales.length;
+      store.sales = store.sales.filter((s) => new Date(s.createdAt) >= cutoffDate);
+      removed += before - store.sales.length;
+    }
+    if (doStock) {
+      const before = store.stockEvents.length;
+      store.stockEvents = store.stockEvents.filter((e) => new Date(e.createdAt) >= cutoffDate);
+      removed += before - store.stockEvents.length;
+    }
+    if (doUser) {
+      const before = store.userEvents.length;
+      store.userEvents = store.userEvents.filter((e) => new Date(e.createdAt) >= cutoffDate);
+      removed += before - store.userEvents.length;
+    }
+    if (doEvents) {
+      const before = store.events.length;
+      store.events = store.events.filter((e) => new Date(e.createdAt) >= cutoffDate);
+      removed += before - store.events.length;
+    }
 
-    const removed = (beforeSales - store.sales.length) + (beforeStock - store.stockEvents.length) + (beforeUser - store.userEvents.length) + (beforeEvents - store.events.length);
+    const types = [];
+    if (doSales) types.push("sales");
+    if (doStock) types.push("stock events");
+    if (doUser) types.push("user events");
+    if (doEvents) types.push("events");
 
-    logUserEvent("Purged old logs", `Removed ${removed} records older than ${cutoff}`);
+    logUserEvent("Purged old logs", `Removed ${removed} ${types.join("/")} records older than ${cutoff}`);
     await scheduleSave();
     renderAdmin();
     closeModal(elements.purgeLogConfirmDialog);
