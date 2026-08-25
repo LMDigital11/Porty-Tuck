@@ -2871,6 +2871,7 @@ body.dark-mode .modal::backdrop {
   let pendingMoneyAction = null;
   let keypadTargetInput = null;
   let keypadAllowDecimal = true;
+  let keypadMask = false;
   let keypadSuppressRefocus = false;
   let pendingScheduleEditId = null;
   let sellSortMode = "default";
@@ -3258,7 +3259,7 @@ body.dark-mode .modal::backdrop {
       keypadSuppressRefocus = true;
     });
 
-    ["buyPrice", "sellPrice", "quantity", "lowStock", "barcodeStockQty", "cashReconcileActualInput"].forEach((id) => {
+    ["buyPrice", "sellPrice", "quantity", "lowStock", "barcodeStockQty", "cashReconcileActualInput", "ownerLoginCode", "lockoutCode", "undoSaleCode", "purgeLogCode", "suspendCodeInput", "cashRemovalCodeInput"].forEach((id) => {
       const input = document.getElementById(id);
       if (!input) return;
       input.setAttribute("inputmode", "none");
@@ -4755,7 +4756,13 @@ body.dark-mode .modal::backdrop {
     quantity: { title: "Current stock", decimal: false },
     lowStock: { title: "Low stock alert", decimal: false },
     barcodeStockQty: { title: "Quantity to add", decimal: false },
-    cashReconcileActualInput: { title: "Cash counted", decimal: true }
+    cashReconcileActualInput: { title: "Cash counted", decimal: true },
+    ownerLoginCode: { title: "Owner security code", decimal: false, mask: true },
+    lockoutCode: { title: "Lock system code", decimal: false, mask: true },
+    undoSaleCode: { title: "Undo sale code", decimal: false, mask: true },
+    purgeLogCode: { title: "Purge logs code", decimal: false, mask: true },
+    suspendCodeInput: { title: "Suspend user code", decimal: false, mask: true },
+    cashRemovalCodeInput: { title: "New security code", decimal: false, mask: false }
   };
 
   function setDecimalKeyVisible(visible) {
@@ -4774,8 +4781,10 @@ body.dark-mode .modal::backdrop {
   }
 
   function keypadDisplayText(rawValue) {
-    if (!rawValue) return keypadAllowDecimal ? money.format(0) : "0";
-    return keypadAllowDecimal ? money.format(roundMoney(normaliseMoney(rawValue))) : String(clampInteger(rawValue));
+    const text = String(rawValue || "");
+    if (keypadMask) return "•".repeat(text.length);
+    if (!text) return keypadAllowDecimal ? money.format(0) : "0";
+    return keypadAllowDecimal ? money.format(roundMoney(normaliseMoney(text))) : String(clampInteger(text));
   }
 
   function openKeypadForField(input) {
@@ -4783,6 +4792,7 @@ body.dark-mode .modal::backdrop {
     if (!config) return;
     keypadTargetInput = input;
     keypadAllowDecimal = config.decimal;
+    keypadMask = Boolean(config.mask);
     pendingMoneyAction = "field";
     elements.moneyInputTitle.textContent = config.title;
     setDecimalKeyVisible(config.decimal);
