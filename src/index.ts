@@ -66,6 +66,30 @@ const INDEX_SQL = `
   ON app_state(updated_at)
 `;
 
+const SESSIONS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires_at INTEGER NOT NULL
+  )
+`;
+
+const SESSIONS_EXPIRES_AT_IDX_SQL = `
+  CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions(expires_at)
+`;
+
+const SESSIONS_USER_ID_IDX_SQL = `
+  CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions(user_id)
+`;
+
+const RATE_LIMIT_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS rate_limit (
+    ip TEXT PRIMARY KEY,
+    attempts INTEGER NOT NULL,
+    first_at INTEGER NOT NULL
+  )
+`;
+
 const PREFIX = "tuck:";
 
 const SECTIONS = [
@@ -119,51 +143,13 @@ function generateTempPassword(): string {
 
 // ── Session management ──
 
-interface Session {
-  token: string;
-  userId: string;
-  expiresAt: number;
-}
-
-interface SessionsRow {
-  sessions: Record<string, Session>;
-}
-
-async function loadSessions(db: D1Database): Promise<SessionsRow> {
-  const row = await db
-    .prepare(`SELECT data FROM app_state WHERE id = ?`)
-    .bind(`${PREFIX}sessions`)
-    .first<{ data: string }>();
-  if (!row?.data) return { sessions: {} };
-  try {
-    const parsed = JSON.parse(row.data);
-    return parsed && typeof parsed === "object" ? parsed : { sessions: {} };
-  } catch {
-    return { sessions: {} };
-  }
-}
-
-async function saveSessions(db: D1Database, data: SessionsRow): Promise<void> {
-  await db
-    .prepare(
-      `INSERT INTO app_state (id, data, updated_at)
-       VALUES (?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = CURRENT_TIMESTAMP`
-    )
-    .bind(`${PREFIX}sessions`, JSON.stringify(data))
-    .run();
-}
-
 async function createSession(db: D1Database, userId: string): Promise<{ token: string; expiresAt: number }> {
-  const data = await loadSessions(db);
   const token = generateToken();
   const expiresAt = Date.now() + SESSION_TTL_MS;
-  data.sessions[token] = {
-    token,
-    userId,
-    expiresAt,
-  };
-  await saveSessions(db, data);
+  await db
+    .prepare(`INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)`)
+    .bind(token, userId, expiresAt)
+    .run();
   return { token, expiresAt };
 }
 
@@ -171,46 +157,28 @@ async function validateSession(
   db: D1Database,
   token: string
 ): Promise<{ valid: boolean; userId: string }> {
-  const data = await loadSessions(db);
-  const session = data.sessions[token];
-  if (!session) return { valid: false, userId: "" };
-  if (Date.now() > session.expiresAt) {
-    delete data.sessions[token];
-    await saveSessions(db, data);
+  const row = await db
+    .prepare(`SELECT user_id, expires_at FROM sessions WHERE token = ?`)
+    .bind(token)
+    .first<{ user_id: string; expires_at: number }>();
+  if (!row) return { valid: false, userId: "" };
+  if (Date.now() > row.expires_at) {
+    await removeSession(db, token);
     return { valid: false, userId: "" };
   }
-  return { valid: true, userId: session.userId };
+  return { valid: true, userId: row.user_id };
 }
 
 async function removeSession(db: D1Database, token: string): Promise<void> {
-  const data = await loadSessions(db);
-  delete data.sessions[token];
-  await saveSessions(db, data);
+  await db.prepare(`DELETE FROM sessions WHERE token = ?`).bind(token).run();
 }
 
 async function pruneExpiredSessions(db: D1Database): Promise<void> {
-  const data = await loadSessions(db);
-  const now = Date.now();
-  let changed = false;
-  for (const [key, session] of Object.entries(data.sessions)) {
-    if (now > session.expiresAt) {
-      delete data.sessions[key];
-      changed = true;
-    }
-  }
-  if (changed) await saveSessions(db, data);
+  await db.prepare(`DELETE FROM sessions WHERE expires_at < ?`).bind(Date.now()).run();
 }
 
 async function removeSessionsForUser(db: D1Database, userId: string): Promise<void> {
-  const data = await loadSessions(db);
-  let changed = false;
-  for (const [key, session] of Object.entries(data.sessions)) {
-    if (session.userId === userId) {
-      delete data.sessions[key];
-      changed = true;
-    }
-  }
-  if (changed) await saveSessions(db, data);
+  await db.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(userId).run();
 }
 
 // ── Rate limiting for login ──
@@ -218,54 +186,21 @@ async function removeSessionsForUser(db: D1Database, userId: string): Promise<vo
 const LOGIN_MAX_ATTEMPTS = 10;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
 
-interface RateLimitEntry {
-  attempts: number;
-  firstAt: number;
-}
-
-interface RateLimitRow {
-  entries: Record<string, RateLimitEntry>;
-}
-
-async function loadRateLimit(db: D1Database): Promise<RateLimitRow> {
-  const row = await db
-    .prepare(`SELECT data FROM app_state WHERE id = ?`)
-    .bind(`${PREFIX}rateLimit`)
-    .first<{ data: string }>();
-  if (!row?.data) return { entries: {} };
-  try {
-    const parsed = JSON.parse(row.data);
-    return parsed && typeof parsed === "object" ? parsed : { entries: {} };
-  } catch {
-    return { entries: {} };
-  }
-}
-
-async function saveRateLimit(db: D1Database, data: RateLimitRow): Promise<void> {
-  await db
-    .prepare(
-      `INSERT INTO app_state (id, data, updated_at)
-       VALUES (?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = CURRENT_TIMESTAMP`
-    )
-    .bind(`${PREFIX}rateLimit`, JSON.stringify(data))
-    .run();
-}
-
 async function checkRateLimit(db: D1Database, ip: string): Promise<{ allowed: boolean; retryAfterMs?: number }> {
-  const data = await loadRateLimit(db);
-  const entry = data.entries[ip];
+  const entry = await db
+    .prepare(`SELECT attempts, first_at FROM rate_limit WHERE ip = ?`)
+    .bind(ip)
+    .first<{ attempts: number; first_at: number }>();
   if (!entry) return { allowed: true };
 
   const now = Date.now();
-  if (now - entry.firstAt > LOGIN_LOCKOUT_MS) {
-    delete data.entries[ip];
-    await saveRateLimit(db, data);
+  if (now - entry.first_at > LOGIN_LOCKOUT_MS) {
+    await clearRateLimit(db, ip);
     return { allowed: true };
   }
 
   if (entry.attempts >= LOGIN_MAX_ATTEMPTS) {
-    const retryAfterMs = entry.firstAt + LOGIN_LOCKOUT_MS - now;
+    const retryAfterMs = entry.first_at + LOGIN_LOCKOUT_MS - now;
     return { allowed: false, retryAfterMs: Math.max(0, retryAfterMs) };
   }
 
@@ -273,30 +208,26 @@ async function checkRateLimit(db: D1Database, ip: string): Promise<{ allowed: bo
 }
 
 async function recordFailedLogin(db: D1Database, ip: string): Promise<void> {
-  const data = await loadRateLimit(db);
   const now = Date.now();
-  const entry = data.entries[ip];
+  await db
+    .prepare(
+      `INSERT INTO rate_limit (ip, attempts, first_at)
+       VALUES (?, 1, ?)
+       ON CONFLICT(ip) DO UPDATE SET
+         attempts = CASE WHEN ? - first_at > ${LOGIN_LOCKOUT_MS} THEN 1 ELSE attempts + 1 END,
+         first_at = CASE WHEN ? - first_at > ${LOGIN_LOCKOUT_MS} THEN ? ELSE first_at END`
+    )
+    .bind(ip, now, now, now, now)
+    .run();
 
-  if (!entry || now - entry.firstAt > LOGIN_LOCKOUT_MS) {
-    data.entries[ip] = { attempts: 1, firstAt: now };
-  } else {
-    entry.attempts++;
-  }
-
-  const pruneBefore = now - LOGIN_LOCKOUT_MS * 2;
-  for (const [key, e] of Object.entries(data.entries)) {
-    if (e.firstAt < pruneBefore) delete data.entries[key];
-  }
-
-  await saveRateLimit(db, data);
+  await db
+    .prepare(`DELETE FROM rate_limit WHERE first_at < ?`)
+    .bind(now - LOGIN_LOCKOUT_MS * 2)
+    .run();
 }
 
 async function clearRateLimit(db: D1Database, ip: string): Promise<void> {
-  const data = await loadRateLimit(db);
-  if (data.entries[ip]) {
-    delete data.entries[ip];
-    await saveRateLimit(db, data);
-  }
+  await db.prepare(`DELETE FROM rate_limit WHERE ip = ?`).bind(ip).run();
 }
 
 // ── Auth middleware ──
@@ -383,9 +314,81 @@ async function ensureFirstRun(db: D1Database, store: StoreDocument): Promise<Rec
 
 // ── DB load/save ──
 
+let dbInitPromise: Promise<void> | null = null;
+
 async function ensureTable(db: D1Database): Promise<void> {
-  await db.prepare(TABLE_SQL).run();
-  await db.prepare(INDEX_SQL).run();
+  if (!dbInitPromise) {
+    dbInitPromise = initDatabase(db).catch((error) => {
+      dbInitPromise = null;
+      throw error;
+    });
+  }
+  return dbInitPromise;
+}
+
+async function initDatabase(db: D1Database): Promise<void> {
+  await db.batch([
+    db.prepare(TABLE_SQL),
+    db.prepare(INDEX_SQL),
+    db.prepare(SESSIONS_TABLE_SQL),
+    db.prepare(SESSIONS_EXPIRES_AT_IDX_SQL),
+    db.prepare(SESSIONS_USER_ID_IDX_SQL),
+    db.prepare(RATE_LIMIT_TABLE_SQL),
+  ]);
+  await migrateLegacyStateRows(db);
+}
+
+// One-time migration of the legacy whole-row JSON blobs into proper tables.
+async function migrateLegacyStateRows(db: D1Database): Promise<void> {
+  const legacySessions = await db
+    .prepare(`SELECT data FROM app_state WHERE id = ?`)
+    .bind(`${PREFIX}sessions`)
+    .first<{ data: string }>();
+
+  if (legacySessions) {
+    const statements: D1PreparedStatement[] = [];
+    try {
+      const parsed = JSON.parse(legacySessions.data);
+      const sessions = parsed && typeof parsed === "object" ? parsed.sessions : {};
+      for (const session of Object.values<any>(sessions)) {
+        if (!session?.token || !session?.userId || typeof session.expiresAt !== "number") continue;
+        statements.push(
+          db
+            .prepare(`INSERT OR IGNORE INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)`)
+            .bind(session.token, session.userId, session.expiresAt)
+        );
+      }
+    } catch {
+      // Malformed blob — drop it
+    }
+    statements.push(db.prepare(`DELETE FROM app_state WHERE id = ?`).bind(`${PREFIX}sessions`));
+    await db.batch(statements);
+  }
+
+  const legacyRateLimit = await db
+    .prepare(`SELECT data FROM app_state WHERE id = ?`)
+    .bind(`${PREFIX}rateLimit`)
+    .first<{ data: string }>();
+
+  if (legacyRateLimit) {
+    const statements: D1PreparedStatement[] = [];
+    try {
+      const parsed = JSON.parse(legacyRateLimit.data);
+      const entries = parsed && typeof parsed === "object" ? parsed.entries : {};
+      for (const [ip, entry] of Object.entries<any>(entries)) {
+        if (!ip || typeof entry?.attempts !== "number" || typeof entry?.firstAt !== "number") continue;
+        statements.push(
+          db
+            .prepare(`INSERT OR IGNORE INTO rate_limit (ip, attempts, first_at) VALUES (?, ?, ?)`)
+            .bind(ip, entry.attempts, entry.firstAt)
+        );
+      }
+    } catch {
+      // Malformed blob — drop it
+    }
+    statements.push(db.prepare(`DELETE FROM app_state WHERE id = ?`).bind(`${PREFIX}rateLimit`));
+    await db.batch(statements);
+  }
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -699,6 +702,8 @@ export default {
           const retrySec = Math.ceil((rateCheck.retryAfterMs || 0) / 1000);
           return jsonResponse({ error: `Too many failed attempts. Try again in ${retrySec} seconds.` }, 429);
         }
+
+        await pruneExpiredSessions(env.DB);
 
         const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
         const normalized = normalizeStore(store);
