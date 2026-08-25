@@ -2871,7 +2871,7 @@ body.dark-mode .modal::backdrop {
   let pendingMoneyAction = null;
   let keypadTargetInput = null;
   let keypadAllowDecimal = true;
-  let keypadIgnoreNextFocus = false;
+  let keypadSuppressRefocus = false;
   let pendingScheduleEditId = null;
   let sellSortMode = "default";
   let lastSaleForReceipt = null;
@@ -3245,14 +3245,17 @@ body.dark-mode .modal::backdrop {
     elements.cancelResetButton.addEventListener("click", () => closeModal(elements.resetDialog));
 
     elements.moneyInputForm.addEventListener("submit", handleMoneyInputSubmit);
-    elements.cancelMoneyInputButton.addEventListener("click", () => closeModal(elements.moneyInputDialog));
+    elements.cancelMoneyInputButton.addEventListener("click", closeMoneyKeypad);
     elements.moneyInputDialog.addEventListener("click", handleMoneyKeypadInput);
 
     elements.moneyInputDialog.addEventListener("close", () => {
       pendingMoneyAction = null;
       keypadTargetInput = null;
-      keypadIgnoreNextFocus = true;
-      setTimeout(() => { keypadIgnoreNextFocus = false; }, 80);
+    });
+
+    // Esc key: flag before the browser closes and restores focus
+    elements.moneyInputDialog.addEventListener("cancel", () => {
+      keypadSuppressRefocus = true;
     });
 
     ["buyPrice", "sellPrice", "quantity", "lowStock", "barcodeStockQty", "cashReconcileActualInput"].forEach((id) => {
@@ -3260,8 +3263,8 @@ body.dark-mode .modal::backdrop {
       if (!input) return;
       input.setAttribute("inputmode", "none");
       const openKeypad = () => {
-        if (keypadIgnoreNextFocus) {
-          keypadIgnoreNextFocus = false;
+        if (keypadSuppressRefocus) {
+          keypadSuppressRefocus = false;
           return;
         }
         if (elements.moneyInputDialog.open) return;
@@ -4760,6 +4763,11 @@ body.dark-mode .modal::backdrop {
     if (decimalButton) decimalButton.style.display = visible ? "" : "none";
   }
 
+  function closeMoneyKeypad() {
+    keypadSuppressRefocus = true;
+    closeModal(elements.moneyInputDialog);
+  }
+
   function keypadValueString(rawValue) {
     if (!rawValue) return "";
     return keypadAllowDecimal ? roundMoney(normaliseMoney(rawValue)).toFixed(2) : String(clampInteger(rawValue));
@@ -4821,7 +4829,7 @@ body.dark-mode .modal::backdrop {
         target.value = keypadValueString(elements.moneyInputValue.value);
         target.dispatchEvent(new Event("input", { bubbles: true }));
       }
-      closeModal(elements.moneyInputDialog);
+      closeMoneyKeypad();
       return;
     }
 
@@ -4853,7 +4861,7 @@ body.dark-mode .modal::backdrop {
     }
 
     pendingMoneyAction = null;
-    closeModal(elements.moneyInputDialog);
+    closeMoneyKeypad();
   }
 
   async function fetchSumUpAmountFromApi() {
