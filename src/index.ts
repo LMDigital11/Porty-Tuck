@@ -141,6 +141,81 @@ function generateTempPassword(): string {
     .join("");
 }
 
+// ── Password recovery seals (AES-GCM under the security code) ──
+
+interface SealedPassword {
+  salt: string;
+  iv: string;
+  data: string;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const clean = hex.length % 2 ? `0${hex}` : hex;
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+async function deriveSealKey(code: string, saltHex: string, usages: KeyUsage[]): Promise<CryptoKey> {
+  const base = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(code),
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: hexToBytes(saltHex), iterations: 150000, hash: "SHA-256" },
+    base,
+    { name: "AES-GCM", length: 256 },
+    false,
+    usages
+  );
+}
+
+async function sealPassword(code: string, plaintext: string): Promise<SealedPassword> {
+  const salt = generateSalt();
+  const iv = bytesToHex(crypto.getRandomValues(new Uint8Array(12)));
+  const key = await deriveSealKey(code, salt, ["encrypt"]);
+  const data = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: hexToBytes(iv) },
+    key,
+    new TextEncoder().encode(plaintext)
+  );
+  return { salt, iv, data: bytesToHex(new Uint8Array(data)) };
+}
+
+async function openPassword(code: string, sealed: SealedPassword): Promise<string | null> {
+  try {
+    const key = await deriveSealKey(code, sealed.salt, ["decrypt"]);
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: hexToBytes(sealed.iv) },
+      key,
+      hexToBytes(sealed.data)
+    );
+    return new TextDecoder().decode(plain);
+  } catch {
+    return null;
+  }
+}
+
+async function securityCodeMatches(storedCode: string, code: string): Promise<boolean> {
+  if (storedCode.includes(":")) {
+    const [salt, hash] = storedCode.split(":");
+    const inputHash = await hashPassword(code, salt);
+    return inputHash === hash;
+  }
+  return code === storedCode;
+}
+
 // ── Session management ──
 
 async function createSession(db: D1Database, userId: string): Promise<{ token: string; expiresAt: number }> {
@@ -257,8 +332,8 @@ async function requireAuth(
 
 function stripUserSecrets(users: any[]): any[] {
   return users.map((u) => {
-    const { passwordHash, salt, ...rest } = u;
-    return rest;
+    const { passwordHash, salt, pwEnc, ...rest } = u;
+    return { ...rest, hasPasswordRecovery: Boolean(u.pwEnc) };
   });
 }
 
@@ -843,6 +918,45 @@ export default {
       }
     }
 
+    // ── API: Users — Reveal password with security code ──
+    if (request.method === "POST" && url.pathname === "/api/users/reveal-password") {
+      const auth = await requireAuth(request, env.DB);
+      if (!auth.ok) return jsonResponse({ error: auth.error }, 401);
+      if (auth.user.role !== "admin") return jsonResponse({ error: "Admin access required." }, 403);
+
+      try {
+        const body = await request.json<{ userId?: string; code?: string }>();
+        const userId = (body.userId || "").trim();
+        const code = (body.code || "").trim();
+        if (!userId || !code) {
+          return jsonResponse({ error: "User ID and security code are required." }, 400);
+        }
+
+        const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
+        const normalized = normalizeStore(store);
+        const storedCode = normalized.apiConfig?.cashRemovalCode || "";
+        if (!storedCode) return jsonResponse({ error: "No security code configured." }, 403);
+
+        if (!(await securityCodeMatches(storedCode, code))) {
+          return jsonResponse({ error: "Invalid security code." }, 403);
+        }
+
+        const user = normalized.users.find((u: any) => u.id === userId);
+        if (!user?.pwEnc) {
+          return jsonResponse({ error: "No recoverable password stored for this account." }, 404);
+        }
+
+        const password = await openPassword(code, user.pwEnc);
+        if (password === null) {
+          return jsonResponse({ error: "Could not decrypt the stored password." }, 500);
+        }
+
+        return jsonResponse({ ok: true, password });
+      } catch {
+        return jsonResponse({ error: "Invalid request body." }, 400);
+      }
+    }
+
     // ── API: Auth — Set security code ──
     if (request.method === "POST" && url.pathname === "/api/auth/set-code") {
       const auth = await requireAuth(request, env.DB);
@@ -878,6 +992,16 @@ export default {
 
           if (!currentValid) {
             return jsonResponse({ error: "Current code is incorrect." }, 403);
+          }
+
+          for (const u of normalized.users as any[]) {
+            if (!u.pwEnc) continue;
+            const plain = await openPassword(currentCode, u.pwEnc);
+            if (plain === null) {
+              delete u.pwEnc;
+              continue;
+            }
+            u.pwEnc = await sealPassword(newCode, plain);
           }
         }
 
@@ -917,6 +1041,7 @@ export default {
         user.salt = generateSalt();
         user.passwordHash = await hashPassword(newPassword, user.salt);
         user.mustChangePassword = false;
+        delete user.pwEnc;
 
         await saveStoreToDb(env.DB, normalized);
 
@@ -977,6 +1102,7 @@ export default {
               ...incUser,
               salt: existingUser.salt,
               passwordHash: existingUser.passwordHash,
+              pwEnc: incUser.pwEnc ?? existingUser.pwEnc,
             };
           }
           return incUser;

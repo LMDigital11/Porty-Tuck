@@ -3594,6 +3594,7 @@ body.dark-mode .modal::backdrop {
         suspendedReason: String(user.suspendedReason || ""),
         suspendedAt: user.suspendedAt || null,
         mustChangePassword: Boolean(user.mustChangePassword),
+        hasPasswordRecovery: Boolean(user.hasPasswordRecovery),
         createdAt: user.createdAt || new Date().toISOString()
       }));
 
@@ -6628,7 +6629,7 @@ body.dark-mode .modal::backdrop {
     }
 
     const salt = uid("salt");
-    store.users.push({
+    const account = {
       id: uid("user"),
       username,
       displayName,
@@ -6638,7 +6639,18 @@ body.dark-mode .modal::backdrop {
       active: true,
       mustChangePassword: mustChange,
       createdAt: new Date().toISOString()
-    });
+    };
+
+    const recoveryCode = window.prompt(`Optional: type the security code so "${displayName}"'s password can be revealed later. Cancel to skip.`, "");
+    if (recoveryCode !== null && recoveryCode.trim()) {
+      if (await verifySecurityCode(recoveryCode.trim())) {
+        account.pwEnc = await sealPassword(recoveryCode.trim(), tempPassword);
+      } else {
+        showToast("Invalid code — password recovery not enabled for this account.");
+      }
+    }
+
+    store.users.push(account);
 
     scheduleSave();
     elements.createUserForm.reset();
@@ -6677,6 +6689,15 @@ body.dark-mode .modal::backdrop {
     if (password) {
       user.salt = uid("salt");
       user.passwordHash = await hashPassword(password, user.salt);
+      const recoveryCode = window.prompt(`Type the security code to keep password recovery working for ${user.displayName}. Cancel to disable recovery.`, "");
+      if (recoveryCode !== null && recoveryCode.trim() && await verifySecurityCode(recoveryCode.trim())) {
+        user.pwEnc = await sealPassword(recoveryCode.trim(), password);
+      } else {
+        delete user.pwEnc;
+        if (recoveryCode !== null && recoveryCode.trim()) {
+          showToast("Invalid code — password recovery disabled for this account.");
+        }
+      }
     }
     user.mustChangePassword = mustChange;
     scheduleSave();
@@ -6909,6 +6930,9 @@ body.dark-mode .modal::backdrop {
             }
           }
         }
+        if (user.hasPasswordRecovery) {
+          actionButtons += ` <button type="button" class="secondary-button reveal-password-button" data-user-id="${user.id}" title="Reveal password with the security code">Show password</button>`;
+        }
         return `
           <tr>
             <td>${escapeHtml(user.displayName)}${isSelf ? ' <em>(you)</em>' : ""}</td>
@@ -6924,6 +6948,11 @@ body.dark-mode .modal::backdrop {
   let suspendTargetUserId = null;
 
   function handleUserAction(event) {
+    const revealBtn = event.target.closest("button.reveal-password-button");
+    if (revealBtn) {
+      handleRevealPassword(revealBtn.dataset.userId);
+      return;
+    }
     const toggleRoleBtn = event.target.closest("button.toggle-role-button");
     if (toggleRoleBtn) {
       handleToggleRole(toggleRoleBtn.dataset.userId);
@@ -7080,6 +7109,43 @@ body.dark-mode .modal::backdrop {
     logUserEvent("Deleted user", `${user.displayName} (${user.username})`);
     renderAdmin();
     showToast(`User "${user.displayName}" removed.`);
+  }
+
+  async function handleRevealPassword(userId) {
+    const user = store.users.find((candidate) => candidate.id === userId);
+    if (!user) {
+      showToast("User not found.");
+      return;
+    }
+    if (!user.hasPasswordRecovery) {
+      showToast("No recoverable password stored for this account.");
+      return;
+    }
+
+    const code = window.prompt(`Type the security code to reveal ${user.displayName}'s password.`, "");
+    if (code === null) return;
+
+    try {
+      const resp = await fetch(`${API_URL}/users/reveal-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ userId, code: code.trim() })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        showToast(data.error || "Failed to reveal password.");
+        return;
+      }
+      let copied = false;
+      try { await navigator.clipboard.writeText(data.password); copied = true; } catch {}
+      window.alert(`${user.displayName}'s password: ${data.password}${copied ? "\n\n(Copied to clipboard)" : ""}`);
+      logUserEvent("Revealed password", `For: ${user.displayName}`);
+    } catch {
+      showToast("Failed to reveal password.");
+    }
   }
 
   function renderSalesLog() {
@@ -7349,6 +7415,25 @@ body.dark-mode .modal::backdrop {
       hash = ((hash << 5) - hash + input.charCodeAt(index)) | 0;
     }
     return `fallback-${Math.abs(hash)}`;
+  }
+
+  function bytesToHex(bytes) {
+    return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function sealPassword(code, plaintext) {
+    const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+    const ivBytes = crypto.getRandomValues(new Uint8Array(12));
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(code), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt: saltBytes, iterations: 150000, hash: "SHA-256" },
+      base,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt"]
+    );
+    const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv: ivBytes }, key, new TextEncoder().encode(plaintext));
+    return { salt: bytesToHex(saltBytes), iv: bytesToHex(ivBytes), data: bytesToHex(new Uint8Array(data)) };
   }
 
   function openModal(dialog) {
