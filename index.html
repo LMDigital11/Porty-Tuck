@@ -1953,6 +1953,7 @@ body.dark-mode .modal::backdrop {
         <label>
           Security code
           <input id="ownerLoginCode" type="password" autocomplete="off" placeholder="Enter owner code" required>
+          <span class="field-hint">If you require this code, talk to admin users.</span>
         </label>
         <button type="submit" id="ownerLoginSubmitBtn" class="primary-button full-width">Unlock &amp; log in</button>
       </form>
@@ -2959,6 +2960,7 @@ body.dark-mode .modal::backdrop {
       <label>
         Enter security code to confirm
         <input id="undoSaleCode" type="text" autocomplete="off" placeholder="Security code">
+        <span class="field-hint">If you require this code, talk to admin users.</span>
       </label>
       <div class="modal-actions">
         <button type="button" class="secondary-button" id="cancelUndoSaleButton">Cancel</button>
@@ -2974,6 +2976,7 @@ body.dark-mode .modal::backdrop {
       <label>
         Enter security code to confirm
         <input id="lockoutCode" type="password" autocomplete="off" placeholder="Security code">
+        <span class="field-hint">If you require this code, talk to admin users.</span>
       </label>
       <div class="modal-actions">
         <button type="button" class="secondary-button" id="cancelLockoutButton">Cancel</button>
@@ -3020,6 +3023,7 @@ body.dark-mode .modal::backdrop {
       <label>
         Security code
         <input id="purgeLogCode" type="password" autocomplete="off" required>
+        <span class="field-hint">If you require this code, talk to admin users.</span>
       </label>
       <div class="modal-actions">
         <button type="button" class="secondary-button" id="cancelPurgeLogCodeButton">Cancel</button>
@@ -3090,6 +3094,7 @@ body.dark-mode .modal::backdrop {
         <label>
           Security code
           <input id="suspendCodeInput" type="password" placeholder="Enter security code" autocomplete="off" required>
+          <span class="field-hint">If you require this code, talk to admin users.</span>
         </label>
       </div>
       <div class="modal-actions">
@@ -3143,6 +3148,24 @@ body.dark-mode .modal::backdrop {
       <input id="moneyInputValue" type="hidden" inputmode="decimal" required>
       <div class="modal-actions">
         <button type="button" class="secondary-button" id="cancelMoneyInputButton">Cancel</button>
+        <button type="submit" class="primary-button">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="securityCodePromptDialog" class="modal">
+    <form id="securityCodePromptForm" method="dialog">
+      <h3 id="securityCodePromptTitle">Enter security code</h3>
+      <p id="securityCodePromptMessage"></p>
+      <label>
+        Security code
+        <input id="securityCodePromptInput" type="text" inputmode="none" autocomplete="off" required>
+      </label>
+      <div class="alert-card warning" style="margin-top:4px;" aria-live="polite">
+        If you require this code, talk to admin users.
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" id="cancelSecurityCodePromptButton">Cancel</button>
         <button type="submit" class="primary-button">Confirm</button>
       </div>
     </form>
@@ -3257,6 +3280,33 @@ body.dark-mode .modal::backdrop {
     } catch {
       return false;
     }
+  }
+
+  let securityCodePromptResolve = null;
+  function promptSecurityCode(title, message) {
+    return new Promise((resolve) => {
+      securityCodePromptResolve = resolve;
+      elements.securityCodePromptTitle.textContent = title;
+      elements.securityCodePromptMessage.textContent = message;
+      elements.securityCodePromptInput.value = "";
+      openModal(elements.securityCodePromptDialog);
+      setTimeout(() => {
+        if (elements.moneyInputDialog.open) return;
+        openKeypadForField(elements.securityCodePromptInput);
+      }, 0);
+    });
+  }
+  function handleSecurityCodePromptSubmit(event) {
+    event.preventDefault();
+    const code = elements.securityCodePromptInput.value;
+    closeModal(elements.securityCodePromptDialog);
+    if (securityCodePromptResolve) {
+      securityCodePromptResolve(code);
+      securityCodePromptResolve = null;
+    }
+  }
+  function cancelSecurityCodePrompt() {
+    closeModal(elements.securityCodePromptDialog);
   }
 
   const money = new Intl.NumberFormat("en-GB", {
@@ -3497,6 +3547,12 @@ body.dark-mode .modal::backdrop {
     elements.securityCodeForm = document.querySelector("#securityCodeForm");
     elements.cashRemovalCodeInput = document.querySelector("#cashRemovalCodeInput");
     elements.currentCashCodeDisplay = document.querySelector("#currentCashCodeDisplay");
+    elements.securityCodePromptDialog = document.querySelector("#securityCodePromptDialog");
+    elements.securityCodePromptForm = document.querySelector("#securityCodePromptForm");
+    elements.securityCodePromptTitle = document.querySelector("#securityCodePromptTitle");
+    elements.securityCodePromptMessage = document.querySelector("#securityCodePromptMessage");
+    elements.securityCodePromptInput = document.querySelector("#securityCodePromptInput");
+    elements.cancelSecurityCodePromptButton = document.querySelector("#cancelSecurityCodePromptButton");
 
     elements.maintenanceView = document.querySelector("#maintenanceView");
     elements.maintenanceReason = document.querySelector("#maintenanceReason");
@@ -3692,7 +3748,7 @@ body.dark-mode .modal::backdrop {
       keypadSuppressRefocus = true;
     });
 
-    ["buyPrice", "sellPrice", "quantity", "lowStock", "barcodeStockQty", "cashReconcileActualInput", "ownerLoginCode", "lockoutCode", "undoSaleCode", "purgeLogCode", "suspendCodeInput", "cashRemovalCodeInput"].forEach((id) => {
+    ["buyPrice", "sellPrice", "quantity", "lowStock", "barcodeStockQty", "cashReconcileActualInput", "ownerLoginCode", "lockoutCode", "undoSaleCode", "purgeLogCode", "suspendCodeInput", "cashRemovalCodeInput", "securityCodePromptInput"].forEach((id) => {
       const input = document.getElementById(id);
       if (!input) return;
       input.setAttribute("inputmode", "none");
@@ -3706,6 +3762,15 @@ body.dark-mode .modal::backdrop {
       };
       input.addEventListener("focus", openKeypad);
       input.addEventListener("click", openKeypad);
+    });
+
+    elements.securityCodePromptForm.addEventListener("submit", handleSecurityCodePromptSubmit);
+    elements.cancelSecurityCodePromptButton.addEventListener("click", cancelSecurityCodePrompt);
+    elements.securityCodePromptDialog.addEventListener("close", () => {
+      if (securityCodePromptResolve) {
+        securityCodePromptResolve(null);
+        securityCodePromptResolve = null;
+      }
     });
 
     elements.configureSumupApiButton.addEventListener("click", openSumupApiConfig);
@@ -5171,8 +5236,8 @@ body.dark-mode .modal::backdrop {
   }
 
   async function removeCashAmount() {
-    const enteredCode = window.prompt("Type the code to remove cash from the till.", "");
-    if (enteredCode === null) {
+    const enteredCode = await promptSecurityCode("Remove cash", "Type the code to remove cash from the till.");
+    if (enteredCode === null || enteredCode === "") {
       return;
     }
 
@@ -5230,7 +5295,8 @@ body.dark-mode .modal::backdrop {
     undoSaleCode: { title: "Undo sale code", decimal: false, mask: true },
     purgeLogCode: { title: "Purge logs code", decimal: false, mask: true },
     suspendCodeInput: { title: "Suspend user code", decimal: false, mask: true },
-    cashRemovalCodeInput: { title: "New security code", decimal: false, mask: false }
+    cashRemovalCodeInput: { title: "New security code", decimal: false, mask: false },
+    securityCodePromptInput: { title: "Security code", decimal: false, mask: true }
   };
 
   function setDecimalKeyVisible(visible) {
@@ -5853,8 +5919,8 @@ body.dark-mode .modal::backdrop {
   async function handlePendingSumupAction(event) {
     const confirmButton = event.target.closest("button[data-confirm-sale-id]");
     if (confirmButton) {
-      const enteredCode = window.prompt("Enter the confirmation code to finalise this SumUp sale.");
-      if (enteredCode === null) {
+      const enteredCode = await promptSecurityCode("Confirm SumUp sale", "Enter the confirmation code to finalise this SumUp sale.");
+      if (enteredCode === null || enteredCode === "") {
         return;
       }
       if (!(await verifySecurityCode(enteredCode))) {
@@ -5866,8 +5932,8 @@ body.dark-mode .modal::backdrop {
     }
     const cancelButton = event.target.closest("button[data-cancel-sale-id]");
     if (cancelButton) {
-      const enteredCode = window.prompt("Enter the security code to cancel this pending SumUp sale.");
-      if (enteredCode === null) {
+      const enteredCode = await promptSecurityCode("Cancel SumUp sale", "Enter the security code to cancel this pending SumUp sale.");
+      if (enteredCode === null || enteredCode === "") {
         return;
       }
       if (!(await verifySecurityCode(enteredCode))) {
@@ -7195,7 +7261,7 @@ body.dark-mode .modal::backdrop {
       createdAt: new Date().toISOString()
     };
 
-    const recoveryCode = window.prompt(`Optional: type the security code so "${displayName}"'s password can be revealed later. Cancel to skip.`, "");
+    const recoveryCode = await promptSecurityCode("Password recovery", `Optional: type the security code so "${displayName}"'s password can be revealed later. Cancel to skip.`);
     if (recoveryCode !== null && recoveryCode.trim()) {
       if (await verifySecurityCode(recoveryCode.trim())) {
         account.pwEnc = await sealPassword(recoveryCode.trim(), tempPassword);
@@ -7243,7 +7309,7 @@ body.dark-mode .modal::backdrop {
     if (password) {
       user.salt = uid("salt");
       user.passwordHash = await hashPassword(password, user.salt);
-      const recoveryCode = window.prompt(`Type the security code to keep password recovery working for ${user.displayName}. Cancel to disable recovery.`, "");
+      const recoveryCode = await promptSecurityCode("Password recovery", `Type the security code to keep password recovery working for ${user.displayName}. Cancel to disable recovery.`);
       if (recoveryCode !== null && recoveryCode.trim() && await verifySecurityCode(recoveryCode.trim())) {
         user.pwEnc = await sealPassword(recoveryCode.trim(), password);
       } else {
@@ -7649,8 +7715,8 @@ body.dark-mode .modal::backdrop {
       return;
     }
 
-    const enteredCode = window.prompt("Type the security code to delete this user.", "");
-    if (enteredCode === null) {
+    const enteredCode = await promptSecurityCode("Delete user", "Type the security code to delete this user.");
+    if (enteredCode === null || enteredCode === "") {
       return;
     }
     if (!(await verifySecurityCode(enteredCode))) {
@@ -7676,8 +7742,8 @@ body.dark-mode .modal::backdrop {
       return;
     }
 
-    const code = window.prompt(`Type the security code to reveal ${user.displayName}'s password.`, "");
-    if (code === null) return;
+    const code = await promptSecurityCode("Reveal password", `Type the security code to reveal ${user.displayName}'s password.`);
+    if (code === null || code === "") return;
 
     try {
       const resp = await fetch(`${API_URL}/users/reveal-password`, {
