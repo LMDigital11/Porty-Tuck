@@ -3151,17 +3151,25 @@ body.dark-mode .modal::backdrop {
   <dialog id="cashReconcileDialog" class="modal">
     <form id="cashReconcileForm" method="dialog">
       <h3>Reconcile Cash Drawer</h3>
-      <p>Count the physical cash in the drawer and enter the total below.</p>
+      <p>Enter the opening float, then the total cash in the drawer. The drawer's cash sales (total &minus; float) are matched against the expected amount.</p>
       <div class="form-readout" style="margin-bottom:4px;">
-        <span>Expected cash</span>
+        <span>Expected cash (sales)</span>
         <strong id="cashReconcileExpected">GBP 0.00</strong>
       </div>
       <label>
-        Cash counted
+        Opening float
+        <input id="cashReconcileFloatInput" type="number" step="0.01" min="0" placeholder="0.00" autocomplete="off" required>
+      </label>
+      <label>
+        Total in drawer
         <input id="cashReconcileActualInput" type="number" step="0.01" min="0" placeholder="0.00" autocomplete="off" required>
       </label>
       <div class="form-readout">
-        <span>Difference</span>
+        <span>Cash sales (total &minus; float)</span>
+        <strong id="cashReconcileSales">GBP 0.00</strong>
+      </div>
+      <div class="form-readout">
+        <span>Difference vs expected</span>
         <strong id="cashReconcileDifference">GBP 0.00</strong>
       </div>
       <label>
@@ -3446,7 +3454,9 @@ body.dark-mode .modal::backdrop {
     elements.cashReconcileDialog = document.querySelector("#cashReconcileDialog");
     elements.cashReconcileForm = document.querySelector("#cashReconcileForm");
     elements.cashReconcileExpected = document.querySelector("#cashReconcileExpected");
+    elements.cashReconcileFloatInput = document.querySelector("#cashReconcileFloatInput");
     elements.cashReconcileActualInput = document.querySelector("#cashReconcileActualInput");
+    elements.cashReconcileSales = document.querySelector("#cashReconcileSales");
     elements.cashReconcileDifference = document.querySelector("#cashReconcileDifference");
     elements.cashReconcileNotesInput = document.querySelector("#cashReconcileNotesInput");
     elements.cashReconcileAlert = document.querySelector("#cashReconcileAlert");
@@ -3656,6 +3666,7 @@ body.dark-mode .modal::backdrop {
     elements.reconcileCashButton.addEventListener("click", openCashReconcileDialog);
     elements.cancelCashReconcileButton.addEventListener("click", () => closeModal(elements.cashReconcileDialog));
     elements.cashReconcileForm.addEventListener("submit", handleCashReconcileSubmit);
+    elements.cashReconcileFloatInput.addEventListener("input", updateCashReconcileDifference);
     elements.cashReconcileActualInput.addEventListener("input", updateCashReconcileDifference);
     elements.toggleCashDrawerHistoryButton.addEventListener("click", toggleCashDrawerHistory);
     elements.usersTableBody.addEventListener("click", handleUserAction);
@@ -5036,14 +5047,18 @@ body.dark-mode .modal::backdrop {
 
   function openCashReconcileDialog() {
     const expected = getExpectedMoneyBreakdown();
+    const lastFloat = Number(store.money?.cash?.float || 0);
     elements.cashReconcileExpected.textContent = money.format(expected.cashExpected);
+    elements.cashReconcileFloatInput.value = lastFloat ? lastFloat.toFixed(2) : "";
     elements.cashReconcileActualInput.value = "";
     elements.cashReconcileNotesInput.value = "";
+    elements.cashReconcileSales.textContent = money.format(0);
     elements.cashReconcileDifference.textContent = money.format(0);
+    elements.cashReconcileDifference.style.color = "";
     elements.cashReconcileAlert.classList.add("is-hidden");
     elements.cashReconcileAlert.textContent = "";
     openModal(elements.cashReconcileDialog);
-    setTimeout(() => elements.cashReconcileActualInput.focus(), 0);
+    setTimeout(() => elements.cashReconcileFloatInput.focus(), 0);
   }
 
   function updateCashReconcileDifference() {
@@ -5208,7 +5223,8 @@ body.dark-mode .modal::backdrop {
     quantity: { title: "Current stock", decimal: false },
     lowStock: { title: "Low stock alert", decimal: false },
     barcodeStockQty: { title: "Quantity to add", decimal: false },
-    cashReconcileActualInput: { title: "Cash counted", decimal: true },
+    cashReconcileFloatInput: { title: "Opening float", decimal: true },
+    cashReconcileActualInput: { title: "Total in drawer", decimal: true },
     ownerLoginCode: { title: "Owner security code", decimal: false, mask: true },
     lockoutCode: { title: "Lock system code", decimal: false, mask: true },
     undoSaleCode: { title: "Undo sale code", decimal: false, mask: true },
