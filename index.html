@@ -440,14 +440,77 @@ label {
 .check-toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  min-height: 43px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.check-toggle:hover {
+  border-color: var(--green);
+}
+
+.check-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.check-toggle .toggle-track {
+  position: relative;
+  flex-shrink: 0;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--line);
+  transition: background 0.2s ease;
+}
+
+.check-toggle .toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+}
+
+.check-toggle input:checked + .toggle-track {
+  background: var(--green);
+}
+
+.check-toggle input:checked + .toggle-track::after {
+  transform: translateX(18px);
+}
+
+.check-toggle:has(input:checked) {
+  background: var(--green-soft);
+  border-color: var(--green);
+}
+
+.check-toggle .check-toggle-label {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.check-toggle .check-toggle-title {
   font-size: 0.9rem;
 }
 
-.check-toggle input[type="checkbox"] {
-  width: auto;
-  min-height: auto;
-  margin: 0;
+.check-toggle .check-toggle-sub {
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
 input,
@@ -1763,11 +1826,14 @@ body.dark-mode .modal::backdrop {
           <label>
             Current stock
             <input id="quantity" type="text" inputmode="numeric" placeholder="25">
-            <span class="field-hint">Type <strong>INFINITE</strong> to make stock never run out.</span>
           </label>
           <label class="check-toggle">
             <input id="itemInfinite" type="checkbox">
-            <span>Infinite stock (never runs out)</span>
+            <span class="toggle-track" aria-hidden="true"></span>
+            <span class="check-toggle-label">
+              <span class="check-toggle-title">∞ Infinite stock</span>
+              <span class="check-toggle-sub">Never runs out when selling</span>
+            </span>
           </label>
           <label>
             Low stock alert
