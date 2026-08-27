@@ -2323,7 +2323,7 @@ body.dark-mode .modal::backdrop {
         <div class="money-section">
           <div class="money-section-head">
             <h4 class="money-section-title">Floats</h4>
-            <p class="money-section-desc">The current expected and actual amounts for cash and SumUp.</p>
+            <p class="money-section-desc">Expected vs. recorded amounts. Actual cash is the till total minus the opening float.</p>
           </div>
           <div class="admin-grid">
             <article class="admin-card">
@@ -2348,7 +2348,11 @@ body.dark-mode .modal::backdrop {
         <div class="split-layout">
           <section class="panel-block">
             <h4>Cash float</h4>
-            <p>Expected cash from cash sales and the current till total.</p>
+            <p>Expected cash from cash sales vs. cash in the till after the opening float.</p>
+            <div class="form-readout">
+              <span>Float in till</span>
+              <strong id="moneyCashFloat">GBP 0.00</strong>
+            </div>
             <div class="form-readout">
               <span>Difference</span>
               <strong id="moneyCashDifference">GBP 0.00</strong>
@@ -2400,7 +2404,9 @@ body.dark-mode .modal::backdrop {
                     <tr>
                       <th>Date</th>
                       <th>Expected</th>
+                      <th>Float</th>
                       <th>Counted</th>
+                      <th>Sales</th>
                       <th>Difference</th>
                       <th>Counted by</th>
                       <th>Notes</th>
@@ -3748,7 +3754,7 @@ body.dark-mode .modal::backdrop {
       keypadSuppressRefocus = true;
     });
 
-    ["buyPrice", "sellPrice", "quantity", "lowStock", "barcodeStockQty", "cashReconcileActualInput", "ownerLoginCode", "lockoutCode", "undoSaleCode", "purgeLogCode", "suspendCodeInput", "cashRemovalCodeInput", "securityCodePromptInput"].forEach((id) => {
+    ["buyPrice", "sellPrice", "quantity", "lowStock", "barcodeStockQty", "cashReconcileFloatInput", "cashReconcileActualInput", "ownerLoginCode", "lockoutCode", "undoSaleCode", "purgeLogCode", "suspendCodeInput", "cashRemovalCodeInput", "securityCodePromptInput"].forEach((id) => {
       const input = document.getElementById(id);
       if (!input) return;
       input.setAttribute("inputmode", "none");
@@ -3957,6 +3963,7 @@ body.dark-mode .modal::backdrop {
       money: {
         cash: {
           actual: 0,
+          float: 0,
           lastUpdatedAt: null
         },
         sumup: {
@@ -4034,6 +4041,7 @@ body.dark-mode .modal::backdrop {
     next.money = {
       cash: {
         actual: Number(value.money?.cash?.actual || 0),
+        float: Number(value.money?.cash?.float || 0),
         lastUpdatedAt: value.money?.cash?.lastUpdatedAt || null
       },
       sumup: {
@@ -5072,22 +5080,25 @@ body.dark-mode .modal::backdrop {
 
     const expected = getExpectedMoneyBreakdown();
     const actualCash = Number(store.money?.cash?.actual || 0);
+    const tillFloat = Number(store.money?.cash?.float || 0);
+    const netCash = roundMoney(Math.max(0, actualCash - tillFloat));
     const actualSumup = Number(store.money?.sumup?.actual || 0);
-    const cashDifference = roundMoney(actualCash - expected.cashExpected);
+    const cashDifference = roundMoney(netCash - expected.cashExpected);
     const sumupDifference = roundMoney(actualSumup - expected.sumupExpected);
-    const totalDifference = roundMoney((actualCash + actualSumup) - expected.totalExpected);
+    const totalDifference = roundMoney((netCash + actualSumup) - expected.totalExpected);
 
     document.getElementById("moneyExpectedCash").textContent = money.format(expected.cashExpected);
-    document.getElementById("moneyActualCash").textContent = money.format(actualCash);
+    document.getElementById("moneyActualCash").textContent = money.format(netCash);
     document.getElementById("moneyExpectedSumup").textContent = money.format(expected.sumupExpected);
     document.getElementById("moneyActualSumup").textContent = money.format(actualSumup);
     document.getElementById("moneyCashDifference").textContent = money.format(cashDifference);
     document.getElementById("moneySumupDifference").textContent = money.format(sumupDifference);
 
-    const actualTotal = roundMoney(actualCash + actualSumup);
+    const actualTotal = roundMoney(netCash + actualSumup);
     document.getElementById("moneyExpectedTotal").textContent = money.format(expected.totalExpected);
     document.getElementById("moneyActualTotal").textContent = money.format(actualTotal);
     document.getElementById("moneyTotalDifference").textContent = money.format(totalDifference);
+    document.getElementById("moneyCashFloat").textContent = money.format(tillFloat);
 
     const diffBox = document.getElementById("moneyTotalDifferenceBox");
     diffBox.classList.toggle("positive", totalDifference > 0);
@@ -5128,8 +5139,11 @@ body.dark-mode .modal::backdrop {
 
   function updateCashReconcileDifference() {
     const expected = getExpectedMoneyBreakdown();
-    const actual = normaliseMoney(elements.cashReconcileActualInput.value);
-    const diff = roundMoney(actual - expected.cashExpected);
+    const total = normaliseMoney(elements.cashReconcileActualInput.value);
+    const float = normaliseMoney(elements.cashReconcileFloatInput.value);
+    const sales = roundMoney(Math.max(0, total - float));
+    const diff = roundMoney(sales - expected.cashExpected);
+    elements.cashReconcileSales.textContent = money.format(sales);
     elements.cashReconcileDifference.textContent = money.format(diff);
     elements.cashReconcileDifference.style.color = diff === 0 ? "" : "var(--coral)";
   }
@@ -5137,18 +5151,25 @@ body.dark-mode .modal::backdrop {
   function handleCashReconcileSubmit(event) {
     event.preventDefault();
     const expected = getExpectedMoneyBreakdown();
-    const actual = normaliseMoney(elements.cashReconcileActualInput.value);
-    const diff = roundMoney(actual - expected.cashExpected);
+    const total = normaliseMoney(elements.cashReconcileActualInput.value);
+    const float = normaliseMoney(elements.cashReconcileFloatInput.value);
+    const sales = roundMoney(Math.max(0, total - float));
+    const diff = roundMoney(sales - expected.cashExpected);
     const notes = (elements.cashReconcileNotesInput.value || "").trim();
 
-    if (!store.money) store.money = { cash: { actual: 0 }, sumup: { actual: 0, expectedAdjustment: 0 }, cashDrawer: { reconciliations: [] } };
+    if (!store.money) store.money = { cash: { actual: 0, float: 0 }, sumup: { actual: 0, expectedAdjustment: 0 }, cashDrawer: { reconciliations: [] } };
+    if (!store.money.cash) store.money.cash = { actual: 0, float: 0 };
     if (!store.money.cashDrawer) store.money.cashDrawer = { reconciliations: [] };
     if (!Array.isArray(store.money.cashDrawer.reconciliations)) store.money.cashDrawer.reconciliations = [];
+
+    store.money.cash.float = float;
 
     store.money.cashDrawer.reconciliations.unshift({
       id: uid("recon"),
       expected: expected.cashExpected,
-      actual,
+      float,
+      actual: total,
+      sales,
       difference: diff,
       notes,
       countedBy: currentUser ? currentUser.displayName : "Unknown",
@@ -5164,8 +5185,8 @@ body.dark-mode .modal::backdrop {
     renderMoneyTab();
 
     const summary = diff === 0
-      ? `Counted ${money.format(actual)}. Drawer is balanced.`
-      : `Counted ${money.format(actual)}. Difference: ${money.format(diff)}.`;
+      ? `Counted ${money.format(total)} (${money.format(float)} float). Drawer is balanced.`
+      : `Counted ${money.format(total)} (${money.format(float)} float). Cash sales ${money.format(sales)}. Difference: ${money.format(diff)}.`;
     logUserEvent("Reconciled cash drawer", summary);
     showToast(summary);
   }
@@ -5198,10 +5219,14 @@ body.dark-mode .modal::backdrop {
       elements.cashDrawerHistoryBody.innerHTML = recs.map((r) => {
         const d = roundMoney(r.difference);
         const diffClass = d === 0 ? "" : ' style="color:var(--coral)"';
+        const float = roundMoney(Number(r.float) || 0);
+        const sales = roundMoney(r.sales !== undefined ? r.sales : Math.max(0, Number(r.actual) - float));
         return `<tr>
           <td>${escapeHtml(formatDate(r.createdAt))}</td>
           <td>${money.format(roundMoney(r.expected))}</td>
+          <td>${money.format(float)}</td>
           <td>${money.format(roundMoney(r.actual))}</td>
+          <td>${money.format(sales)}</td>
           <td${diffClass}>${money.format(d)}</td>
           <td>${escapeHtml(r.countedBy || "")}</td>
           <td>${escapeHtml(r.notes || "")}</td>

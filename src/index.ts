@@ -18,7 +18,7 @@ interface StoreDocument {
     unitsSold: number;
   };
   money: {
-    cash: { actual: number; lastUpdatedAt: string | null };
+    cash: { actual: number; float: number; lastUpdatedAt: string | null };
     sumup: { actual: number; expectedAdjustment: number; lastUpdatedAt: string | null };
     cashDrawer: { reconciliations: any[] };
   };
@@ -631,7 +631,7 @@ function blankStore(): StoreDocument {
       cashRemovalCode: "",
     },
     money: {
-      cash: { actual: 0, lastUpdatedAt: null },
+      cash: { actual: 0, float: 0, lastUpdatedAt: null },
       sumup: { actual: 0, expectedAdjustment: 0, lastUpdatedAt: null },
       cashDrawer: { reconciliations: [] },
     },
@@ -679,6 +679,7 @@ function normalizeStore(store: unknown): StoreDocument {
     money: {
       cash: {
         actual: Number((source.money?.cash as any)?.actual || 0),
+        float: Number((source.money?.cash as any)?.float || 0),
         lastUpdatedAt: (source.money?.cash as any)?.lastUpdatedAt || null,
       },
       sumup: {
