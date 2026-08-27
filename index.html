@@ -2323,7 +2323,7 @@ body.dark-mode .modal::backdrop {
         <div class="money-section">
           <div class="money-section-head">
             <h4 class="money-section-title">Floats</h4>
-            <p class="money-section-desc">Expected vs. recorded amounts. Actual cash is the till total minus the opening float.</p>
+            <p class="money-section-desc">Expected vs. recorded amounts for cash and SumUp.</p>
           </div>
           <div class="admin-grid">
             <article class="admin-card">
@@ -2347,12 +2347,8 @@ body.dark-mode .modal::backdrop {
 
         <div class="split-layout">
           <section class="panel-block">
-            <h4>Cash float</h4>
-            <p>Expected cash from cash sales vs. cash in the till after the opening float.</p>
-            <div class="form-readout">
-              <span>Float in till</span>
-              <strong id="moneyCashFloat">GBP 0.00</strong>
-            </div>
+            <h4>Cash</h4>
+            <p>Actual cash in the till (set during cash drawer reconciliation) vs. expected cash sales.</p>
             <div class="form-readout">
               <span>Difference</span>
               <strong id="moneyCashDifference">GBP 0.00</strong>
@@ -2364,7 +2360,7 @@ body.dark-mode .modal::backdrop {
           </section>
 
           <section class="panel-block">
-            <h4>SumUp float</h4>
+            <h4>SumUp</h4>
             <p>Expected SumUp income and the amount seen on the reader.</p>
             <div class="form-readout">
               <span>Difference</span>
@@ -2373,7 +2369,8 @@ body.dark-mode .modal::backdrop {
             <div class="modal-actions">
               <button type="button" id="fetchSumupButton" class="secondary-button">Fetch from API</button>
               <button type="button" id="enterSumupButton" class="primary-button">Enter SumUp total</button>
-              <button type="button" id="removeSumupButton" class="danger-button">Remove SumUp</button>
+              <button type="button" id="removeSumupButton" class="danger-button">Remove from expected</button>
+              <button type="button" id="removeSumupActualButton" class="danger-button">Remove from actual</button>
             </div>
           </section>
         </div>
@@ -3180,7 +3177,7 @@ body.dark-mode .modal::backdrop {
   <dialog id="cashReconcileDialog" class="modal">
     <form id="cashReconcileForm" method="dialog">
       <h3>Reconcile Cash Drawer</h3>
-      <p>Enter the opening float, then the total cash in the drawer. The drawer's cash sales (total &minus; float) are matched against the expected amount.</p>
+      <p>Enter the opening float, then the total cash in the drawer. The cash sales (total &minus; float) become the actual cash and are compared against the expected amount.</p>
       <div class="form-readout" style="margin-bottom:4px;">
         <span>Expected cash (sales)</span>
         <strong id="cashReconcileExpected">GBP 0.00</strong>
@@ -3497,6 +3494,7 @@ body.dark-mode .modal::backdrop {
     elements.removeCashButton = document.querySelector("#removeCashButton");
     elements.enterSumupButton = document.querySelector("#enterSumupButton");
     elements.removeSumupButton = document.querySelector("#removeSumupButton");
+    elements.removeSumupActualButton = document.querySelector("#removeSumupActualButton");
     elements.fetchSumupButton = document.querySelector("#fetchSumupButton");
     elements.moneyImbalanceBanner = document.querySelector("#moneyImbalanceBanner");
     elements.moneyImbalanceBannerText = document.querySelector("#moneyImbalanceBannerText");
@@ -3724,6 +3722,7 @@ body.dark-mode .modal::backdrop {
     elements.removeCashButton.addEventListener("click", () => removeCashAmount());
     elements.enterSumupButton.addEventListener("click", () => enterSumUpAmount());
     elements.removeSumupButton.addEventListener("click", () => removeSumUpAmount());
+    elements.removeSumupActualButton.addEventListener("click", () => removeSumUpActualAmount());
     elements.fetchSumupButton.addEventListener("click", () => fetchSumUpAmountFromApi());
     elements.reconcileCashButton.addEventListener("click", openCashReconcileDialog);
     elements.cancelCashReconcileButton.addEventListener("click", () => closeModal(elements.cashReconcileDialog));
@@ -5080,25 +5079,22 @@ body.dark-mode .modal::backdrop {
 
     const expected = getExpectedMoneyBreakdown();
     const actualCash = Number(store.money?.cash?.actual || 0);
-    const tillFloat = Number(store.money?.cash?.float || 0);
-    const netCash = roundMoney(Math.max(0, actualCash - tillFloat));
     const actualSumup = Number(store.money?.sumup?.actual || 0);
-    const cashDifference = roundMoney(netCash - expected.cashExpected);
+    const cashDifference = roundMoney(actualCash - expected.cashExpected);
     const sumupDifference = roundMoney(actualSumup - expected.sumupExpected);
-    const totalDifference = roundMoney((netCash + actualSumup) - expected.totalExpected);
+    const totalDifference = roundMoney((actualCash + actualSumup) - expected.totalExpected);
 
     document.getElementById("moneyExpectedCash").textContent = money.format(expected.cashExpected);
-    document.getElementById("moneyActualCash").textContent = money.format(netCash);
+    document.getElementById("moneyActualCash").textContent = money.format(actualCash);
     document.getElementById("moneyExpectedSumup").textContent = money.format(expected.sumupExpected);
     document.getElementById("moneyActualSumup").textContent = money.format(actualSumup);
     document.getElementById("moneyCashDifference").textContent = money.format(cashDifference);
     document.getElementById("moneySumupDifference").textContent = money.format(sumupDifference);
 
-    const actualTotal = roundMoney(netCash + actualSumup);
+    const actualTotal = roundMoney(actualCash + actualSumup);
     document.getElementById("moneyExpectedTotal").textContent = money.format(expected.totalExpected);
     document.getElementById("moneyActualTotal").textContent = money.format(actualTotal);
     document.getElementById("moneyTotalDifference").textContent = money.format(totalDifference);
-    document.getElementById("moneyCashFloat").textContent = money.format(tillFloat);
 
     const diffBox = document.getElementById("moneyTotalDifferenceBox");
     diffBox.classList.toggle("positive", totalDifference > 0);
@@ -5128,12 +5124,10 @@ body.dark-mode .modal::backdrop {
     elements.cashReconcileFloatInput.value = lastFloat ? lastFloat.toFixed(2) : "";
     elements.cashReconcileActualInput.value = "";
     elements.cashReconcileNotesInput.value = "";
-    elements.cashReconcileSales.textContent = money.format(0);
-    elements.cashReconcileDifference.textContent = money.format(0);
-    elements.cashReconcileDifference.style.color = "";
     elements.cashReconcileAlert.classList.add("is-hidden");
     elements.cashReconcileAlert.textContent = "";
     openModal(elements.cashReconcileDialog);
+    updateCashReconcileDifference();
     setTimeout(() => elements.cashReconcileFloatInput.focus(), 0);
   }
 
@@ -5163,6 +5157,8 @@ body.dark-mode .modal::backdrop {
     if (!Array.isArray(store.money.cashDrawer.reconciliations)) store.money.cashDrawer.reconciliations = [];
 
     store.money.cash.float = float;
+    store.money.cash.actual = sales;
+    store.money.cash.lastUpdatedAt = new Date().toISOString();
 
     store.money.cashDrawer.reconciliations.unshift({
       id: uid("recon"),
@@ -5185,8 +5181,8 @@ body.dark-mode .modal::backdrop {
     renderMoneyTab();
 
     const summary = diff === 0
-      ? `Counted ${money.format(total)} (${money.format(float)} float). Drawer is balanced.`
-      : `Counted ${money.format(total)} (${money.format(float)} float). Cash sales ${money.format(sales)}. Difference: ${money.format(diff)}.`;
+      ? `Reconciled: ${money.format(total)} counted (${money.format(float)} float), cash sales ${money.format(sales)} saved as actual cash and balanced.`
+      : `Reconciled: ${money.format(total)} counted (${money.format(float)} float), cash sales ${money.format(sales)} saved as actual cash. Difference: ${money.format(diff)}.`;
     logUserEvent("Reconciled cash drawer", summary);
     showToast(summary);
   }
@@ -5272,6 +5268,8 @@ body.dark-mode .modal::backdrop {
     }
 
     pendingMoneyAction = "removeCash";
+    keypadAllowDecimal = true;
+    keypadMask = false;
     elements.moneyInputTitle.textContent = "Remove cash from till";
     elements.moneyInputValue.value = "";
     elements.moneyInputDisplay.textContent = "GBP 0.00";
@@ -5297,9 +5295,39 @@ body.dark-mode .modal::backdrop {
     showToast(`SumUp total updated to ${money.format(numericValue)}.`);
   }
 
-  function removeSumUpAmount() {
+  async function removeSumUpAmount() {
+    const enteredCode = await promptSecurityCode("Remove from expected SumUp", "Type the security code to continue.");
+    if (enteredCode === null || enteredCode === "") {
+      return;
+    }
+    if (!(await verifySecurityCode(enteredCode))) {
+      showToast("Invalid security code.");
+      return;
+    }
     pendingMoneyAction = "removeSumUp";
+    keypadAllowDecimal = true;
+    keypadMask = false;
     elements.moneyInputTitle.textContent = "Remove from expected SumUp";
+    elements.moneyInputValue.value = "";
+    elements.moneyInputDisplay.textContent = "GBP 0.00";
+    setDecimalKeyVisible(true);
+    elements.moneyInputForm.querySelector("button[type='submit']").textContent = "Remove";
+    openModal(elements.moneyInputDialog);
+  }
+
+  async function removeSumUpActualAmount() {
+    const enteredCode = await promptSecurityCode("Remove from actual SumUp", "Type the security code to continue.");
+    if (enteredCode === null || enteredCode === "") {
+      return;
+    }
+    if (!(await verifySecurityCode(enteredCode))) {
+      showToast("Invalid security code.");
+      return;
+    }
+    pendingMoneyAction = "removeSumUpActual";
+    keypadAllowDecimal = true;
+    keypadMask = false;
+    elements.moneyInputTitle.textContent = "Remove from actual SumUp";
     elements.moneyInputValue.value = "";
     elements.moneyInputDisplay.textContent = "GBP 0.00";
     setDecimalKeyVisible(true);
@@ -5427,6 +5455,16 @@ body.dark-mode .modal::backdrop {
       renderMoneyTab();
       logUserEvent("Removed SumUp adjustment", `${money.format(value)} adjustment. Diff: ${money.format(totalDifference)}.`);
       showToast(`Expected SumUp reduced by ${money.format(value)}. Difference is ${money.format(totalDifference)}.`);
+    } else if (pendingMoneyAction === "removeSumUpActual") {
+      store.money = store.money || { cash: { actual: 0 }, sumup: { actual: 0, expectedAdjustment: 0 } };
+      store.money.sumup = store.money.sumup || { actual: 0, expectedAdjustment: 0 };
+      const updatedValue = Math.max(0, roundMoney(Number(store.money.sumup.actual || 0) - value));
+      store.money.sumup.actual = updatedValue;
+      store.money.sumup.lastUpdatedAt = new Date().toISOString();
+      scheduleSave();
+      renderMoneyTab();
+      logUserEvent("Removed SumUp actual", `${money.format(value)} removed. Actual now ${money.format(updatedValue)}.`);
+      showToast(`Actual SumUp reduced by ${money.format(value)}. Now ${money.format(updatedValue)}.`);
     }
 
     pendingMoneyAction = null;
