@@ -431,6 +431,25 @@ label {
   font-weight: 700;
 }
 
+.field-hint {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.check-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.check-toggle input[type="checkbox"] {
+  width: auto;
+  min-height: auto;
+  margin: 0;
+}
+
 input,
 select {
   width: 100%;
@@ -645,6 +664,12 @@ select:focus {
 .event-banner-copy span {
   font-size: 0.82rem;
   color: var(--muted);
+}
+
+.event-card-items {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
 .table-toolbar {
@@ -1737,7 +1762,12 @@ body.dark-mode .modal::backdrop {
           </label>
           <label>
             Current stock
-            <input id="quantity" type="text" inputmode="numeric" required placeholder="25">
+            <input id="quantity" type="text" inputmode="numeric" placeholder="25">
+            <span class="field-hint">Type <strong>INFINITE</strong> to make stock never run out.</span>
+          </label>
+          <label class="check-toggle">
+            <input id="itemInfinite" type="checkbox">
+            <span>Infinite stock (never runs out)</span>
           </label>
           <label>
             Low stock alert
@@ -1864,6 +1894,12 @@ body.dark-mode .modal::backdrop {
             <label>
               Details
               <input id="eventDetails" type="text" placeholder="Optional notes">
+            </label>
+            <label>
+              Items for sale during event
+              <select id="eventItems" multiple size="6" style="width:100%;">
+              </select>
+              <span class="field-hint">Choose which items are available in the Selling tab while this event is active. Hold Ctrl/Cmd to select several. Leave empty to sell all items.</span>
             </label>
             <div class="form-actions">
               <button type="submit" class="primary-button">Save event</button>
@@ -2963,6 +2999,7 @@ body.dark-mode .modal::backdrop {
     elements.buyPrice = document.querySelector("#buyPrice");
     elements.sellPrice = document.querySelector("#sellPrice");
     elements.quantity = document.querySelector("#quantity");
+    elements.itemInfinite = document.querySelector("#itemInfinite");
     elements.lowStock = document.querySelector("#lowStock");
     elements.profitPreview = document.querySelector("#profitPreview");
     elements.clearItemFormButton = document.querySelector("#clearItemFormButton");
@@ -2981,6 +3018,7 @@ body.dark-mode .modal::backdrop {
     elements.eventStart = document.querySelector("#eventStart");
     elements.eventLocation = document.querySelector("#eventLocation");
     elements.eventDetails = document.querySelector("#eventDetails");
+    elements.eventItems = document.querySelector("#eventItems");
     elements.clearEventFormButton = document.querySelector("#clearEventFormButton");
 
     elements.sellSearch = document.querySelector("#sellSearch");
@@ -3198,6 +3236,13 @@ body.dark-mode .modal::backdrop {
     elements.deleteItemButton.addEventListener("click", handleDeleteItem);
     [elements.buyPrice, elements.sellPrice].forEach((input) => {
       input.addEventListener("input", updateProfitPreview);
+    });
+    elements.itemInfinite.addEventListener("change", () => {
+      if (elements.itemInfinite.checked) {
+        elements.quantity.value = "INFINITE";
+      } else if (/^infinite$/i.test(elements.quantity.value.trim())) {
+        elements.quantity.value = "";
+      }
     });
     elements.clearItemFormButton.addEventListener("click", clearItemForm);
     elements.stockSearch.addEventListener("input", renderStockTable);
@@ -3514,6 +3559,9 @@ body.dark-mode .modal::backdrop {
         startAt: event.startAt || new Date().toISOString(),
         location: String(event.location || "TBC"),
         details: String(event.details || ""),
+        itemIds: Array.isArray(event.itemIds)
+          ? event.itemIds.filter((id) => typeof id === "string")
+          : [],
         status: event.status === "active" ? "active" : event.status === "ended" ? "ended" : "scheduled",
         createdAt: event.createdAt || new Date().toISOString(),
         startedAt: event.startedAt || null,
@@ -3607,7 +3655,9 @@ body.dark-mode .modal::backdrop {
         buyPrice: roundMoney(item.buyPrice),
         sellPrice: roundMoney(item.sellPrice),
         quantity: clampInteger(item.quantity),
+        infinite: Boolean(item.infinite),
         lowStock: clampInteger(item.lowStock ?? 5),
+        barcode: String(item.barcode || ""),
         createdAt: item.createdAt || new Date().toISOString(),
         updatedAt: item.updatedAt || new Date().toISOString(),
         addedBy: item.addedBy || null
@@ -4505,8 +4555,10 @@ body.dark-mode .modal::backdrop {
   function renderSummary() {
     const totals = store.items.reduce(
       (acc, item) => {
-        acc.stockValue += item.buyPrice * item.quantity;
-        acc.potentialProfit += (item.sellPrice - item.buyPrice) * item.quantity;
+        if (!isInfiniteStock(item)) {
+          acc.stockValue += item.buyPrice * item.quantity;
+          acc.potentialProfit += (item.sellPrice - item.buyPrice) * item.quantity;
+        }
         if (isLowStock(item)) {
           acc.lowStock += 1;
         }
@@ -5051,7 +5103,7 @@ body.dark-mode .modal::backdrop {
         return;
       }
       document.getElementById("barcodeStockItemName").textContent = item.name;
-      document.getElementById("barcodeStockCurrent").textContent = String(item.quantity);
+      document.getElementById("barcodeStockCurrent").textContent = isInfiniteStock(item) ? "\u221E" : String(item.quantity);
       document.getElementById("barcodeStockQty").value = "1";
       elements.barcodeStockForm.dataset.itemId = item.id;
       openModal(elements.barcodeStockDialog);
@@ -5462,13 +5514,15 @@ body.dark-mode .modal::backdrop {
       return;
     }
 
-    if (item.quantity < sale.quantity) {
+    if (!isInfiniteStock(item) && item.quantity < sale.quantity) {
       showToast(`Not enough stock for ${item.name}. Need ${sale.quantity}, have ${item.quantity}.`);
       return;
     }
 
-    item.quantity -= sale.quantity;
-    item.updatedAt = new Date().toISOString();
+    if (!isInfiniteStock(item)) {
+      item.quantity -= sale.quantity;
+      item.updatedAt = new Date().toISOString();
+    }
     sale.paymentStatus = "paid";
     sale.confirmedAt = new Date().toISOString();
     sale.confirmedBy = currentUser.id;
@@ -5697,6 +5751,7 @@ body.dark-mode .modal::backdrop {
   }
 
   function renderEvents() {
+    populateEventItems();
     const events = [...store.events].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
 
     if (!events.length) {
@@ -5718,6 +5773,7 @@ body.dark-mode .modal::backdrop {
             <span class="badge ${status === "active" ? "success" : status === "ended" ? "danger" : "warning"}">${status === "active" ? "Active" : status === "ended" ? "Ended" : "Upcoming"}</span>
           </div>
           <p class="event-card-details">${escapeHtml(event.details || "No extra details provided.")}</p>
+          <p class="event-card-items">${eventItemSummary(event)}</p>
           <div class="event-metrics">
             <div class="event-metric"><span>Sales</span><strong>${summary.sales}</strong></div>
             <div class="event-metric"><span>Units</span><strong>${summary.units}</strong></div>
@@ -5728,6 +5784,7 @@ body.dark-mode .modal::backdrop {
             <div class="event-actions">
               ${status !== "active" && status !== "ended" ? `<button type="button" class="primary-button" data-event-action="start" data-event-id="${event.id}">Start event</button>` : ""}
               ${status === "active" ? `<button type="button" class="secondary-button" data-event-action="end" data-event-id="${event.id}">End event</button>` : ""}
+              <button type="button" class="secondary-button" data-event-action="edit" data-event-id="${event.id}">Edit</button>
               <button type="button" class="danger-button" data-event-action="delete" data-event-id="${event.id}">Remove</button>
             </div>
           ` : ""}
@@ -5782,6 +5839,50 @@ body.dark-mode .modal::backdrop {
   function clearEventForm() {
     elements.eventForm.reset();
     elements.eventId.value = "";
+    populateEventItems();
+  }
+
+  function populateEventItems(event) {
+    if (!elements.eventItems) return;
+    const target = event || findEvent(elements.eventId.value);
+    const currentSelection = Array.from(elements.eventItems.selectedOptions || []).map((opt) => opt.value);
+    const selectedIds = target
+      ? Array.isArray(target.itemIds) ? target.itemIds : []
+      : currentSelection;
+    elements.eventItems.innerHTML = store.items
+      .length
+      ? store.items.map((item) => `<option value="${item.id}" title="${escapeHtml(item.category)}">${escapeHtml(item.name)} (${formatStockQuantity(item)} left)</option>`).join("")
+      : `<option value="" disabled>No stock items yet.</option>`;
+    for (const option of elements.eventItems.options) {
+      option.selected = selectedIds.includes(option.value);
+    }
+  }
+
+  function populateEventForm(event) {
+    elements.eventId.value = event.id;
+    elements.eventName.value = event.name;
+    elements.eventStart.value = formatDatetimeLocal(new Date(event.startAt));
+    elements.eventLocation.value = event.location;
+    elements.eventDetails.value = event.details || "";
+    populateEventItems(event);
+  }
+
+  function eventItemSummary(event) {
+    const ids = Array.isArray(event.itemIds) ? event.itemIds : [];
+    if (!ids.length) return "Sells all items";
+    const names = ids
+      .map((id) => store.items.find((item) => item.id === id))
+      .filter(Boolean)
+      .map((item) => item.name);
+    if (!names.length) return "Selected items no longer exist";
+    return "Sells: " + names.join(", ");
+  }
+
+  function getActiveEventSaleItemIds() {
+    const active = [...store.events].find((event) => getEventStatus(event) === "active");
+    if (!active) return null;
+    const ids = Array.isArray(active.itemIds) ? active.itemIds : [];
+    return ids.length ? ids : null;
   }
 
   function handleSaveEvent(event) {
@@ -5795,6 +5896,7 @@ body.dark-mode .modal::backdrop {
     const startAt = elements.eventStart.value;
     const location = elements.eventLocation.value.trim();
     const details = elements.eventDetails.value.trim();
+    const itemIds = Array.from(elements.eventItems.selectedOptions || []).map((opt) => opt.value);
 
     if (!name || !startAt || !location) {
       showToast("Add an event name, start time, and location.");
@@ -5818,6 +5920,7 @@ body.dark-mode .modal::backdrop {
       event.startAt = parsedStart.toISOString();
       event.location = location;
       event.details = details;
+      event.itemIds = itemIds;
       event.updatedAt = new Date().toISOString();
     } else {
       store.events.push({
@@ -5826,6 +5929,7 @@ body.dark-mode .modal::backdrop {
         startAt: parsedStart.toISOString(),
         location,
         details,
+        itemIds,
         status: "scheduled",
         createdAt: new Date().toISOString(),
         startedAt: null,
@@ -5886,6 +5990,13 @@ body.dark-mode .modal::backdrop {
       return;
     }
 
+    if (button.dataset.eventAction === "edit") {
+      populateEventForm(eventItem);
+      setActiveTab("events");
+      elements.eventName.focus();
+      return;
+    }
+
     if (button.dataset.eventAction === "delete") {
       if (!window.confirm(`Remove event "${eventItem.name}"?`)) {
         return;
@@ -5915,12 +6026,15 @@ body.dark-mode .modal::backdrop {
   function handleSaveItem(event) {
     event.preventDefault();
     const itemId = elements.itemId.value;
+    const quantityRaw = elements.quantity.value.trim();
+    const infinite = elements.itemInfinite.checked || /^infinite$/i.test(quantityRaw);
     const itemData = {
       name: elements.itemName.value.trim(),
       category: elements.itemCategory.value.trim() || "General",
       buyPrice: getMoneyInput(elements.buyPrice),
       sellPrice: getMoneyInput(elements.sellPrice),
-      quantity: getIntegerInput(elements.quantity),
+      quantity: infinite ? 0 : getIntegerInput(elements.quantity),
+      infinite,
       lowStock: getIntegerInput(elements.lowStock),
       barcode: elements.itemBarcode.value.trim(),
       updatedAt: new Date().toISOString()
@@ -5934,6 +6048,10 @@ body.dark-mode .modal::backdrop {
       showToast("Selling price is below bought price.");
       return;
     }
+    if (!infinite && (!Number.isFinite(itemData.quantity) || itemData.quantity < 0)) {
+      showToast("Enter a current stock quantity (or use INFINITE).");
+      return;
+    }
 
     if (itemId) {
       const item = findItem(itemId);
@@ -5941,7 +6059,7 @@ body.dark-mode .modal::backdrop {
         showToast("That item could not be found.");
         return;
       }
-      const quantityChange = itemData.quantity - item.quantity;
+      const quantityChange = infinite ? 0 : itemData.quantity - item.quantity;
       Object.assign(item, itemData);
       logStockEvent({
         item,
@@ -5963,7 +6081,7 @@ body.dark-mode .modal::backdrop {
         action: "Created item",
         quantity: item.quantity
       });
-      logUserEvent("Created stock item", `${item.name} (qty: ${item.quantity}, sell: ${money.format(item.sellPrice)})`);
+      logUserEvent("Created stock item", `${item.name} (qty: ${isInfiniteStock(item) ? "infinite" : item.quantity}, sell: ${money.format(item.sellPrice)})`);
       showToast(`${item.name} added to stock.`);
     }
 
@@ -6038,11 +6156,11 @@ body.dark-mode .modal::backdrop {
           <td>${money.format(item.buyPrice)}</td>
           <td>${money.format(item.sellPrice)}</td>
           <td>${money.format(roundMoney(profitEach))}</td>
-          <td>${item.quantity}</td>
+          <td>${formatStockQuantity(item)}</td>
           <td>${stockStatusBadge(item)}</td>
           <td>
             <div class="actions-row">
-              <button type="button" class="icon-button" data-action="add" data-id="${item.id}" title="Add stock">+ Stock</button>
+              ${isInfiniteStock(item) ? "" : `<button type="button" class="icon-button" data-action="add" data-id="${item.id}" title="Add stock">+ Stock</button>`}
               <button type="button" class="icon-button" data-action="edit" data-id="${item.id}" title="Edit item">Edit</button>
             </div>
           </td>
@@ -6089,7 +6207,8 @@ body.dark-mode .modal::backdrop {
     elements.itemCategory.value = item.category;
     elements.buyPrice.value = item.buyPrice.toFixed(2);
     elements.sellPrice.value = item.sellPrice.toFixed(2);
-    elements.quantity.value = item.quantity;
+    elements.quantity.value = isInfiniteStock(item) ? "" : item.quantity;
+    elements.itemInfinite.checked = isInfiniteStock(item);
     elements.lowStock.value = item.lowStock;
     elements.itemBarcode.value = item.barcode || "";
     elements.itemForm.querySelector("button[type='submit']").textContent = "Update item";
@@ -6158,24 +6277,28 @@ body.dark-mode .modal::backdrop {
 
   function renderSellGrid() {
     const query = elements.sellSearch.value.trim().toLowerCase();
-    const items = sortedItems().filter((item) => itemMatches(item, query));
+    const eventItemIds = getActiveEventSaleItemIds();
+    const items = sortedItems()
+      .filter((item) => !eventItemIds || eventItemIds.includes(item.id))
+      .filter((item) => itemMatches(item, query));
 
     if (!items.length) {
-      elements.sellGrid.innerHTML = `<div class="empty-state">No items match that search.</div>`;
+      elements.sellGrid.innerHTML = `<div class="empty-state">${eventItemIds ? "No items available for the active event." : "No items match that search."}</div>`;
       return;
     }
 
     elements.sellGrid.innerHTML = items.map((item) => {
-      const disabled = item.quantity <= 0 ? "disabled" : "";
+      const infinite = isInfiniteStock(item);
+      const disabled = infinite ? "" : (item.quantity <= 0 ? "disabled" : "");
       const reservedQty = basket.reduce((sum, line) => line.itemId === item.id ? sum + line.quantity : sum, 0);
-      const availableQty = Math.max(0, item.quantity - reservedQty);
+      const availableQty = infinite ? Infinity : Math.max(0, item.quantity - reservedQty);
       const availableDisabled = availableQty <= 0 ? "disabled" : "";
       return `
         <button type="button" class="sell-card sell-card-button" data-sell-id="${item.id}" ${disabled || availableDisabled}>
           <span class="sell-card-name">${escapeHtml(item.name)}</span>
           <span class="sell-card-meta">${escapeHtml(item.category)}</span>
           <span class="sell-card-price">${money.format(item.sellPrice)}</span>
-          <span class="sell-card-stock">${availableQty} left</span>
+          <span class="sell-card-stock">${infinite ? "∞ left" : availableQty + " left"}</span>
           ${stockStatusBadge(item)}
         </button>
       `;
@@ -6194,7 +6317,7 @@ body.dark-mode .modal::backdrop {
     }
 
     const reservedQty = basket.reduce((sum, line) => line.itemId === item.id ? sum + line.quantity : sum, 0);
-    const availableQty = item.quantity - reservedQty;
+    const availableQty = isInfiniteStock(item) ? Infinity : item.quantity - reservedQty;
     if (availableQty <= 0) {
       showToast(`${item.name} is out of stock.`);
       return;
@@ -6254,7 +6377,7 @@ body.dark-mode .modal::backdrop {
     }
 
     const reservedQty = basket.reduce((sum, line) => line.itemId === item.id ? sum + line.quantity : sum, 0);
-    const availableQty = item.quantity - reservedQty;
+    const availableQty = isInfiniteStock(item) ? Infinity : item.quantity - reservedQty;
     const rawQuantity = String(elements.sellQuantity.value || "").trim();
     const quantity = rawQuantity ? getIntegerInput(elements.sellQuantity) : 1;
     if (quantity <= 0) {
@@ -6362,7 +6485,7 @@ body.dark-mode .modal::backdrop {
     const sales = [];
     for (const line of draft.items) {
       const item = findItem(line.itemId);
-      if (!item || line.quantity > item.quantity) {
+      if (!item || (!isInfiniteStock(item) && line.quantity > item.quantity)) {
         showToast(`Could not complete checkout because ${line.itemName} no longer has enough stock.`);
         closeModal(elements.paymentDialog);
         return;
@@ -6392,7 +6515,7 @@ body.dark-mode .modal::backdrop {
     if (paymentMethod === "cash") {
       for (const line of draft.items) {
         const item = findItem(line.itemId);
-        if (item) {
+        if (item && !isInfiniteStock(item)) {
           item.quantity -= line.quantity;
           item.updatedAt = new Date().toISOString();
         }
@@ -6414,7 +6537,6 @@ body.dark-mode .modal::backdrop {
       renderSellGrid();
       renderAll();
       logUserEvent("Recorded sale", `${sales.length} item(s), ${money.format(roundMoney(draft.total))} cash`);
-      showReceiptDialog(draft);
       const saleIds = sales.map((s) => s.id);
       const summary = `${sales.length} item(s), ${money.format(roundMoney(draft.total))} cash`;
       startUndoSaleTimer(saleIds, summary);
@@ -6562,7 +6684,7 @@ body.dark-mode .modal::backdrop {
 
     for (const sale of salesToUndo) {
       const item = store.items.find((i) => i.id === sale.itemId);
-      if (item) {
+      if (item && !isInfiniteStock(item)) {
         item.quantity += sale.quantity;
         item.updatedAt = new Date().toISOString();
       }
@@ -7361,6 +7483,9 @@ body.dark-mode .modal::backdrop {
   }
 
   function stockWeight(item) {
+    if (isInfiniteStock(item)) {
+      return 2;
+    }
     if (item.quantity === 0) {
       return 0;
     }
@@ -7370,11 +7495,25 @@ body.dark-mode .modal::backdrop {
     return 2;
   }
 
+  function isInfiniteStock(item) {
+    return Boolean(item && item.infinite);
+  }
+
+  function formatStockQuantity(item) {
+    return isInfiniteStock(item) ? "\u221E" : String(item.quantity);
+  }
+
   function isLowStock(item) {
+    if (isInfiniteStock(item)) {
+      return false;
+    }
     return item.quantity <= item.lowStock;
   }
 
   function stockStatusBadge(item) {
+    if (isInfiniteStock(item)) {
+      return `<span class="badge">Infinite</span>`;
+    }
     if (item.quantity === 0) {
       return `<span class="badge danger">Out</span>`;
     }
