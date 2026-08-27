@@ -3212,23 +3212,27 @@ body.dark-mode .modal::backdrop {
 
   <dialog id="sumupApiDialog" class="modal">
     <form id="sumupApiForm" method="dialog">
-      <h3>SumUp API Configuration</h3>
-      <p>Enter the full URL for a SumUp reporting endpoint that returns JSON with a total/amount/gross field.</p>
+      <h3>SumUp Configuration</h3>
+      <p>The API settings are optional and only used for the reporting/balance features. Payments via the SumUp app need only the Affiliate Key (and App ID on Android).</p>
       <label>
         API URL
         <input id="sumupApiUrlInput" type="url" placeholder="https://api.sumup.com/v0.1/..." autocomplete="off">
       </label>
       <label>
-        API Key
+        API Key (optional)
         <input id="sumupApiKeyInput" type="password" placeholder="sk_live_..." autocomplete="off">
       </label>
       <label>
-        Merchant Code
+        Merchant Code (optional)
         <input id="sumupMerchantCodeInput" type="text" placeholder="MH4H92C7" autocomplete="off">
       </label>
       <label>
         Affiliate Key
         <input id="sumupAffiliateKeyInput" type="text" placeholder="Your affiliate key" autocomplete="off">
+      </label>
+      <label>
+        App ID (Android only, optional)
+        <input id="sumupAppIdInput" type="text" placeholder="com.example.myapp" autocomplete="off">
       </label>
       <div id="sumupApiTestResult" class="alert-card is-hidden" aria-live="polite"></div>
       <div class="modal-actions">
@@ -3539,6 +3543,7 @@ body.dark-mode .modal::backdrop {
     elements.sumupApiKeyInput = document.querySelector("#sumupApiKeyInput");
     elements.sumupMerchantCodeInput = document.querySelector("#sumupMerchantCodeInput");
     elements.sumupAffiliateKeyInput = document.querySelector("#sumupAffiliateKeyInput");
+    elements.sumupAppIdInput = document.querySelector("#sumupAppIdInput");
     elements.sumupApiTestResult = document.querySelector("#sumupApiTestResult");
     elements.cancelSumupApiButton = document.querySelector("#cancelSumupApiButton");
     elements.testSumupApiDialogButton = document.querySelector("#testSumupApiDialogButton");
@@ -3979,6 +3984,7 @@ body.dark-mode .modal::backdrop {
         sumupApiKey: "",
         sumupMerchantCode: "",
         affiliateKey: "",
+        appId: "",
         cashRemovalCode: "CASHOUT"
       },
       meta: {
@@ -4059,6 +4065,7 @@ body.dark-mode .modal::backdrop {
       sumupApiKey: String(value.apiConfig?.sumupApiKey || ""),
       sumupMerchantCode: String(value.apiConfig?.sumupMerchantCode || ""),
       affiliateKey: String(value.apiConfig?.affiliateKey || ""),
+      appId: String(value.apiConfig?.appId || ""),
       cashRemovalCode: String(value.apiConfig?.cashRemovalCode || "CASHOUT")
     };
     next.meta = {
@@ -5479,7 +5486,7 @@ body.dark-mode .modal::backdrop {
       return;
     }
     if (!apiKey) {
-      showToast("No SumUp API key configured. Click Configure API URL and enter your key.");
+      showToast("No SumUp API key configured. It is optional, but the reporting endpoint may require one. Enter it in the SumUp configuration to continue.");
       return;
     }
 
@@ -6180,10 +6187,12 @@ body.dark-mode .modal::backdrop {
     const apiKey = store.apiConfig?.sumupApiKey || "";
     const merchantCode = store.apiConfig?.sumupMerchantCode || "";
     const affiliateKey = store.apiConfig?.affiliateKey || "";
+    const appId = store.apiConfig?.appId || "";
     elements.sumupApiUrlInput.value = url;
     elements.sumupApiKeyInput.value = apiKey;
     elements.sumupMerchantCodeInput.value = merchantCode;
     elements.sumupAffiliateKeyInput.value = affiliateKey;
+    elements.sumupAppIdInput.value = appId;
     elements.sumupApiTestResult.classList.add("is-hidden");
     elements.sumupApiTestResult.textContent = "";
     openModal(elements.sumupApiDialog);
@@ -6272,6 +6281,7 @@ body.dark-mode .modal::backdrop {
     const apiKey = elements.sumupApiKeyInput.value.trim();
     const merchantCode = elements.sumupMerchantCodeInput.value.trim();
     const affiliateKey = elements.sumupAffiliateKeyInput.value.trim();
+    const appId = elements.sumupAppIdInput.value.trim();
 
     if (url) {
       try {
@@ -6287,6 +6297,7 @@ body.dark-mode .modal::backdrop {
     store.apiConfig.sumupApiKey = apiKey;
     store.apiConfig.sumupMerchantCode = merchantCode;
     store.apiConfig.affiliateKey = affiliateKey;
+    store.apiConfig.appId = appId;
     scheduleSave();
     closeModal(elements.sumupApiDialog);
     renderSumupApiConfig();
@@ -7128,14 +7139,51 @@ body.dark-mode .modal::backdrop {
     }
   }
 
+  function getMobileOS() {
+    const ua = navigator.userAgent || "";
+    const uaData = navigator.userAgentData;
+    const platform = String((uaData && uaData.platform) || navigator.platform || "");
+    const isTouch = (navigator.maxTouchPoints || 0) > 1;
+    if (/Mac|iPhone|iPod/.test(platform) || /Mac/.test(platform) && isTouch) {
+      return "ios";
+    }
+    if (/Android/i.test(ua)) {
+      return "android";
+    }
+    return "other";
+  }
+
   function openSumUpPayment(amount) {
     const pounds = Number(amount || 0);
     const sumUpAmount = pounds.toFixed(2);
     const affiliateKey = (store.apiConfig?.affiliateKey || "").trim();
-    let sumUpUrl = `sumupmerchant://pay/1.0?amount=${sumUpAmount}&total=${sumUpAmount}&currency=GBP&title=Porty%20Tuck%20Sale`;
+    const appId = (store.apiConfig?.appId || "").trim();
+    const os = getMobileOS();
+
+    let foreignTxId = "";
+    try {
+      foreignTxId = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : "";
+    } catch (e) {
+      foreignTxId = "";
+    }
+
+    let sumUpUrl;
+    if (os === "android") {
+      sumUpUrl = `sumupmerchant://pay/1.0?total=${sumUpAmount}`;
+      if (appId) {
+        sumUpUrl += `&app-id=${encodeURIComponent(appId)}`;
+      }
+    } else {
+      sumUpUrl = `sumupmerchant://pay/1.0?amount=${sumUpAmount}`;
+    }
+    sumUpUrl += `&currency=GBP&title=Porty%20Tuck%20Sale`;
     if (affiliateKey) {
       sumUpUrl += `&affiliate-key=${encodeURIComponent(affiliateKey)}`;
     }
+    if (foreignTxId) {
+      sumUpUrl += `&foreign-tx-id=${foreignTxId}`;
+    }
+
     try {
       window.location.href = sumUpUrl;
       setTimeout(() => {

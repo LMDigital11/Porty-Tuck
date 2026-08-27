@@ -27,6 +27,7 @@ interface StoreDocument {
     sumupApiKey: string;
     sumupMerchantCode: string;
     affiliateKey: string;
+    appId: string;
     cashRemovalCode: string;
   };
   meta: {
@@ -628,6 +629,7 @@ function blankStore(): StoreDocument {
       sumupApiKey: "",
       sumupMerchantCode: "",
       affiliateKey: "",
+      appId: "",
       cashRemovalCode: "",
     },
     money: {
