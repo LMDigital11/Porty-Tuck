@@ -394,12 +394,61 @@ button.is-loading::after {
 
 .item-form {
   display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  padding: 18px;
+  gap: 16px;
+  padding: 20px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.82);
 }
+
+.item-form-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.item-form-group-label {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+
+.item-form-group > .check-toggle {
+  grid-column: 1 / -1;
+}
+
+.inline-field {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.inline-field input {
+  flex: 1;
+}
+
+.item-form-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.item-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 
 .form-grid {
   display: grid;
@@ -1204,7 +1253,7 @@ tbody tr:last-child td {
     grid-template-columns: repeat(2, minmax(150px, 1fr));
   }
 
-  .item-form {
+  .item-form-group {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
 }
@@ -1249,7 +1298,8 @@ tbody tr:last-child td {
 
   .summary-grid,
   .admin-grid,
-  .item-form {
+  .item-form,
+  .item-form-group {
     grid-template-columns: 1fr;
   }
 
@@ -1807,51 +1857,68 @@ body.dark-mode .modal::backdrop {
 
         <form id="itemForm" class="item-form">
           <input id="itemId" type="hidden">
-          <label>
-            Item name
-            <input id="itemName" type="text" required placeholder="Chocolate bar">
-          </label>
-          <label>
-            Category
-            <input id="itemCategory" type="text" placeholder="Snacks">
-          </label>
-          <label>
-            Bought price
-            <input id="buyPrice" type="text" inputmode="decimal" required placeholder="0.30">
-          </label>
-          <label>
-            Selling price
-            <input id="sellPrice" type="text" inputmode="decimal" required placeholder="0.60">
-          </label>
-          <label>
-            Current stock
-            <input id="quantity" type="text" inputmode="numeric" placeholder="25">
-          </label>
-          <label class="check-toggle">
-            <input id="itemInfinite" type="checkbox">
-            <span class="toggle-track" aria-hidden="true"></span>
-            <span class="check-toggle-label">
-              <span class="check-toggle-title">∞ Infinite stock</span>
-              <span class="check-toggle-sub">Never runs out when selling</span>
-            </span>
-          </label>
-          <label>
-            Low stock alert
-            <input id="lowStock" type="text" inputmode="numeric" required value="5">
-          </label>
-          <label>
-            Barcode
-            <div style="display:flex;gap:8px;align-items:center;">
-              <input id="itemBarcode" type="text" placeholder="Scan or enter barcode" autocomplete="off" style="flex:1;">
-              <button type="button" id="scanItemBarcodeButton" class="secondary-button" style="white-space:nowrap;">Scan</button>
-            </div>
-          </label>
-          <div class="form-readout">
-            <span>Profit each</span>
-            <strong id="profitPreview">GBP 0.00</strong>
+
+          <div class="item-form-group">
+            <h4 class="item-form-group-label">Details</h4>
+            <label>
+              Item name
+              <input id="itemName" type="text" required placeholder="Chocolate bar">
+            </label>
+            <label>
+              Category
+              <input id="itemCategory" type="text" placeholder="Snacks">
+            </label>
+            <label>
+              Barcode
+              <div class="inline-field">
+                <input id="itemBarcode" type="text" placeholder="Scan or enter barcode" autocomplete="off">
+                <button type="button" id="scanItemBarcodeButton" class="secondary-button">Scan</button>
+              </div>
+            </label>
           </div>
-          <button type="submit" class="primary-button">Save item</button>
-          <button type="button" id="deleteItemButton" class="danger-button is-hidden">Delete item</button>
+
+          <div class="item-form-group">
+            <h4 class="item-form-group-label">Pricing</h4>
+            <label>
+              Bought price
+              <input id="buyPrice" type="text" inputmode="decimal" required placeholder="0.30">
+            </label>
+            <label>
+              Selling price
+              <input id="sellPrice" type="text" inputmode="decimal" required placeholder="0.60">
+            </label>
+          </div>
+
+          <div class="item-form-group">
+            <h4 class="item-form-group-label">Stock</h4>
+            <label>
+              Current stock
+              <input id="quantity" type="text" inputmode="numeric" placeholder="25">
+            </label>
+            <label>
+              Low stock alert
+              <input id="lowStock" type="text" inputmode="numeric" required value="5">
+            </label>
+            <label class="check-toggle">
+              <input id="itemInfinite" type="checkbox">
+              <span class="toggle-track" aria-hidden="true"></span>
+              <span class="check-toggle-label">
+                <span class="check-toggle-title">∞ Infinite stock</span>
+                <span class="check-toggle-sub">Never runs out when selling</span>
+              </span>
+            </label>
+          </div>
+
+          <div class="item-form-footer">
+            <div class="form-readout">
+              <span>Profit each</span>
+              <strong id="profitPreview">GBP 0.00</strong>
+            </div>
+            <div class="item-form-actions">
+              <button type="submit" class="primary-button">Save item</button>
+              <button type="button" id="deleteItemButton" class="danger-button is-hidden">Delete item</button>
+            </div>
+          </div>
         </form>
 
         <div class="table-toolbar">
