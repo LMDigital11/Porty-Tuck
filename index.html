@@ -392,6 +392,80 @@ button.is-loading::after {
   color: var(--muted);
 }
 
+.money-section {
+  display: grid;
+  gap: 12px;
+}
+
+.money-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.money-section-title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+
+.money-section-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.money-overview {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.82);
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.money-overview-head h4 {
+  margin: 0;
+}
+
+.money-overview-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.money-overview-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.money-total-diff {
+  background: var(--blue-soft);
+}
+
+.money-total-diff strong {
+  color: var(--blue);
+}
+
+.money-total-diff.positive {
+  background: var(--green-soft);
+}
+
+.money-total-diff.positive strong {
+  color: var(--green);
+}
+
+.money-total-diff.negative {
+  background: var(--coral-soft);
+}
+
+.money-total-diff.negative strong {
+  color: var(--coral);
+}
+
 .item-form {
   display: grid;
   gap: 16px;
@@ -431,6 +505,90 @@ button.is-loading::after {
 
 .inline-field input {
   flex: 1;
+}
+
+.event-items-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.item-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.05s ease;
+}
+
+.item-chip:hover {
+  border-color: var(--green);
+}
+
+.item-chip:active {
+  transform: scale(0.98);
+}
+
+.item-chip .item-chip-check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  color: transparent;
+  transition: all 0.15s ease;
+}
+
+.item-chip .item-chip-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ink);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-chip .item-chip-stock {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.item-chip.selected {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+
+.item-chip.selected .item-chip-check {
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+}
+
+.event-items-empty {
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+@media (max-width: 700px) {
+  .event-items-picker {
+    grid-template-columns: 1fr;
+    max-height: none;
+  }
 }
 
 .item-form-footer {
@@ -1677,6 +1835,55 @@ body.dark-mode .modal::backdrop {
   background: rgba(255,255,255,0.4);
 }
 
+.money-imbalance-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  padding: 9px 16px;
+  animation: bannerSlide 200ms ease;
+}
+
+.money-imbalance-banner.over {
+  background: var(--coral);
+  color: #fff;
+}
+
+.money-imbalance-banner.under {
+  background: var(--amber);
+  color: #1a1a2e;
+}
+
+.money-imbalance-copy {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  min-height: 0;
+  padding: 0;
+}
+
+.money-imbalance-icon {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.money-imbalance-banner.is-hidden {
+  display: none;
+}
+
 .rate-limit-timer {
   color: #d32f2f;
   font-size: 0.82rem;
@@ -1707,6 +1914,12 @@ body.dark-mode .modal::backdrop {
   <div id="lowStockBanner" class="status-banner banner-low-stock is-hidden" role="status"></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <div id="eventBanner" class="event-banner is-hidden" role="status" aria-live="polite"></div>
+  <div id="moneyImbalanceBanner" class="money-imbalance-banner is-hidden" role="alert" aria-live="polite">
+    <button type="button" id="moneyImbalanceBannerButton" class="money-imbalance-copy">
+      <span class="money-imbalance-icon" aria-hidden="true"></span>
+      <span id="moneyImbalanceBannerText"></span>
+    </button>
+  </div>
 
   <main class="login-view" id="loginView">
     <section class="login-panel">
@@ -2030,9 +2243,8 @@ body.dark-mode .modal::backdrop {
             </label>
             <label>
               Items for sale during event
-              <select id="eventItems" multiple size="6" style="width:100%;">
-              </select>
-              <span class="field-hint">Choose which items are available in the Selling tab while this event is active. Hold Ctrl/Cmd to select several. Leave empty to sell all items.</span>
+              <div class="event-items-picker" id="eventItems"></div>
+              <span class="field-hint">Choose which items are available in the Selling tab while this event is active. Leave empty to sell all items.</span>
             </label>
             <div class="form-actions">
               <button type="submit" class="primary-button">Save event</button>
@@ -2084,23 +2296,52 @@ body.dark-mode .modal::backdrop {
           </div>
         </div>
 
-        <div class="admin-grid">
-          <article class="admin-card">
-            <span>Expected cash</span>
-            <strong id="moneyExpectedCash">GBP 0.00</strong>
-          </article>
-          <article class="admin-card">
-            <span>Actual cash</span>
-            <strong id="moneyActualCash">GBP 0.00</strong>
-          </article>
-          <article class="admin-card">
-            <span>Expected SumUp</span>
-            <strong id="moneyExpectedSumup">GBP 0.00</strong>
-          </article>
-          <article class="admin-card">
-            <span>Actual SumUp</span>
-            <strong id="moneyActualSumup">GBP 0.00</strong>
-          </article>
+        <div class="money-overview">
+          <div class="money-overview-head">
+            <div>
+              <h4>Overall position</h4>
+              <p>Expected sales totals vs. the actual money recorded in each float.</p>
+            </div>
+          </div>
+          <div class="money-overview-row">
+            <div class="form-readout">
+              <span>Expected total</span>
+              <strong id="moneyExpectedTotal">GBP 0.00</strong>
+            </div>
+            <div class="form-readout">
+              <span>Actual total</span>
+              <strong id="moneyActualTotal">GBP 0.00</strong>
+            </div>
+            <div class="form-readout money-total-diff" id="moneyTotalDifferenceBox">
+              <span>Total difference</span>
+              <strong id="moneyTotalDifference">GBP 0.00</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="money-section">
+          <div class="money-section-head">
+            <h4 class="money-section-title">Floats</h4>
+            <p class="money-section-desc">The current expected and actual amounts for cash and SumUp.</p>
+          </div>
+          <div class="admin-grid">
+            <article class="admin-card">
+              <span>Expected cash</span>
+              <strong id="moneyExpectedCash">GBP 0.00</strong>
+            </article>
+            <article class="admin-card">
+              <span>Actual cash</span>
+              <strong id="moneyActualCash">GBP 0.00</strong>
+            </article>
+            <article class="admin-card">
+              <span>Expected SumUp</span>
+              <strong id="moneyExpectedSumup">GBP 0.00</strong>
+            </article>
+            <article class="admin-card">
+              <span>Actual SumUp</span>
+              <strong id="moneyActualSumup">GBP 0.00</strong>
+            </article>
+          </div>
         </div>
 
         <div class="split-layout">
@@ -2277,7 +2518,6 @@ body.dark-mode .modal::backdrop {
           </section>
         </section>
 
-        <div id="moneyAlert" class="alert-card is-hidden success" aria-live="polite"></div>
       </section>
 
       <section class="tab-panel is-hidden" id="adminTab" data-panel="admin">
@@ -3194,7 +3434,9 @@ body.dark-mode .modal::backdrop {
     elements.enterSumupButton = document.querySelector("#enterSumupButton");
     elements.removeSumupButton = document.querySelector("#removeSumupButton");
     elements.fetchSumupButton = document.querySelector("#fetchSumupButton");
-    elements.moneyAlert = document.querySelector("#moneyAlert");
+    elements.moneyImbalanceBanner = document.querySelector("#moneyImbalanceBanner");
+    elements.moneyImbalanceBannerText = document.querySelector("#moneyImbalanceBannerText");
+    elements.moneyImbalanceBannerButton = document.querySelector("#moneyImbalanceBannerButton");
     elements.reconcileCashButton = document.querySelector("#reconcileCashButton");
     elements.cashDrawerLastText = document.querySelector("#cashDrawerLastText");
     elements.cashDrawerHistory = document.querySelector("#cashDrawerHistory");
@@ -3382,8 +3624,10 @@ body.dark-mode .modal::backdrop {
     elements.sellSearch.addEventListener("input", renderSellGrid);
     elements.eventForm.addEventListener("submit", handleSaveEvent);
     elements.clearEventFormButton.addEventListener("click", clearEventForm);
+    elements.eventItems.addEventListener("click", handleEventItemsClick);
     elements.eventsList.addEventListener("click", handleEventAction);
     elements.eventBanner.addEventListener("click", handleActiveEventBanner);
+    elements.moneyImbalanceBannerButton.addEventListener("click", () => setActiveTab("money"));
     elements.stockTableBody.addEventListener("click", handleStockAction);
     elements.sellGrid.addEventListener("click", handleSellAction);
 
@@ -4725,8 +4969,28 @@ body.dark-mode .modal::backdrop {
     };
   }
 
+  function renderMoneyImbalanceBanner({ totalDifference }) {
+    const banner = elements.moneyImbalanceBanner;
+    if (!banner || !isAdmin()) {
+      if (banner) banner.classList.add("is-hidden");
+      return;
+    }
+    if (totalDifference === 0) {
+      banner.classList.add("is-hidden");
+      return;
+    }
+    const sign = totalDifference < 0 ? "under" : "over";
+    const signText = totalDifference < 0 ? "short" : "over";
+    elements.moneyImbalanceBannerText.textContent =
+      `Money mismatch: the till is ${signText} by ${money.format(Math.abs(totalDifference))} vs. recorded sales. Tap to review cash & SumUp.`;
+    banner.classList.remove("is-hidden");
+    banner.dataset.sign = sign;
+    banner.classList.toggle("over", totalDifference > 0);
+    banner.classList.toggle("under", totalDifference < 0);
+  }
+
   function renderMoneyTab() {
-    if (!elements.moneyAlert) {
+    if (!elements.moneyImbalanceBanner) {
       return;
     }
 
@@ -4744,14 +5008,16 @@ body.dark-mode .modal::backdrop {
     document.getElementById("moneyCashDifference").textContent = money.format(cashDifference);
     document.getElementById("moneySumupDifference").textContent = money.format(sumupDifference);
 
-    const alertText = totalDifference === 0
-      ? "Money matches the recorded sales totals."
-      : `Money does not match. Total difference is ${money.format(totalDifference)}.`;
+    const actualTotal = roundMoney(actualCash + actualSumup);
+    document.getElementById("moneyExpectedTotal").textContent = money.format(expected.totalExpected);
+    document.getElementById("moneyActualTotal").textContent = money.format(actualTotal);
+    document.getElementById("moneyTotalDifference").textContent = money.format(totalDifference);
 
-    elements.moneyAlert.textContent = alertText;
-    elements.moneyAlert.classList.toggle("is-hidden", totalDifference === 0);
-    elements.moneyAlert.classList.toggle("success", totalDifference === 0);
-    elements.moneyAlert.classList.toggle("warning", totalDifference !== 0);
+    const diffBox = document.getElementById("moneyTotalDifferenceBox");
+    diffBox.classList.toggle("positive", totalDifference > 0);
+    diffBox.classList.toggle("negative", totalDifference < 0);
+
+    renderMoneyImbalanceBanner({ cashDifference, sumupDifference, totalDifference });
 
     renderSumupApiConfig();
     renderPendingSumupSales();
@@ -5975,20 +6241,35 @@ body.dark-mode .modal::backdrop {
     populateEventItems();
   }
 
+  function handleEventItemsClick(event) {
+    const chip = event.target.closest(".item-chip");
+    if (!chip) return;
+    chip.classList.toggle("selected");
+  }
+
   function populateEventItems(event) {
     if (!elements.eventItems) return;
     const target = event || findEvent(elements.eventId.value);
-    const currentSelection = Array.from(elements.eventItems.selectedOptions || []).map((opt) => opt.value);
+    const currentSelection = Array.from(
+      elements.eventItems.querySelectorAll(".item-chip.selected")
+    ).map((chip) => chip.dataset.id);
     const selectedIds = target
       ? Array.isArray(target.itemIds) ? target.itemIds : []
       : currentSelection;
-    elements.eventItems.innerHTML = store.items
-      .length
-      ? store.items.map((item) => `<option value="${item.id}" title="${escapeHtml(item.category)}">${escapeHtml(item.name)} (${formatStockQuantity(item)} left)</option>`).join("")
-      : `<option value="" disabled>No stock items yet.</option>`;
-    for (const option of elements.eventItems.options) {
-      option.selected = selectedIds.includes(option.value);
-    }
+    elements.eventItems.innerHTML = store.items.length
+      ? store.items
+          .map((item) => {
+            const selected = selectedIds.includes(item.id);
+            return `
+              <button type="button" class="item-chip ${selected ? "selected" : ""}" data-id="${item.id}" title="${escapeHtml(item.category)}">
+                <span class="item-chip-check" aria-hidden="true">✓</span>
+                <span class="item-chip-name">${escapeHtml(item.name)}</span>
+                <span class="item-chip-stock">${formatStockQuantity(item)} left</span>
+              </button>
+            `;
+          })
+          .join("")
+      : `<span class="event-items-empty">No stock items yet.</span>`;
   }
 
   function populateEventForm(event) {
@@ -6029,7 +6310,9 @@ body.dark-mode .modal::backdrop {
     const startAt = elements.eventStart.value;
     const location = elements.eventLocation.value.trim();
     const details = elements.eventDetails.value.trim();
-    const itemIds = Array.from(elements.eventItems.selectedOptions || []).map((opt) => opt.value);
+    const itemIds = Array.from(
+      elements.eventItems.querySelectorAll(".item-chip.selected")
+    ).map((chip) => chip.dataset.id);
 
     if (!name || !startAt || !location) {
       showToast("Add an event name, start time, and location.");
