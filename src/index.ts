@@ -10,6 +10,7 @@ interface StoreDocument {
   stockEvents: any[];
   events: any[];
   userEvents: any[];
+  orders: any[];
   lifetime: {
     revenue: number;
     cost: number;
@@ -100,6 +101,7 @@ const SECTIONS = [
   "stockEvents",
   "events",
   "userEvents",
+  "orders",
   "config",
 ] as const;
 
@@ -617,6 +619,7 @@ function blankStore(): StoreDocument {
     stockEvents: [],
     events: [],
     userEvents: [],
+    orders: [],
     lifetime: {
       revenue: 0,
       cost: 0,
@@ -670,6 +673,7 @@ function normalizeStore(store: unknown): StoreDocument {
     stockEvents: Array.isArray(source.stockEvents) ? source.stockEvents : [],
     events: Array.isArray(source.events) ? source.events : [],
     userEvents: Array.isArray(source.userEvents) ? source.userEvents : [],
+    orders: Array.isArray(source.orders) ? source.orders : [],
     lifetime: {
       ...base.lifetime,
       ...(source.lifetime ?? {}),
@@ -1118,6 +1122,7 @@ export default {
         normalized.stockEvents = incoming.stockEvents;
         normalized.events = incoming.events;
         normalized.userEvents = incoming.userEvents;
+        normalized.orders = incoming.orders;
         normalized.lifetime = incoming.lifetime;
         normalized.money = incoming.money;
         normalized.apiConfig = incoming.apiConfig;

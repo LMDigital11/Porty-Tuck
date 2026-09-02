@@ -1136,6 +1136,153 @@ tbody tr:last-child td {
   font-weight: 800;
 }
 
+.orders-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.order-item-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.order-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.84);
+  text-align: left;
+}
+
+.order-pick:hover,
+.order-pick:focus-visible {
+  border-color: rgba(33, 110, 78, 0.38);
+  background: var(--green-soft);
+}
+
+.order-pick.is-selected {
+  border-color: var(--green);
+  background: var(--green-soft);
+  box-shadow: 0 0 0 2px rgba(33, 110, 78, 0.28);
+}
+
+.order-pick:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.order-pick-name {
+  font-weight: 800;
+  font-size: 0.86rem;
+  line-height: 1.15;
+}
+
+.order-pick-meta {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.order-pick-price {
+  color: var(--green);
+  font-weight: 800;
+  font-size: 0.86rem;
+}
+
+.order-pick-qty {
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin-top: 3px;
+}
+
+.payment-note {
+  margin: 10px 0 4px;
+  font-weight: 800;
+  color: var(--coral);
+}
+
+.order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.order-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.order-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.order-card-header strong {
+  font-size: 0.95rem;
+}
+
+.order-status {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.order-status.pending {
+  background: var(--amber-soft, #fdeeb5);
+  color: var(--amber, #8a6d1f);
+}
+
+.order-status.fulfilled {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.order-card-meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-bottom: 8px;
+}
+
+.order-card-items {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.order-card-items li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.82rem;
+  padding: 2px 0;
+}
+
+.order-card-total {
+  font-weight: 800;
+  font-size: 0.9rem;
+  margin-bottom: 10px;
+}
+
+.order-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 @keyframes cardPulse {
   0% { box-shadow: 0 0 0 0 rgba(33, 110, 78, 0.4); }
   70% { box-shadow: 0 0 0 8px rgba(33, 110, 78, 0); }
@@ -1451,6 +1598,10 @@ tbody tr:last-child td {
   .table-toolbar,
   .split-layout {
     display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .orders-layout {
     grid-template-columns: 1fr;
   }
 
@@ -2000,6 +2151,7 @@ body.dark-mode .modal::backdrop {
       <nav class="nav-tabs" aria-label="Main navigation">
         <button type="button" class="nav-tab is-active" data-tab="stock">Stock</button>
         <button type="button" class="nav-tab" data-tab="sell">Sell</button>
+        <button type="button" class="nav-tab" data-tab="orders">Orders</button>
         <button type="button" class="nav-tab" data-tab="events">Events</button>
         <button type="button" class="nav-tab admin-only" data-tab="money">Money</button>
         <button type="button" class="nav-tab admin-only" data-tab="admin">Admin</button>
@@ -2017,6 +2169,7 @@ body.dark-mode .modal::backdrop {
     <nav class="bottom-nav" aria-label="Mobile navigation">
       <button type="button" class="bottom-nav-tab is-active" data-tab="stock"><span class="nav-icon">📦</span>Stock</button>
       <button type="button" class="bottom-nav-tab" data-tab="sell"><span class="nav-icon">🛒</span>Sell</button>
+      <button type="button" class="bottom-nav-tab" data-tab="orders"><span class="nav-icon">📝</span>Orders</button>
       <button type="button" class="bottom-nav-tab" data-tab="events"><span class="nav-icon">📅</span>Events</button>
       <button type="button" class="bottom-nav-tab admin-only" data-tab="money"><span class="nav-icon">💰</span>Money</button>
       <button type="button" class="bottom-nav-tab admin-only" data-tab="admin"><span class="nav-icon">⚙️</span>Admin</button>
@@ -2211,6 +2364,51 @@ body.dark-mode .modal::backdrop {
             <span id="basketTotal" class="basket-total">GBP 0.00</span>
           </div>
         </section>
+        </div>
+      </section>
+
+      <section class="tab-panel is-hidden" id="ordersTab" data-panel="orders">
+        <div class="section-heading">
+          <div>
+            <h3>Orders</h3>
+            <p>Order food and drinks for delivery to your room. Payment must be made in cash.</p>
+          </div>
+        </div>
+        <div class="orders-layout">
+          <section class="panel-block">
+            <h4>Place an order</h4>
+            <p>Pick your items below, then add your delivery details.</p>
+            <div>
+              <label>Your name
+                <input id="orderCustomerInput" type="text" placeholder="e.g. Alex" autocomplete="off">
+              </label>
+              <label>Room / delivery location
+                <input id="orderRoomInput" type="text" placeholder="e.g. Room 12" autocomplete="off">
+              </label>
+              <label>Delivery time
+                <select id="orderTimeInput">
+                  <option value="Break">Break</option>
+                  <option value="Lunch">Lunch</option>
+                </select>
+              </label>
+            </div>
+            <div id="orderItemPicker" class="order-item-picker" aria-label="Available items"></div>
+            <div class="form-readout">
+              <span>Total</span>
+              <strong id="orderTotalDisplay">GBP 0.00</strong>
+            </div>
+            <p class="payment-note">Payment must be made in cash.</p>
+            <div class="modal-actions">
+              <button type="button" id="clearOrderButton" class="secondary-button">Clear</button>
+              <button type="button" id="placeOrderButton" class="primary-button">Place order</button>
+            </div>
+          </section>
+
+          <section class="panel-block">
+            <h4>Current orders</h4>
+            <p>Orders waiting to be delivered. Mark one fulfilled when it is handed over.</p>
+            <div id="orderList" class="order-list"></div>
+          </section>
         </div>
       </section>
 
@@ -3340,6 +3538,7 @@ body.dark-mode .modal::backdrop {
   let pendingAction = null;
   let basket = [];
   let pendingSaleDraft = null;
+  let orderSelection = [];
   let toastTimer;
   let pendingMoneyAction = null;
   let keypadTargetInput = null;
@@ -3473,6 +3672,14 @@ body.dark-mode .modal::backdrop {
     elements.basketTotal = document.querySelector("#basketTotal");
     elements.clearBasketButton = document.querySelector("#clearBasketButton");
     elements.payBasketButton = document.querySelector("#payBasketButton");
+    elements.orderItemPicker = document.querySelector("#orderItemPicker");
+    elements.orderCustomerInput = document.querySelector("#orderCustomerInput");
+    elements.orderRoomInput = document.querySelector("#orderRoomInput");
+    elements.orderTimeInput = document.querySelector("#orderTimeInput");
+    elements.orderTotalDisplay = document.querySelector("#orderTotalDisplay");
+    elements.placeOrderButton = document.querySelector("#placeOrderButton");
+    elements.clearOrderButton = document.querySelector("#clearOrderButton");
+    elements.orderList = document.querySelector("#orderList");
     elements.paymentDialog = document.querySelector("#paymentDialog");
     elements.paymentForm = document.querySelector("#paymentForm");
     elements.paymentDialogMeta = document.querySelector("#paymentDialogMeta");
@@ -3718,6 +3925,14 @@ body.dark-mode .modal::backdrop {
     elements.paymentForm.addEventListener("click", handlePaymentChoice);
     elements.cancelPaymentButton.addEventListener("click", () => closeModal(elements.paymentDialog));
 
+    elements.orderItemPicker.addEventListener("click", handleOrderItemPick);
+    elements.orderList.addEventListener("click", handleOrderListAction);
+    elements.placeOrderButton.addEventListener("click", placeOrder);
+    elements.clearOrderButton.addEventListener("click", clearOrderSelection);
+    elements.orderCustomerInput.addEventListener("input", renderOrderTotal);
+    elements.orderRoomInput.addEventListener("input", renderOrderTotal);
+    elements.orderTimeInput.addEventListener("change", renderOrderTotal);
+
     elements.createUserForm.addEventListener("submit", handleCreateUser);
     elements.passwordForm.addEventListener("submit", handlePasswordChange);
     elements.passwordUser.addEventListener("change", syncPasswordMustChange);
@@ -3954,6 +4169,7 @@ body.dark-mode .modal::backdrop {
       stockEvents: [],
       events: [],
       userEvents: [],
+      orders: [],
       lifetime: {
         revenue: 0,
         cost: 0,
@@ -4014,6 +4230,7 @@ body.dark-mode .modal::backdrop {
     next.stockEvents = Array.isArray(value.stockEvents) ? value.stockEvents : [];
     next.events = Array.isArray(value.events) ? value.events : [];
     next.userEvents = Array.isArray(value.userEvents) ? value.userEvents : [];
+    next.orders = Array.isArray(value.orders) ? value.orders : [];
     next.events = next.events
       .filter((event) => event && event.name)
       .map((event) => ({
@@ -4974,6 +5191,7 @@ body.dark-mode .modal::backdrop {
     renderStockTable();
     renderLowStockList();
     renderSellGrid();
+    renderOrdersTab();
     renderEvents();
     renderEventBanner();
     renderMoneyTab();
@@ -4996,6 +5214,7 @@ body.dark-mode .modal::backdrop {
     const titles = {
       stock: "Stock Management",
       sell: "Selling",
+      orders: "Orders",
       events: "Events",
       money: "Money",
       admin: isBackdoor() ? "Backdoor access" : "Admin",
@@ -6862,6 +7081,200 @@ body.dark-mode .modal::backdrop {
         </button>
       `;
     }).join("");
+  }
+
+  function orderItemsSorted() {
+    return [...store.items].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function getOrderLine(itemId) {
+    return orderSelection.find((line) => line.itemId === itemId);
+  }
+
+  function renderOrderItemPicker() {
+    const items = orderItemsSorted();
+    if (!items.length) {
+      elements.orderItemPicker.innerHTML = `<div class="empty-state">No items in stock yet. Add items from the Stock tab first.</div>`;
+      return;
+    }
+    elements.orderItemPicker.innerHTML = items.map((item) => {
+      const infinite = isInfiniteStock(item);
+      const outOfStock = !infinite && item.quantity <= 0;
+      const line = getOrderLine(item.id);
+      const qty = line ? line.quantity : 0;
+      const selected = qty > 0 ? "is-selected" : "";
+      return `
+        <button type="button" class="order-pick ${selected}" data-order-item="${item.id}" ${outOfStock ? "disabled" : ""}>
+          <span class="order-pick-name">${escapeHtml(item.name)}</span>
+          <span class="order-pick-meta">${escapeHtml(item.category)}</span>
+          <span class="order-pick-price">${money.format(item.sellPrice)}</span>
+          <span class="order-pick-qty">${qty > 0 ? qty + " selected" : (infinite ? "∞ left" : item.quantity + " left")}</span>
+        </button>
+      `;
+    }).join("");
+  }
+
+  function handleOrderItemPick(event) {
+    const button = event.target.closest("button[data-order-item]");
+    if (!button || button.disabled) {
+      return;
+    }
+    const item = findItem(button.dataset.orderItem);
+    if (!item) {
+      return;
+    }
+    const line = getOrderLine(item.id);
+    if (line) {
+      line.quantity += 1;
+    } else {
+      orderSelection.push({ itemId: item.id, itemName: item.name, quantity: 1, sellPrice: item.sellPrice });
+    }
+    renderOrderTotal();
+  }
+
+  function getOrderTotal() {
+    return roundMoney(orderSelection.reduce((sum, line) => sum + line.quantity * line.sellPrice, 0));
+  }
+
+  function renderOrderTotal() {
+    elements.orderTotalDisplay.textContent = money.format(getOrderTotal());
+    renderOrderItemPicker();
+  }
+
+  function clearOrderSelection() {
+    orderSelection = [];
+    elements.orderCustomerInput.value = "";
+    elements.orderRoomInput.value = "";
+    elements.orderTimeInput.value = "Break";
+    renderOrderTotal();
+  }
+
+  function renderOrderList() {
+    const orders = store.orders || [];
+    if (!orders.length) {
+      elements.orderList.innerHTML = `<div class="empty-state">No orders yet. Place one on the left.</div>`;
+      return;
+    }
+    elements.orderList.innerHTML = orders.map((order) => {
+      const itemsHtml = order.items.map((li) => `
+        <li><span>${escapeHtml(li.itemName)} × ${li.quantity}</span><span>${money.format(roundMoney(li.itemPrice * li.quantity))}</span></li>
+      `).join("");
+      const isFulfilled = order.status === "fulfilled";
+      return `
+        <article class="order-card">
+          <div class="order-card-header">
+            <strong>${escapeHtml(order.customerName || "Guest")}</strong>
+            <span class="order-status ${escapeHtml(order.status)}">${escapeHtml(order.status)}</span>
+          </div>
+          <div class="order-card-meta">${escapeHtml(order.room || "No room")} &#183; ${escapeHtml(order.timeSlot || "Break")} &#183; ${formatDate(order.createdAt)}</div>
+          <ul class="order-card-items">${itemsHtml}</ul>
+          <div class="order-card-total">Total: ${money.format(roundMoney(order.total))} &#8211; pay in cash</div>
+          ${isFulfilled ? "" : `
+          <div class="order-card-actions">
+            <button type="button" class="primary-button" data-fulfill-order="${order.id}">Fulfil</button>
+            <button type="button" class="danger-button" data-cancel-order="${order.id}">Cancel</button>
+          </div>`}
+        </article>
+      `;
+    }).join("");
+  }
+
+  function renderOrdersTab() {
+    renderOrderItemPicker();
+    renderOrderTotal();
+    renderOrderList();
+  }
+
+  function handleOrderListAction(event) {
+    const fulfillBtn = event.target.closest("button[data-fulfill-order]");
+    const cancelBtn = event.target.closest("button[data-cancel-order]");
+    if (fulfillBtn) {
+      fulfillOrder(fulfillBtn.dataset.fulfillOrder);
+      return;
+    }
+    if (cancelBtn) {
+      cancelOrder(cancelBtn.dataset.cancelOrder);
+      return;
+    }
+  }
+
+  function placeOrder() {
+    const customerName = elements.orderCustomerInput.value.trim();
+    const room = elements.orderRoomInput.value.trim();
+    const timeSlot = elements.orderTimeInput.value;
+    if (!customerName) {
+      showToast("Enter your name.");
+      return;
+    }
+    if (!room) {
+      showToast("Enter a room or delivery location.");
+      return;
+    }
+    if (!orderSelection.length) {
+      showToast("Select at least one item.");
+      return;
+    }
+
+    for (const line of orderSelection) {
+      const item = findItem(line.itemId);
+      if (item && !isInfiniteStock(item) && line.quantity > item.quantity) {
+        showToast(`Not enough ${item.name} in stock for this order.`);
+        renderOrderTotal();
+        return;
+      }
+    }
+
+    const total = getOrderTotal();
+    const items = orderSelection.map((line) => ({
+      itemId: line.itemId,
+      itemName: line.itemName,
+      quantity: line.quantity,
+      itemPrice: roundMoney(line.sellPrice)
+    }));
+
+    store.orders = store.orders || [];
+    store.orders.unshift({
+      id: uid("order"),
+      customerName,
+      room,
+      timeSlot,
+      items,
+      total,
+      status: "pending",
+      placedBy: currentUser ? currentUser.displayName : "Guest",
+      createdAt: new Date().toISOString()
+    });
+
+    clearOrderSelection();
+    scheduleSave();
+    renderOrderList();
+    logUserEvent("Placed order", `${customerName} - ${room} (${timeSlot}) ${money.format(total)}`);
+    showToast(`Order placed for ${customerName}. Total ${money.format(total)} - payment in cash.`);
+  }
+
+  function fulfillOrder(id) {
+    const order = (store.orders || []).find((o) => o.id === id);
+    if (!order) {
+      return;
+    }
+    order.status = "fulfilled";
+    order.fulfilledAt = new Date().toISOString();
+    scheduleSave();
+    renderOrderList();
+    logUserEvent("Fulfilled order", `${order.customerName} - ${order.room}`);
+    showToast(`Order for ${order.customerName} marked fulfilled.`);
+  }
+
+  function cancelOrder(id) {
+    const order = (store.orders || []).find((o) => o.id === id);
+    if (!order) {
+      return;
+    }
+    store.orders = (store.orders || []).filter((o) => o.id !== id);
+    scheduleSave();
+    renderOrderList();
+    logUserEvent("Cancelled order", `${order.customerName} - ${order.room}`);
+    showToast("Order cancelled.");
   }
 
   function handleSellAction(event) {
