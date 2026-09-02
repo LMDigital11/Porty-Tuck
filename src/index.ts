@@ -768,6 +768,69 @@ export default {
       return jsonResponse(response);
     }
 
+    // ── API: Public Orders (no auth) ──
+    if (request.method === "POST" && url.pathname === "/api/orders") {
+      try {
+        const body = await request.json<{
+          customerName?: string;
+          room?: string;
+          timeSlot?: string;
+          items?: any[];
+        }>();
+
+        const customerName = String(body.customerName || "").trim().slice(0, 80);
+        const room = String(body.room || "").trim().slice(0, 80);
+        const timeSlot = ["Break", "Lunch"].includes(String(body.timeSlot))
+          ? String(body.timeSlot)
+          : "Break";
+
+        if (!customerName || !room) {
+          return jsonResponse({ error: "Name and room are required." }, 400);
+        }
+
+        const cleanItems = (Array.isArray(body.items) ? body.items : [])
+          .slice(0, 50)
+          .map((it: any) => ({
+            itemId: String((it && it.itemId) || "").slice(0, 64),
+            itemName: String((it && it.itemName) || "").slice(0, 120),
+            quantity: Math.max(1, Math.min(999, parseInt(it && it.quantity, 10) || 1)),
+            itemPrice: Math.max(0, Number(it && it.itemPrice) || 0),
+          }))
+          .filter((it) => it.itemId && it.itemName);
+
+        if (cleanItems.length === 0) {
+          return jsonResponse({ error: "No valid items provided." }, 400);
+        }
+
+        const total =
+          Math.round(cleanItems.reduce((sum, it) => sum + it.quantity * it.itemPrice, 0) * 100) / 100;
+
+        const order = {
+          id: `order_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`,
+          customerName,
+          room,
+          timeSlot,
+          items: cleanItems,
+          total,
+          status: "pending",
+          placedBy: "Customer",
+          createdAt: new Date().toISOString(),
+        };
+
+        const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
+        const normalized = normalizeStore(store);
+        normalized.orders = normalized.orders || [];
+        normalized.orders.unshift(order);
+        if (normalized.orders.length > 300) normalized.orders = normalized.orders.slice(0, 300);
+        await saveStoreToDb(env.DB, normalized);
+
+        return jsonResponse({ ok: true, order });
+      } catch (err) {
+        console.error("Public order error:", err);
+        return jsonResponse({ error: "Invalid request body." }, 400);
+      }
+    }
+
     // ── API: Auth — Login ──
     if (request.method === "POST" && url.pathname === "/api/auth/login") {
       try {

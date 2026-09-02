@@ -1207,6 +1207,17 @@ tbody tr:last-child td {
   color: var(--coral);
 }
 
+.public-order-view .login-panel {
+  width: min(520px, 100%);
+  text-align: left;
+}
+
+.public-order-view .order-item-picker {
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  max-height: 280px;
+  overflow-y: auto;
+}
+
 .order-list {
   display: flex;
   flex-direction: column;
@@ -2136,6 +2147,47 @@ body.dark-mode .modal::backdrop {
         </label>
         <button type="submit" id="maintenanceLoginSubmitBtn" class="primary-button full-width">Log in</button>
       </form>
+    </section>
+  </main>
+
+  <main class="login-view public-order-view is-hidden" id="publicOrderView">
+    <section class="login-panel">
+      <div class="brand-mark" aria-hidden="true"></div>
+      <h1>Porty Tuck Shop</h1>
+      <h2 style="margin-top:0;">Place an order</h2>
+      <p>Choose your items and delivery details. Payment must be made in cash.</p>
+      <div id="publicOrderFormWrapper">
+        <div>
+          <label>Your name
+            <input id="publicOrderCustomerInput" type="text" placeholder="e.g. Alex" autocomplete="name" maxlength="80">
+          </label>
+          <label>Room / delivery location
+            <input id="publicOrderRoomInput" type="text" placeholder="e.g. Room 12" autocomplete="off" maxlength="80">
+          </label>
+          <label>Delivery time
+            <select id="publicOrderTimeInput">
+              <option value="Break">Break</option>
+              <option value="Lunch">Lunch</option>
+            </select>
+          </label>
+        </div>
+        <div id="publicOrderItemPicker" class="order-item-picker" aria-label="Available items"></div>
+        <div class="form-readout">
+          <span>Total</span>
+          <strong id="publicOrderTotalDisplay">GBP 0.00</strong>
+        </div>
+        <p class="payment-note">Payment must be made in cash.</p>
+        <div class="modal-actions">
+          <button type="button" id="publicClearOrderButton" class="secondary-button">Clear</button>
+          <button type="button" id="publicPlaceOrderButton" class="primary-button">Place order</button>
+        </div>
+      </div>
+      <div id="publicOrderConfirm" class="is-hidden" style="text-align:center;padding:12px 0;">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <h3>Order placed!</h3>
+        <p id="publicOrderConfirmText">Your order has been sent. Payment must be made in cash.</p>
+        <button type="button" id="publicOrderNewOrderButton" class="primary-button">Place another order</button>
+      </div>
     </section>
   </main>
 
@@ -3683,6 +3735,18 @@ body.dark-mode .modal::backdrop {
     elements.clearOrderButton = document.querySelector("#clearOrderButton");
     elements.orderList = document.querySelector("#orderList");
     elements.copyOrderLinkButton = document.querySelector("#copyOrderLinkButton");
+    elements.publicOrderView = document.querySelector("#publicOrderView");
+    elements.publicOrderFormWrapper = document.querySelector("#publicOrderFormWrapper");
+    elements.publicOrderConfirm = document.querySelector("#publicOrderConfirm");
+    elements.publicOrderConfirmText = document.querySelector("#publicOrderConfirmText");
+    elements.publicOrderItemPicker = document.querySelector("#publicOrderItemPicker");
+    elements.publicOrderCustomerInput = document.querySelector("#publicOrderCustomerInput");
+    elements.publicOrderRoomInput = document.querySelector("#publicOrderRoomInput");
+    elements.publicOrderTimeInput = document.querySelector("#publicOrderTimeInput");
+    elements.publicOrderTotalDisplay = document.querySelector("#publicOrderTotalDisplay");
+    elements.publicPlaceOrderButton = document.querySelector("#publicPlaceOrderButton");
+    elements.publicClearOrderButton = document.querySelector("#publicClearOrderButton");
+    elements.publicOrderNewOrderButton = document.querySelector("#publicOrderNewOrderButton");
     elements.paymentDialog = document.querySelector("#paymentDialog");
     elements.paymentForm = document.querySelector("#paymentForm");
     elements.paymentDialogMeta = document.querySelector("#paymentDialogMeta");
@@ -3936,6 +4000,11 @@ body.dark-mode .modal::backdrop {
     elements.orderCustomerInput.addEventListener("input", renderOrderTotal);
     elements.orderRoomInput.addEventListener("input", renderOrderTotal);
     elements.orderTimeInput.addEventListener("change", renderOrderTotal);
+
+    elements.publicOrderItemPicker.addEventListener("click", handlePublicOrderPick);
+    elements.publicPlaceOrderButton.addEventListener("click", submitPublicOrder);
+    elements.publicClearOrderButton.addEventListener("click", resetPublicOrderForm);
+    elements.publicOrderNewOrderButton.addEventListener("click", resetPublicOrderForm);
 
     elements.createUserForm.addEventListener("submit", handleCreateUser);
     elements.passwordForm.addEventListener("submit", handlePasswordChange);
@@ -5136,6 +5205,10 @@ body.dark-mode .modal::backdrop {
   }
 
   function renderAuth() {
+    if (isPublicOrderMode()) {
+      renderPublicOrderView();
+      return;
+    }
     const signedIn = Boolean(currentUser);
     elements.loginView.classList.toggle("is-hidden", signedIn);
     elements.appShell.classList.toggle("is-hidden", !signedIn);
@@ -7283,7 +7356,16 @@ body.dark-mode .modal::backdrop {
 
   function getOrderPageUrl() {
     const url = new URL(window.location.href);
-    return url.origin + url.pathname + "?tab=orders";
+    return url.origin + url.pathname + "?order=1";
+  }
+
+  function isPublicOrderMode() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("order") === "1" || params.get("public") === "1";
+    } catch (e) {
+      return false;
+    }
   }
 
   function fallbackCopy(text) {
@@ -7317,12 +7399,135 @@ body.dark-mode .modal::backdrop {
   function applyRequestedTab() {
     try {
       const params = new URLSearchParams(window.location.search);
-      if (params.get("tab") === "orders" || params.get("orders") === "1") {
+      if (params.get("tab") === "orders") {
         activeTab = "orders";
       }
     } catch (e) {
       // Ignore malformed URLs
     }
+  }
+
+  function renderPublicOrderPicker() {
+    const items = [...store.items].sort((a, b) => a.name.localeCompare(b.name));
+    if (!items.length) {
+      elements.publicOrderItemPicker.innerHTML = `<div class="empty-state">No items available right now.</div>`;
+      return;
+    }
+    elements.publicOrderItemPicker.innerHTML = items.map((item) => {
+      const infinite = isInfiniteStock(item);
+      const outOfStock = !infinite && item.quantity <= 0;
+      const line = getOrderLine(item.id);
+      const qty = line ? line.quantity : 0;
+      const selected = qty > 0 ? "is-selected" : "";
+      return `
+        <button type="button" class="order-pick ${selected}" data-order-item="${item.id}" ${outOfStock ? "disabled" : ""}>
+          <span class="order-pick-name">${escapeHtml(item.name)}</span>
+          <span class="order-pick-meta">${escapeHtml(item.category)}</span>
+          <span class="order-pick-price">${money.format(item.sellPrice)}</span>
+          <span class="order-pick-qty">${qty > 0 ? qty + " selected" : (infinite ? "∞ left" : item.quantity + " left")}</span>
+        </button>
+      `;
+    }).join("");
+  }
+
+  function updatePublicOrderTotal() {
+    elements.publicOrderTotalDisplay.textContent = money.format(getOrderTotal());
+    renderPublicOrderPicker();
+  }
+
+  function handlePublicOrderPick(event) {
+    const button = event.target.closest("button[data-order-item]");
+    if (!button || button.disabled) {
+      return;
+    }
+    const item = findItem(button.dataset.orderItem);
+    if (!item) {
+      return;
+    }
+    const line = getOrderLine(item.id);
+    if (line) {
+      line.quantity += 1;
+    } else {
+      orderSelection.push({ itemId: item.id, itemName: item.name, quantity: 1, sellPrice: item.sellPrice });
+    }
+    updatePublicOrderTotal();
+  }
+
+  function resetPublicOrderForm() {
+    orderSelection = [];
+    elements.publicOrderCustomerInput.value = "";
+    elements.publicOrderRoomInput.value = "";
+    elements.publicOrderTimeInput.value = "Break";
+    elements.publicOrderFormWrapper.classList.remove("is-hidden");
+    elements.publicOrderConfirm.classList.add("is-hidden");
+    updatePublicOrderTotal();
+  }
+
+  async function submitPublicOrder() {
+    const customerName = elements.publicOrderCustomerInput.value.trim();
+    const room = elements.publicOrderRoomInput.value.trim();
+    const timeSlot = elements.publicOrderTimeInput.value;
+    if (!customerName) {
+      showToast("Enter your name.");
+      return;
+    }
+    if (!room) {
+      showToast("Enter a room or delivery location.");
+      return;
+    }
+    if (!orderSelection.length) {
+      showToast("Select at least one item.");
+      return;
+    }
+
+    for (const line of orderSelection) {
+      const item = findItem(line.itemId);
+      if (item && !isInfiniteStock(item) && line.quantity > item.quantity) {
+        showToast(`Not enough ${item.name} in stock for this order.`);
+        updatePublicOrderTotal();
+        return;
+      }
+    }
+
+    const items = orderSelection.map((line) => ({
+      itemId: line.itemId,
+      itemName: line.itemName,
+      quantity: line.quantity,
+      itemPrice: roundMoney(line.sellPrice)
+    }));
+
+    elements.publicPlaceOrderButton.disabled = true;
+    try {
+      const response = await fetch(`${API_URL}/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerName, room, timeSlot, items })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        showToast(data.error || "Could not place your order. Please try again.");
+        return;
+      }
+      orderSelection = [];
+      elements.publicOrderFormWrapper.classList.add("is-hidden");
+      elements.publicOrderConfirm.classList.remove("is-hidden");
+      elements.publicOrderConfirmText.textContent = `${data.order.customerName}, your order totalling ${money.format(roundMoney(data.order.total))} has been sent. Payment must be made in cash.`;
+      showToast("Order placed!");
+    } catch (error) {
+      console.error("Public order failed", error);
+      showToast("Could not place your order. Please check your connection.");
+    } finally {
+      elements.publicPlaceOrderButton.disabled = false;
+    }
+  }
+
+  function renderPublicOrderView() {
+    elements.loginView.classList.add("is-hidden");
+    elements.appShell.classList.add("is-hidden");
+    elements.maintenanceView.classList.add("is-hidden");
+    renderPublicOrderPicker();
+    updatePublicOrderTotal();
+    elements.publicOrderView.classList.remove("is-hidden");
   }
 
   function handleSellAction(event) {
