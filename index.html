@@ -2373,6 +2373,7 @@ body.dark-mode .modal::backdrop {
             <h3>Orders</h3>
             <p>Order food and drinks for delivery to your room. Payment must be made in cash.</p>
           </div>
+          <button type="button" id="copyOrderLinkButton" class="secondary-button" title="Copy a link that opens this Order page">Copy order link</button>
         </div>
         <div class="orders-layout">
           <section class="panel-block">
@@ -3570,6 +3571,7 @@ body.dark-mode .modal::backdrop {
     fetchClientIp();
     bindEvents();
     await updateLoginHint();
+    applyRequestedTab();
     renderAuth();
     if (localStorage.getItem("tuck-dark-mode") === "1") {
       document.body.classList.add("dark-mode");
@@ -3680,6 +3682,7 @@ body.dark-mode .modal::backdrop {
     elements.placeOrderButton = document.querySelector("#placeOrderButton");
     elements.clearOrderButton = document.querySelector("#clearOrderButton");
     elements.orderList = document.querySelector("#orderList");
+    elements.copyOrderLinkButton = document.querySelector("#copyOrderLinkButton");
     elements.paymentDialog = document.querySelector("#paymentDialog");
     elements.paymentForm = document.querySelector("#paymentForm");
     elements.paymentDialogMeta = document.querySelector("#paymentDialogMeta");
@@ -3927,6 +3930,7 @@ body.dark-mode .modal::backdrop {
 
     elements.orderItemPicker.addEventListener("click", handleOrderItemPick);
     elements.orderList.addEventListener("click", handleOrderListAction);
+    elements.copyOrderLinkButton.addEventListener("click", copyOrderLink);
     elements.placeOrderButton.addEventListener("click", placeOrder);
     elements.clearOrderButton.addEventListener("click", clearOrderSelection);
     elements.orderCustomerInput.addEventListener("input", renderOrderTotal);
@@ -7275,6 +7279,50 @@ body.dark-mode .modal::backdrop {
     renderOrderList();
     logUserEvent("Cancelled order", `${order.customerName} - ${order.room}`);
     showToast("Order cancelled.");
+  }
+
+  function getOrderPageUrl() {
+    const url = new URL(window.location.href);
+    return url.origin + url.pathname + "?tab=orders";
+  }
+
+  function fallbackCopy(text) {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      showToast("Order link copied to clipboard.");
+    } catch (e) {
+      window.prompt("Copy this order link:", text);
+    }
+  }
+
+  function copyOrderLink() {
+    const link = getOrderPageUrl();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(link).then(() => {
+        showToast("Order link copied to clipboard.");
+      }).catch(() => fallbackCopy(link));
+    } else {
+      fallbackCopy(link);
+    }
+  }
+
+  function applyRequestedTab() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "orders" || params.get("orders") === "1") {
+        activeTab = "orders";
+      }
+    } catch (e) {
+      // Ignore malformed URLs
+    }
   }
 
   function handleSellAction(event) {
