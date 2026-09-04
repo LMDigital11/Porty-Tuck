@@ -1207,6 +1207,13 @@ tbody tr:last-child td {
   color: var(--coral);
 }
 
+.delivery-note {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .public-order-view .login-panel {
   width: min(520px, 100%);
   text-align: left;
@@ -2164,12 +2171,7 @@ body.dark-mode .modal::backdrop {
           <label>Room / delivery location
             <input id="publicOrderRoomInput" type="text" placeholder="e.g. 4F12" autocomplete="off" maxlength="80">
           </label>
-          <label>Delivery time
-            <select id="publicOrderTimeInput">
-              <option value="Break">Break</option>
-              <option value="Lunch">Lunch</option>
-            </select>
-          </label>
+          <p class="delivery-note">All orders will be delivered at Break.</p>
         </div>
         <div id="publicOrderItemPicker" class="order-item-picker" aria-label="Available items"></div>
         <div class="form-readout">
@@ -2436,14 +2438,9 @@ body.dark-mode .modal::backdrop {
                 <input id="orderCustomerInput" type="text" placeholder="e.g. Alex" autocomplete="off">
               </label>
               <label>Room / delivery location
-                <input id="orderRoomInput" type="text" placeholder="e.g. Room 12" autocomplete="off">
+                <input id="orderRoomInput" type="text" placeholder="e.g. 4F12" autocomplete="off">
               </label>
-              <label>Delivery time
-                <select id="orderTimeInput">
-                  <option value="Break">Break</option>
-                  <option value="Lunch">Lunch</option>
-                </select>
-              </label>
+              <p class="delivery-note">All orders will be delivered at Break.</p>
             </div>
             <div id="orderItemPicker" class="order-item-picker" aria-label="Available items"></div>
             <div class="form-readout">
@@ -3729,7 +3726,6 @@ body.dark-mode .modal::backdrop {
     elements.orderItemPicker = document.querySelector("#orderItemPicker");
     elements.orderCustomerInput = document.querySelector("#orderCustomerInput");
     elements.orderRoomInput = document.querySelector("#orderRoomInput");
-    elements.orderTimeInput = document.querySelector("#orderTimeInput");
     elements.orderTotalDisplay = document.querySelector("#orderTotalDisplay");
     elements.placeOrderButton = document.querySelector("#placeOrderButton");
     elements.clearOrderButton = document.querySelector("#clearOrderButton");
@@ -3742,7 +3738,6 @@ body.dark-mode .modal::backdrop {
     elements.publicOrderItemPicker = document.querySelector("#publicOrderItemPicker");
     elements.publicOrderCustomerInput = document.querySelector("#publicOrderCustomerInput");
     elements.publicOrderRoomInput = document.querySelector("#publicOrderRoomInput");
-    elements.publicOrderTimeInput = document.querySelector("#publicOrderTimeInput");
     elements.publicOrderTotalDisplay = document.querySelector("#publicOrderTotalDisplay");
     elements.publicPlaceOrderButton = document.querySelector("#publicPlaceOrderButton");
     elements.publicClearOrderButton = document.querySelector("#publicClearOrderButton");
@@ -3999,7 +3994,6 @@ body.dark-mode .modal::backdrop {
     elements.clearOrderButton.addEventListener("click", clearOrderSelection);
     elements.orderCustomerInput.addEventListener("input", renderOrderTotal);
     elements.orderRoomInput.addEventListener("input", renderOrderTotal);
-    elements.orderTimeInput.addEventListener("change", renderOrderTotal);
 
     elements.publicOrderItemPicker.addEventListener("click", handlePublicOrderPick);
     elements.publicPlaceOrderButton.addEventListener("click", submitPublicOrder);
@@ -7222,7 +7216,6 @@ body.dark-mode .modal::backdrop {
     orderSelection = [];
     elements.orderCustomerInput.value = "";
     elements.orderRoomInput.value = "";
-    elements.orderTimeInput.value = "Break";
     renderOrderTotal();
   }
 
@@ -7278,7 +7271,7 @@ body.dark-mode .modal::backdrop {
   function placeOrder() {
     const customerName = elements.orderCustomerInput.value.trim();
     const room = elements.orderRoomInput.value.trim();
-    const timeSlot = elements.orderTimeInput.value;
+    const timeSlot = "Break";
     if (!customerName) {
       showToast("Enter your name.");
       return;
@@ -7457,7 +7450,6 @@ body.dark-mode .modal::backdrop {
     orderSelection = [];
     elements.publicOrderCustomerInput.value = "";
     elements.publicOrderRoomInput.value = "";
-    elements.publicOrderTimeInput.value = "Break";
     elements.publicOrderFormWrapper.classList.remove("is-hidden");
     elements.publicOrderConfirm.classList.add("is-hidden");
     updatePublicOrderTotal();
@@ -7466,7 +7458,7 @@ body.dark-mode .modal::backdrop {
   async function submitPublicOrder() {
     const customerName = elements.publicOrderCustomerInput.value.trim();
     const room = elements.publicOrderRoomInput.value.trim();
-    const timeSlot = elements.publicOrderTimeInput.value;
+    const timeSlot = "Break";
     if (!customerName) {
       showToast("Enter your name.");
       return;
