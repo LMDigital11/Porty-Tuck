@@ -3683,10 +3683,17 @@ body.dark-mode .modal::backdrop {
     <form id="removeOrderForm" method="dialog">
       <h3>Remove order</h3>
       <p id="removeOrderName" style="margin-bottom:10px;"></p>
-      <label>
-        Reason for removal
-        <input id="removeOrderReasonInput" type="text" placeholder="e.g. Customer cancelled" autocomplete="off" required>
-      </label>
+      <div class="form-grid">
+        <label>
+          Reason for removal
+          <input id="removeOrderReasonInput" type="text" placeholder="e.g. Customer cancelled" autocomplete="off" required>
+        </label>
+        <label>
+          Security code
+          <input id="removeOrderCodeInput" type="text" autocomplete="off" required placeholder="Enter security code">
+          <span class="field-hint">If you require this code, talk to admin users.</span>
+        </label>
+      </div>
       <div class="modal-actions">
         <button type="button" id="cancelRemoveOrderButton" class="secondary-button">Cancel</button>
         <button type="submit" class="danger-button">Remove order</button>
@@ -4105,6 +4112,7 @@ body.dark-mode .modal::backdrop {
     elements.removeOrderForm = document.querySelector("#removeOrderForm");
     elements.removeOrderName = document.querySelector("#removeOrderName");
     elements.removeOrderReasonInput = document.querySelector("#removeOrderReasonInput");
+    elements.removeOrderCodeInput = document.querySelector("#removeOrderCodeInput");
     elements.cancelRemoveOrderButton = document.querySelector("#cancelRemoveOrderButton");
 
     // Undo fulfil elements
@@ -4385,6 +4393,7 @@ body.dark-mode .modal::backdrop {
     elements.removeOrderForm.addEventListener("submit", handleRemoveOrderSubmit);
     elements.cancelRemoveOrderButton.addEventListener("click", () => {
       elements.removeOrderReasonInput.value = "";
+      elements.removeOrderCodeInput.value = "";
       closeModal(elements.removeOrderDialog);
     });
     elements.undoFulfillButton.addEventListener("click", undoFulfillOrder);
@@ -4426,7 +4435,7 @@ body.dark-mode .modal::backdrop {
       keypadSuppressRefocus = true;
     });
 
-    ["buyPrice", "sellPrice", "quantity", "lowStock", "barcodeStockQty", "cashReconcileFloatInput", "cashReconcileActualInput", "ownerLoginCode", "lockoutCode", "undoSaleCode", "purgeLogCode", "suspendCodeInput", "cashRemovalCodeInput", "securityCodePromptInput"].forEach((id) => {
+    ["buyPrice", "sellPrice", "quantity", "lowStock", "barcodeStockQty", "cashReconcileFloatInput", "cashReconcileActualInput", "ownerLoginCode", "lockoutCode", "undoSaleCode", "purgeLogCode", "suspendCodeInput", "cashRemovalCodeInput", "securityCodePromptInput", "removeOrderCodeInput"].forEach((id) => {
       const input = document.getElementById(id);
       if (!input) return;
       input.setAttribute("inputmode", "none");
@@ -6023,7 +6032,8 @@ body.dark-mode .modal::backdrop {
     purgeLogCode: { title: "Purge logs code", decimal: false, mask: true },
     suspendCodeInput: { title: "Suspend user code", decimal: false, mask: true },
     cashRemovalCodeInput: { title: "New security code", decimal: false, mask: false },
-    securityCodePromptInput: { title: "Security code", decimal: false, mask: true }
+    securityCodePromptInput: { title: "Security code", decimal: false, mask: true },
+    removeOrderCodeInput: { title: "Security code", decimal: false, mask: true }
   };
 
   function setDecimalKeyVisible(visible) {
@@ -7994,16 +8004,22 @@ body.dark-mode .modal::backdrop {
     orderRemoveTarget = id;
     elements.removeOrderName.textContent = `Remove "${order.customerName}" (${order.room}) from the order list?`;
     elements.removeOrderReasonInput.value = "";
+    elements.removeOrderCodeInput.value = "";
     openModal(elements.removeOrderDialog);
     elements.removeOrderReasonInput.focus();
   }
 
-  function handleRemoveOrderSubmit(event) {
+  async function handleRemoveOrderSubmit(event) {
     event.preventDefault();
     const id = orderRemoveTarget;
     const reason = elements.removeOrderReasonInput.value.trim();
     if (!reason) {
       showToast("Enter a reason for removing the order.");
+      return;
+    }
+    const code = elements.removeOrderCodeInput.value.trim();
+    if (!(await verifySecurityCode(code))) {
+      showToast("Invalid security code.");
       return;
     }
     const order = (store.orders || []).find((o) => o.id === id);
@@ -8038,6 +8054,7 @@ body.dark-mode .modal::backdrop {
     closeModal(elements.removeOrderDialog);
     orderRemoveTarget = null;
     elements.removeOrderReasonInput.value = "";
+    elements.removeOrderCodeInput.value = "";
     showToast("Order removed.");
   }
 
@@ -8090,12 +8107,7 @@ body.dark-mode .modal::backdrop {
     if (stopBtn) {
       const rec = (store.recurringOrders || []).find((r) => r.id === stopBtn.dataset.stopRecurring);
       if (rec) {
-        if (!window.confirm(`Stop the recurring order for ${rec.customerName}?`)) return;
-        rec.active = false;
-        scheduleSave();
-        renderRecurringOrderList();
-        logUserEvent("Stopped recurring order", `${rec.customerName} - ${rec.room}`);
-        showToast("Recurring order stopped.");
+        handleStopRecurring(rec);
       }
       return;
     }
@@ -8113,6 +8125,22 @@ body.dark-mode .modal::backdrop {
     if (editBtn) {
       openEditRecurring(editBtn.dataset.editRecurring);
     }
+  }
+
+  async function handleStopRecurring(rec) {
+    const enteredCode = await promptSecurityCode("Stop recurring order", `Type the security code to stop ${rec.customerName}'s recurring order.`);
+    if (enteredCode === null || enteredCode === "") {
+      return;
+    }
+    if (!(await verifySecurityCode(enteredCode))) {
+      showToast("Invalid security code.");
+      return;
+    }
+    rec.active = false;
+    scheduleSave();
+    renderRecurringOrderList();
+    logUserEvent("Stopped recurring order", `${rec.customerName} - ${rec.room}`);
+    showToast("Recurring order stopped.");
   }
 
   function updateRecurringUntilMin(input) {
