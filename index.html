@@ -2710,6 +2710,12 @@ body.dark-mode .modal::backdrop {
           </div>
           <button type="button" id="copyOrderLinkButton" class="secondary-button" title="Copy a link that opens this Order page">Copy order link</button>
         </div>
+        <div id="undoFulfillBanner" class="alert-card warning is-hidden" style="margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+            <span><strong>Last fulfilled order can be undone.</strong> <span id="undoFulfillTimer"></span></span>
+            <button type="button" id="undoFulfillButton" class="danger-button">Undo fulfil</button>
+          </div>
+        </div>
         <div class="orders-layout">
           <section class="panel-block">
             <h4>Place an order</h4>
@@ -3925,6 +3931,9 @@ body.dark-mode .modal::backdrop {
   let orderSelection = [];
   let orderRemoveTarget = null;
   let editingRecurringId = null;
+  let pendingUndoFulfillOrderId = null;
+  let undoFulfillTimerId = null;
+  let undoFulfillCountdownId = null;
   let toastTimer;
   let pendingMoneyAction = null;
   let keypadTargetInput = null;
@@ -4097,6 +4106,11 @@ body.dark-mode .modal::backdrop {
     elements.removeOrderName = document.querySelector("#removeOrderName");
     elements.removeOrderReasonInput = document.querySelector("#removeOrderReasonInput");
     elements.cancelRemoveOrderButton = document.querySelector("#cancelRemoveOrderButton");
+
+    // Undo fulfil elements
+    elements.undoFulfillBanner = document.querySelector("#undoFulfillBanner");
+    elements.undoFulfillTimer = document.querySelector("#undoFulfillTimer");
+    elements.undoFulfillButton = document.querySelector("#undoFulfillButton");
     elements.paymentDialog = document.querySelector("#paymentDialog");
     elements.paymentForm = document.querySelector("#paymentForm");
     elements.paymentDialogMeta = document.querySelector("#paymentDialogMeta");
@@ -4373,6 +4387,7 @@ body.dark-mode .modal::backdrop {
       elements.removeOrderReasonInput.value = "";
       closeModal(elements.removeOrderDialog);
     });
+    elements.undoFulfillButton.addEventListener("click", undoFulfillOrder);
 
     elements.createUserForm.addEventListener("submit", handleCreateUser);
     elements.passwordForm.addEventListener("submit", handlePasswordChange);
@@ -7913,6 +7928,62 @@ body.dark-mode .modal::backdrop {
     renderOrderList();
     logUserEvent("Fulfilled order", `${order.customerName} - ${order.room}`);
     showToast(`Order for ${order.customerName} marked fulfilled.`);
+    startUndoFulfillTimer(order.id, order.customerName, order.room);
+  }
+
+  function startUndoFulfillTimer(orderId, customerName, room) {
+    clearUndoFulfillTimer(false);
+    pendingUndoFulfillOrderId = orderId;
+    elements.undoFulfillBanner.classList.remove("is-hidden");
+    let remaining = 20;
+    elements.undoFulfillTimer.textContent = `(${remaining}s)`;
+    undoFulfillTimerId = setTimeout(() => {
+      clearUndoFulfillTimer();
+    }, 20000);
+    undoFulfillCountdownId = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearUndoFulfillTimer();
+        return;
+      }
+      elements.undoFulfillTimer.textContent = `(${remaining}s)`;
+    }, 1000);
+  }
+
+  function clearUndoFulfillTimer(hide = true) {
+    if (undoFulfillTimerId) {
+      clearTimeout(undoFulfillTimerId);
+      undoFulfillTimerId = null;
+    }
+    if (undoFulfillCountdownId) {
+      clearInterval(undoFulfillCountdownId);
+      undoFulfillCountdownId = null;
+    }
+    pendingUndoFulfillOrderId = null;
+    if (hide) {
+      elements.undoFulfillBanner.classList.add("is-hidden");
+      elements.undoFulfillTimer.textContent = "";
+    }
+  }
+
+  function undoFulfillOrder() {
+    const id = pendingUndoFulfillOrderId;
+    clearUndoFulfillTimer();
+    if (!id) {
+      showToast("No fulfilled order to undo.");
+      return;
+    }
+    const order = (store.orders || []).find((o) => o.id === id);
+    if (!order) {
+      showToast("That order could not be found.");
+      return;
+    }
+    order.status = "pending";
+    order.fulfilledAt = null;
+    scheduleSave();
+    renderOrderList();
+    logUserEvent("Undid fulfil", `${order.customerName} - ${order.room}`);
+    showToast(`Order for ${order.customerName} is pending again.`);
   }
 
   function openRemoveOrderDialog(id) {
@@ -7940,6 +8011,9 @@ body.dark-mode .modal::backdrop {
       closeModal(elements.removeOrderDialog);
       orderRemoveTarget = null;
       return;
+    }
+    if (pendingUndoFulfillOrderId === id) {
+      clearUndoFulfillTimer();
     }
     store.orders = (store.orders || []).filter((o) => o.id !== id);
     store.orderHistory = store.orderHistory || [];
