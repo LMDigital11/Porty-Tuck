@@ -3107,18 +3107,12 @@ body.dark-mode .modal::backdrop {
 
         <section class="panel-block backdoor-only">
           <h4>Security Settings</h4>
-          <p>Codes used for cash removal and SumUp sale confirmation.</p>
-          <form id="securityCodeForm" class="form-grid">
-            <label>
-              Cash removal & confirmation code
-              <input id="cashRemovalCodeInput" type="text" placeholder="CASHOUT" autocomplete="off">
-            </label>
-            <div class="form-readout">
-              <span>Current code</span>
-              <strong id="currentCashCodeDisplay">CASHOUT</strong>
-            </div>
-            <button type="submit" class="primary-button">Update code</button>
-          </form>
+          <p>Code used for cash removal and SumUp sale confirmation.</p>
+          <div class="form-readout" style="margin-bottom:12px;">
+            <span>Current code</span>
+            <strong id="currentCashCodeDisplay">Not set</strong>
+          </div>
+          <button type="button" id="changeSecurityCodeButton" class="primary-button">Change security code</button>
         </section>
 
         <section class="panel-block backdoor-only">
@@ -3782,6 +3776,37 @@ body.dark-mode .modal::backdrop {
     </form>
   </dialog>
 
+  <dialog id="changeSecurityCodeDialog" class="modal">
+    <form id="changeSecurityCodeForm" method="dialog">
+      <h3 id="changeSecurityCodeTitle">Change security code</h3>
+      <p id="changeSecurityCodeMessage"></p>
+      <div class="quantity-keypad-panel">
+        <div class="form-readout">
+          <span id="changeSecurityCodeStep">Step 1 of 3</span>
+          <strong id="changeSecurityCodeDisplay">•</strong>
+        </div>
+        <div class="keypad-grid">
+          <button type="button" class="keypad-button" data-key="1">1</button>
+          <button type="button" class="keypad-button" data-key="2">2</button>
+          <button type="button" class="keypad-button" data-key="3">3</button>
+          <button type="button" class="keypad-button" data-key="4">4</button>
+          <button type="button" class="keypad-button" data-key="5">5</button>
+          <button type="button" class="keypad-button" data-key="6">6</button>
+          <button type="button" class="keypad-button" data-key="7">7</button>
+          <button type="button" class="keypad-button" data-key="8">8</button>
+          <button type="button" class="keypad-button" data-key="9">9</button>
+          <button type="button" class="keypad-button keypad-action" data-action="clear">Clear</button>
+          <button type="button" class="keypad-button" data-key="0">0</button>
+          <button type="button" class="keypad-button keypad-action" data-action="backspace">⌫</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" id="cancelChangeSecurityCodeButton">Cancel</button>
+        <button type="submit" class="primary-button" id="changeSecurityCodeConfirmButton">Next</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="cashReconcileDialog" class="modal">
     <form id="cashReconcileForm" method="dialog">
       <h3>Reconcile Cash Drawer</h3>
@@ -3898,6 +3923,10 @@ body.dark-mode .modal::backdrop {
   }
 
   let securityCodePromptResolve = null;
+  let changeSecurityCodeCurrent = "";
+  let changeSecurityCodeNew = "";
+  let changeSecurityCodeStep = 0;
+  let changeSecurityCodeValue = "";
   function promptSecurityCode(title, message) {
     return new Promise((resolve) => {
       securityCodePromptResolve = resolve;
@@ -4227,9 +4256,8 @@ body.dark-mode .modal::backdrop {
     elements.sumupApiStatus = document.querySelector("#sumupApiStatus");
     elements.pendingSumupBody = document.querySelector("#pendingSumupBody");
     elements.pollSumupButton = document.querySelector("#pollSumupButton");
-    elements.securityCodeForm = document.querySelector("#securityCodeForm");
-    elements.cashRemovalCodeInput = document.querySelector("#cashRemovalCodeInput");
     elements.currentCashCodeDisplay = document.querySelector("#currentCashCodeDisplay");
+    elements.changeSecurityCodeButton = document.querySelector("#changeSecurityCodeButton");
     elements.securityCodePromptDialog = document.querySelector("#securityCodePromptDialog");
     elements.securityCodePromptForm = document.querySelector("#securityCodePromptForm");
     elements.securityCodePromptTitle = document.querySelector("#securityCodePromptTitle");
@@ -4237,6 +4265,15 @@ body.dark-mode .modal::backdrop {
     elements.securityCodePromptInput = document.querySelector("#securityCodePromptInput");
     elements.securityCodePromptDisplay = document.querySelector("#securityCodePromptDisplay");
     elements.cancelSecurityCodePromptButton = document.querySelector("#cancelSecurityCodePromptButton");
+
+    elements.changeSecurityCodeDialog = document.querySelector("#changeSecurityCodeDialog");
+    elements.changeSecurityCodeForm = document.querySelector("#changeSecurityCodeForm");
+    elements.changeSecurityCodeTitle = document.querySelector("#changeSecurityCodeTitle");
+    elements.changeSecurityCodeMessage = document.querySelector("#changeSecurityCodeMessage");
+    elements.changeSecurityCodeStep = document.querySelector("#changeSecurityCodeStep");
+    elements.changeSecurityCodeDisplay = document.querySelector("#changeSecurityCodeDisplay");
+    elements.changeSecurityCodeConfirmButton = document.querySelector("#changeSecurityCodeConfirmButton");
+    elements.cancelChangeSecurityCodeButton = document.querySelector("#cancelChangeSecurityCodeButton");
 
     elements.maintenanceView = document.querySelector("#maintenanceView");
     elements.maintenanceReason = document.querySelector("#maintenanceReason");
@@ -4466,7 +4503,7 @@ body.dark-mode .modal::backdrop {
       keypadSuppressRefocus = true;
     });
 
-    ["buyPrice", "sellPrice", "quantity", "lowStock", "barcodeStockQty", "cashReconcileFloatInput", "cashReconcileActualInput", "ownerLoginCode", "lockoutCode", "undoSaleCode", "purgeLogCode", "suspendCodeInput", "cashRemovalCodeInput", "removeOrderCodeInput"].forEach((id) => {
+    ["buyPrice", "sellPrice", "quantity", "lowStock", "barcodeStockQty", "cashReconcileFloatInput", "cashReconcileActualInput", "ownerLoginCode", "lockoutCode", "undoSaleCode", "purgeLogCode", "suspendCodeInput", "removeOrderCodeInput"].forEach((id) => {
       const input = document.getElementById(id);
       if (!input) return;
       input.setAttribute("inputmode", "none");
@@ -4500,7 +4537,13 @@ body.dark-mode .modal::backdrop {
     elements.pollSumupButton.addEventListener("click", pollSumupTransactions);
     document.getElementById("sumupBalanceRefreshButton")?.addEventListener("click", fetchSumUpBalance);
     elements.pendingSumupBody.addEventListener("click", handlePendingSumupAction);
-    elements.securityCodeForm.addEventListener("submit", handleUpdateCashCode);
+    elements.changeSecurityCodeButton.addEventListener("click", openChangeSecurityCode);
+    elements.changeSecurityCodeForm.addEventListener("submit", handleChangeSecurityCodeSubmit);
+    elements.cancelChangeSecurityCodeButton.addEventListener("click", cancelChangeSecurityCode);
+    elements.changeSecurityCodeDialog.addEventListener("click", handleChangeSecurityCodeKeypadInput);
+    elements.changeSecurityCodeDialog.addEventListener("close", () => {
+      changeSecurityCodeStep = 0;
+    });
     elements.maintenanceForm.addEventListener("submit", handleTakeDownNow);
     elements.scheduleMaintenanceButton.addEventListener("click", handleScheduleMaintenance);
     elements.endMaintenanceButton.addEventListener("click", handleEndMaintenance);
@@ -6063,7 +6106,6 @@ body.dark-mode .modal::backdrop {
     undoSaleCode: { title: "Undo sale code", decimal: false, mask: true },
     purgeLogCode: { title: "Purge logs code", decimal: false, mask: true },
     suspendCodeInput: { title: "Suspend user code", decimal: false, mask: true },
-    cashRemovalCodeInput: { title: "New security code", decimal: false, mask: false },
     removeOrderCodeInput: { title: "Security code", decimal: false, mask: true }
   };
 
@@ -6725,21 +6767,104 @@ body.dark-mode .modal::backdrop {
     }
   }
 
-  async function handleUpdateCashCode(event) {
+  function openChangeSecurityCode() {
+    if (!isBackdoor()) {
+      showToast("Only the backdoor account can change this code.");
+      return;
+    }
+    changeSecurityCodeStep = 0;
+    changeSecurityCodeValue = "";
+    updateChangeSecurityCodeUI();
+    openModal(elements.changeSecurityCodeDialog);
+  }
+
+  function cancelChangeSecurityCode() {
+    closeModal(elements.changeSecurityCodeDialog);
+  }
+
+  function updateChangeSecurityCodeUI() {
+    const steps = [
+      { label: "Step 1 of 3", title: "Enter current code", message: "Type your current security code to confirm who you are.", button: "Next" },
+      { label: "Step 2 of 3", title: "Enter new code", message: "Type the new security code. Use at least 3 characters.", button: "Next" },
+      { label: "Step 3 of 3", title: "Confirm new code", message: "Re-enter the new security code to confirm.", button: "Update code" }
+    ];
+    const step = steps[changeSecurityCodeStep] || steps[0];
+    elements.changeSecurityCodeTitle.textContent = step.title;
+    elements.changeSecurityCodeMessage.textContent = step.message;
+    elements.changeSecurityCodeStep.textContent = step.label;
+    elements.changeSecurityCodeDisplay.textContent = changeSecurityCodeValue ? "•".repeat(changeSecurityCodeValue.length) : "•";
+    elements.changeSecurityCodeConfirmButton.textContent = step.button;
+  }
+
+  function handleChangeSecurityCodeKeypadInput(event) {
+    const button = event.target.closest("button[data-key], button[data-action]");
+    if (!button) {
+      return;
+    }
+    const action = button.dataset.action;
+    const digit = button.dataset.key;
+    if (action === "clear") {
+      changeSecurityCodeValue = "";
+    } else if (action === "backspace") {
+      changeSecurityCodeValue = changeSecurityCodeValue.length > 0 ? changeSecurityCodeValue.slice(0, -1) : "";
+    } else if (digit !== undefined) {
+      changeSecurityCodeValue += digit;
+    }
+    updateChangeSecurityCodeUI();
+  }
+
+  async function handleChangeSecurityCodeSubmit(event) {
     event.preventDefault();
     if (!isBackdoor()) {
       showToast("Only the backdoor account can change this code.");
       return;
     }
-    const newCode = elements.cashRemovalCodeInput.value.trim();
-    if (!newCode) {
-      showToast("Enter a code.");
+    const currentStep = changeSecurityCodeStep;
+    const value = changeSecurityCodeValue.trim();
+
+    if (currentStep === 0) {
+      if (!value) {
+        showToast("Enter your current code.");
+        return;
+      }
+      changeSecurityCodeCurrent = value;
+      changeSecurityCodeStep = 1;
+      changeSecurityCodeValue = "";
+      updateChangeSecurityCodeUI();
       return;
     }
-    if (newCode.length < 3) {
-      showToast("Code must be at least 3 characters.");
+
+    if (currentStep === 1) {
+      if (!value) {
+        showToast("Enter a new code.");
+        return;
+      }
+      if (value.length < 3) {
+        showToast("Code must be at least 3 characters.");
+        return;
+      }
+      changeSecurityCodeNew = value;
+      changeSecurityCodeStep = 2;
+      changeSecurityCodeValue = "";
+      updateChangeSecurityCodeUI();
       return;
     }
+
+    if (currentStep === 2) {
+      if (!value) {
+        showToast("Re-enter the new code.");
+        return;
+      }
+      if (value !== changeSecurityCodeNew) {
+        showToast("New codes do not match.");
+        return;
+      }
+      await submitChangeSecurityCode(changeSecurityCodeCurrent, value);
+    }
+  }
+
+  async function submitChangeSecurityCode(currentCode, newCode) {
+    elements.changeSecurityCodeConfirmButton.disabled = true;
     try {
       const resp = await fetch(`${API_URL}/auth/set-code`, {
         method: "POST",
@@ -6747,19 +6872,30 @@ body.dark-mode .modal::backdrop {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${authToken}`
         },
-        body: JSON.stringify({ code: newCode })
+        body: JSON.stringify({ code: newCode, currentCode })
       });
       const data = await resp.json();
       if (!resp.ok) {
         showToast(data.error || "Failed to update code.");
+        changeSecurityCodeStep = 0;
+        changeSecurityCodeValue = "";
+        changeSecurityCodeCurrent = "";
+        changeSecurityCodeNew = "";
+        updateChangeSecurityCodeUI();
         return;
       }
       elements.currentCashCodeDisplay.textContent = "••••••••";
-      elements.cashRemovalCodeInput.value = "";
+      closeModal(elements.changeSecurityCodeDialog);
+      changeSecurityCodeStep = 0;
+      changeSecurityCodeValue = "";
+      changeSecurityCodeCurrent = "";
+      changeSecurityCodeNew = "";
       logUserEvent("Updated security code", "Cash removal code changed");
       showToast("Security code updated.");
     } catch {
       showToast("Failed to update security code.");
+    } finally {
+      elements.changeSecurityCodeConfirmButton.disabled = false;
     }
   }
 
@@ -9097,7 +9233,7 @@ body.dark-mode .modal::backdrop {
     renderPurgePreview();
 
     if (isBackdoor() && elements.currentCashCodeDisplay) {
-      elements.currentCashCodeDisplay.textContent = "••••••••";
+      elements.currentCashCodeDisplay.textContent = store.apiConfig?.cashRemovalCode ? "••••••••" : "Not set";
     }
 
     if (isBackdoor()) {
