@@ -11,6 +11,8 @@ interface StoreDocument {
   events: any[];
   userEvents: any[];
   orders: any[];
+  recurringOrders: any[];
+  orderHistory: any[];
   lifetime: {
     revenue: number;
     cost: number;
@@ -102,6 +104,8 @@ const SECTIONS = [
   "events",
   "userEvents",
   "orders",
+  "recurringOrders",
+  "orderHistory",
   "config",
 ] as const;
 
@@ -620,6 +624,8 @@ function blankStore(): StoreDocument {
     events: [],
     userEvents: [],
     orders: [],
+    recurringOrders: [],
+    orderHistory: [],
     lifetime: {
       revenue: 0,
       cost: 0,
@@ -674,6 +680,8 @@ function normalizeStore(store: unknown): StoreDocument {
     events: Array.isArray(source.events) ? source.events : [],
     userEvents: Array.isArray(source.userEvents) ? source.userEvents : [],
     orders: Array.isArray(source.orders) ? source.orders : [],
+    recurringOrders: Array.isArray(source.recurringOrders) ? source.recurringOrders : [],
+    orderHistory: Array.isArray(source.orderHistory) ? source.orderHistory : [],
     lifetime: {
       ...base.lifetime,
       ...(source.lifetime ?? {}),
@@ -776,6 +784,7 @@ export default {
           room?: string;
           timeSlot?: string;
           items?: any[];
+          recurring?: any;
         }>();
 
         const customerName = String(body.customerName || "").trim().slice(0, 80);
@@ -805,6 +814,48 @@ export default {
         const total =
           Math.round(cleanItems.reduce((sum, it) => sum + it.quantity * it.itemPrice, 0) * 100) / 100;
 
+        const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
+        const normalized = normalizeStore(store);
+        normalized.orders = normalized.orders || [];
+        normalized.recurringOrders = normalized.recurringOrders || [];
+
+        // Recurring order creation
+        const recurring = body.recurring && typeof body.recurring === "object" ? body.recurring : null;
+        if (recurring && recurring.enabled) {
+          const rawDays = Array.isArray(recurring.days) ? recurring.days : [];
+          const days = rawDays
+            .map((d: any) => String(d))
+            .filter((d: string) => ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].includes(d));
+          const untilValue = String(recurring.until || "").trim();
+          const repeatUntil = /^\d{4}-\d{2}-\d{2}$/.test(untilValue) ? untilValue : "";
+
+          if (days.length === 0 || !repeatUntil) {
+            return jsonResponse({ error: "Recurring orders need at least one weekday and an end date." }, 400);
+          }
+
+          normalized.recurringOrders.unshift({
+            id: `recurring_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`,
+            customerName,
+            room,
+            timeSlot: "Break",
+            days,
+            repeatUntil,
+            items: cleanItems,
+            total,
+            placedBy: "Customer",
+            createdBy: "Customer",
+            active: true,
+            createdAt: new Date().toISOString(),
+            lastGeneratedDate: "",
+          });
+          if (normalized.recurringOrders.length > 200) {
+            normalized.recurringOrders = normalized.recurringOrders.slice(0, 200);
+          }
+
+          await saveStoreToDb(env.DB, normalized);
+          return jsonResponse({ ok: true, recurring: normalized.recurringOrders[0] });
+        }
+
         const order = {
           id: `order_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`,
           customerName,
@@ -817,9 +868,6 @@ export default {
           createdAt: new Date().toISOString(),
         };
 
-        const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
-        const normalized = normalizeStore(store);
-        normalized.orders = normalized.orders || [];
         normalized.orders.unshift(order);
         if (normalized.orders.length > 300) normalized.orders = normalized.orders.slice(0, 300);
         await saveStoreToDb(env.DB, normalized);
@@ -1186,6 +1234,8 @@ export default {
         normalized.events = incoming.events;
         normalized.userEvents = incoming.userEvents;
         normalized.orders = incoming.orders;
+        normalized.recurringOrders = incoming.recurringOrders;
+        normalized.orderHistory = incoming.orderHistory;
         normalized.lifetime = incoming.lifetime;
         normalized.money = incoming.money;
         normalized.apiConfig = incoming.apiConfig;

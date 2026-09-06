@@ -1301,6 +1301,261 @@ tbody tr:last-child td {
   flex-wrap: wrap;
 }
 
+/* ── Recurring orders ── */
+
+.recurring-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 43px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.recurring-toggle:hover {
+  border-color: var(--green);
+}
+
+.recurring-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.recurring-toggle .toggle-track {
+  position: relative;
+  flex-shrink: 0;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--line);
+  transition: background 0.2s ease;
+}
+
+.recurring-toggle .toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+}
+
+.recurring-toggle input:checked + .toggle-track {
+  background: var(--green);
+}
+
+.recurring-toggle input:checked + .toggle-track::after {
+  transform: translateX(18px);
+}
+
+.recurring-toggle:has(input:checked) {
+  background: var(--green-soft);
+  border-color: var(--green);
+}
+
+.recurring-toggle .recurring-toggle-label {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.recurring-toggle .recurring-toggle-title {
+  font-size: 0.9rem;
+}
+
+.recurring-toggle .recurring-toggle-sub {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.recurring-options {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+}
+
+.recurring-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.day-chip {
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 100ms ease;
+}
+
+.day-chip:hover {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+
+.day-chip:active {
+  transform: scale(0.97);
+}
+
+.day-chip.is-selected {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+}
+
+.recurring-repeat {
+  display: grid;
+  gap: 6px;
+}
+
+.recurring-error {
+  color: var(--coral);
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-height: 1.2em;
+}
+
+.recurring-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* Recurring management section */
+.recurring-list {
+  display: grid;
+  gap: 10px;
+}
+
+.recurring-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.recurring-card.dormant {
+  opacity: 0.6;
+}
+
+.recurring-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.recurring-card-header strong {
+  font-size: 0.95rem;
+}
+
+.recurring-card-header .name-block {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.recurring-card-meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-bottom: 6px;
+}
+
+.recurring-card-days {
+  color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.recurring-card-items {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+
+.recurring-card-items li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.82rem;
+  padding: 2px 0;
+}
+
+.recurring-card-total {
+  font-weight: 800;
+  font-size: 0.9rem;
+  margin-bottom: 10px;
+}
+
+.recurring-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Order history */
+.order-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.order-history-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.order-history-card .order-card-items {
+  margin-bottom: 6px;
+}
+
+.order-history-note {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+  color: var(--coral);
+  font-size: 0.82rem;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.order-history-note span {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.order-history-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 @keyframes cardPulse {
   0% { box-shadow: 0 0 0 0 rgba(33, 110, 78, 0.4); }
   70% { box-shadow: 0 0 0 8px rgba(33, 110, 78, 0); }
@@ -2173,6 +2428,32 @@ body.dark-mode .modal::backdrop {
           </label>
           <p class="delivery-note">All orders will be delivered at Break.</p>
         </div>
+        <label class="recurring-toggle">
+          <input type="checkbox" id="publicOrderRecurringToggle">
+          <span class="toggle-track"></span>
+          <span class="recurring-toggle-label">
+            <span class="recurring-toggle-title">Recurring order</span>
+            <span class="recurring-toggle-sub">Automatically reorder these items on selected weekdays</span>
+          </span>
+        </label>
+        <div id="publicOrderRecurringOptions" class="recurring-options is-hidden">
+          <div class="recurring-repeat">
+            <span class="recurring-toggle-title">Repeat on these weekdays</span>
+            <div id="publicOrderRecurringDays" class="recurring-days" role="group" aria-label="Repeat weekdays">
+              <button type="button" class="day-chip" data-day="mon">Mon</button>
+              <button type="button" class="day-chip" data-day="tue">Tue</button>
+              <button type="button" class="day-chip" data-day="wed">Wed</button>
+              <button type="button" class="day-chip" data-day="thu">Thu</button>
+              <button type="button" class="day-chip" data-day="fri">Fri</button>
+              <button type="button" class="day-chip" data-day="sat">Sat</button>
+              <button type="button" class="day-chip" data-day="sun">Sun</button>
+            </div>
+          </div>
+          <label class="recurring-repeat">Repeat until
+            <input id="publicOrderRecurringUntil" type="date" min="">
+          </label>
+          <p class="recurring-error" id="publicOrderRecurringError"></p>
+        </div>
         <div id="publicOrderItemPicker" class="order-item-picker" aria-label="Available items"></div>
         <div class="form-readout">
           <span>Total</span>
@@ -2442,6 +2723,32 @@ body.dark-mode .modal::backdrop {
               </label>
               <p class="delivery-note">All orders will be delivered at Break.</p>
             </div>
+            <label class="recurring-toggle">
+              <input type="checkbox" id="orderRecurringToggle">
+              <span class="toggle-track"></span>
+              <span class="recurring-toggle-label">
+                <span class="recurring-toggle-title">Recurring order</span>
+                <span class="recurring-toggle-sub">Automatically reorder these items on selected weekdays</span>
+              </span>
+            </label>
+            <div id="orderRecurringOptions" class="recurring-options is-hidden">
+              <div class="recurring-repeat">
+                <span class="recurring-toggle-title">Repeat on these weekdays</span>
+                <div id="orderRecurringDays" class="recurring-days" role="group" aria-label="Repeat weekdays">
+                  <button type="button" class="day-chip" data-day="mon">Mon</button>
+                  <button type="button" class="day-chip" data-day="tue">Tue</button>
+                  <button type="button" class="day-chip" data-day="wed">Wed</button>
+                  <button type="button" class="day-chip" data-day="thu">Thu</button>
+                  <button type="button" class="day-chip" data-day="fri">Fri</button>
+                  <button type="button" class="day-chip" data-day="sat">Sat</button>
+                  <button type="button" class="day-chip" data-day="sun">Sun</button>
+                </div>
+              </div>
+              <label class="recurring-repeat">Repeat until
+                <input id="orderRecurringUntil" type="date" min="">
+              </label>
+              <p class="recurring-error" id="orderRecurringError"></p>
+            </div>
             <div id="orderItemPicker" class="order-item-picker" aria-label="Available items"></div>
             <div class="form-readout">
               <span>Total</span>
@@ -2456,10 +2763,22 @@ body.dark-mode .modal::backdrop {
 
           <section class="panel-block">
             <h4>Current orders</h4>
-            <p>Orders waiting to be delivered. Mark one fulfilled when it is handed over.</p>
+            <p>Orders waiting to be delivered. Mark one fulfilled when it is handed over, or remove one with a reason.</p>
             <div id="orderList" class="order-list"></div>
           </section>
         </div>
+
+        <section class="panel-block" style="margin-top:16px">
+          <h4>Recurring orders</h4>
+          <p>Recurring orders are delivered each selected weekday until their end date. Stop or edit one at any time, or set up a new one above.</p>
+          <div id="recurringOrderList" class="recurring-list"></div>
+        </section>
+
+        <section class="panel-block" style="margin-top:16px">
+          <h4>Order history</h4>
+          <p>Orders removed or fulfilled in the last month.</p>
+          <div id="orderHistoryList" class="order-history-list"></div>
+        </section>
       </section>
 
       <section class="tab-panel is-hidden" id="eventsTab" data-panel="events">
@@ -3354,6 +3673,21 @@ body.dark-mode .modal::backdrop {
     </form>
   </dialog>
 
+  <dialog id="removeOrderDialog" class="modal danger-modal">
+    <form id="removeOrderForm" method="dialog">
+      <h3>Remove order</h3>
+      <p id="removeOrderName" style="margin-bottom:10px;"></p>
+      <label>
+        Reason for removal
+        <input id="removeOrderReasonInput" type="text" placeholder="e.g. Customer cancelled" autocomplete="off" required>
+      </label>
+      <div class="modal-actions">
+        <button type="button" id="cancelRemoveOrderButton" class="secondary-button">Cancel</button>
+        <button type="submit" class="danger-button">Remove order</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="forcePasswordDialog" class="modal">
     <form id="forcePasswordForm" method="dialog">
       <h3>Set your password</h3>
@@ -3589,6 +3923,8 @@ body.dark-mode .modal::backdrop {
   let basket = [];
   let pendingSaleDraft = null;
   let orderSelection = [];
+  let orderRemoveTarget = null;
+  let editingRecurringId = null;
   let toastTimer;
   let pendingMoneyAction = null;
   let keypadTargetInput = null;
@@ -3742,6 +4078,25 @@ body.dark-mode .modal::backdrop {
     elements.publicPlaceOrderButton = document.querySelector("#publicPlaceOrderButton");
     elements.publicClearOrderButton = document.querySelector("#publicClearOrderButton");
     elements.publicOrderNewOrderButton = document.querySelector("#publicOrderNewOrderButton");
+
+    // Recurring order elements
+    elements.orderRecurringToggle = document.querySelector("#orderRecurringToggle");
+    elements.orderRecurringOptions = document.querySelector("#orderRecurringOptions");
+    elements.orderRecurringDays = document.querySelector("#orderRecurringDays");
+    elements.orderRecurringUntil = document.querySelector("#orderRecurringUntil");
+    elements.orderRecurringError = document.querySelector("#orderRecurringError");
+    elements.publicOrderRecurringToggle = document.querySelector("#publicOrderRecurringToggle");
+    elements.publicOrderRecurringOptions = document.querySelector("#publicOrderRecurringOptions");
+    elements.publicOrderRecurringDays = document.querySelector("#publicOrderRecurringDays");
+    elements.publicOrderRecurringUntil = document.querySelector("#publicOrderRecurringUntil");
+    elements.publicOrderRecurringError = document.querySelector("#publicOrderRecurringError");
+    elements.recurringOrderList = document.querySelector("#recurringOrderList");
+    elements.orderHistoryList = document.querySelector("#orderHistoryList");
+    elements.removeOrderDialog = document.querySelector("#removeOrderDialog");
+    elements.removeOrderForm = document.querySelector("#removeOrderForm");
+    elements.removeOrderName = document.querySelector("#removeOrderName");
+    elements.removeOrderReasonInput = document.querySelector("#removeOrderReasonInput");
+    elements.cancelRemoveOrderButton = document.querySelector("#cancelRemoveOrderButton");
     elements.paymentDialog = document.querySelector("#paymentDialog");
     elements.paymentForm = document.querySelector("#paymentForm");
     elements.paymentDialogMeta = document.querySelector("#paymentDialogMeta");
@@ -4000,6 +4355,25 @@ body.dark-mode .modal::backdrop {
     elements.publicClearOrderButton.addEventListener("click", resetPublicOrderForm);
     elements.publicOrderNewOrderButton.addEventListener("click", resetPublicOrderForm);
 
+    // Recurring order listeners
+    elements.orderRecurringToggle.addEventListener("change", () => {
+      elements.orderRecurringOptions.classList.toggle("is-hidden", !elements.orderRecurringToggle.checked);
+      updateRecurringUntilMin(elements.orderRecurringUntil);
+    });
+    elements.orderRecurringDays.addEventListener("click", handleRecurringDayClick);
+    elements.publicOrderRecurringToggle.addEventListener("change", () => {
+      elements.publicOrderRecurringOptions.classList.toggle("is-hidden", !elements.publicOrderRecurringToggle.checked);
+      updateRecurringUntilMin(elements.publicOrderRecurringUntil);
+    });
+    elements.publicOrderRecurringDays.addEventListener("click", handleRecurringDayClick);
+    elements.recurringOrderList.addEventListener("click", handleRecurringListAction);
+    elements.orderHistoryList.addEventListener("click", handleOrderHistoryAction);
+    elements.removeOrderForm.addEventListener("submit", handleRemoveOrderSubmit);
+    elements.cancelRemoveOrderButton.addEventListener("click", () => {
+      elements.removeOrderReasonInput.value = "";
+      closeModal(elements.removeOrderDialog);
+    });
+
     elements.createUserForm.addEventListener("submit", handleCreateUser);
     elements.passwordForm.addEventListener("submit", handlePasswordChange);
     elements.passwordUser.addEventListener("change", syncPasswordMustChange);
@@ -4237,6 +4611,8 @@ body.dark-mode .modal::backdrop {
       events: [],
       userEvents: [],
       orders: [],
+      recurringOrders: [],
+      orderHistory: [],
       lifetime: {
         revenue: 0,
         cost: 0,
@@ -4298,6 +4674,8 @@ body.dark-mode .modal::backdrop {
     next.events = Array.isArray(value.events) ? value.events : [];
     next.userEvents = Array.isArray(value.userEvents) ? value.userEvents : [];
     next.orders = Array.isArray(value.orders) ? value.orders : [];
+    next.recurringOrders = Array.isArray(value.recurringOrders) ? value.recurringOrders : [];
+    next.orderHistory = Array.isArray(value.orderHistory) ? value.orderHistory : [];
     next.events = next.events
       .filter((event) => event && event.name)
       .map((event) => ({
@@ -7212,10 +7590,22 @@ body.dark-mode .modal::backdrop {
     renderOrderItemPicker();
   }
 
+  function resetRecurringForm() {
+    editingRecurringId = null;
+    if (elements.orderRecurringToggle) {
+      elements.orderRecurringToggle.checked = false;
+      elements.orderRecurringOptions.classList.add("is-hidden");
+      elements.orderRecurringUntil.value = "";
+      if (elements.orderRecurringError) elements.orderRecurringError.textContent = "";
+      elements.orderRecurringDays.querySelectorAll(".day-chip").forEach((c) => c.classList.remove("is-selected"));
+    }
+  }
+
   function clearOrderSelection() {
     orderSelection = [];
     elements.orderCustomerInput.value = "";
     elements.orderRoomInput.value = "";
+    resetRecurringForm();
     renderOrderTotal();
   }
 
@@ -7242,30 +7632,178 @@ body.dark-mode .modal::backdrop {
           ${isFulfilled ? "" : `
           <div class="order-card-actions">
             <button type="button" class="primary-button" data-fulfill-order="${order.id}">Fulfil</button>
-            <button type="button" class="danger-button" data-cancel-order="${order.id}">Cancel</button>
+            <button type="button" class="danger-button" data-remove-order="${order.id}">Remove</button>
           </div>`}
         </article>
       `;
     }).join("");
   }
 
+  const ORDER_DAY_NAMES = {
+    mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun"
+  };
+
+  function todayDateString() {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${d.getFullYear()}-${m}-${day}`;
+  }
+
+  function weekdayOf(dateStr) {
+    const parts = dateStr.split("-");
+    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    return ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][d.getDay()];
+  }
+
+  function generateDueRecurringOrders() {
+    if (!store.recurringOrders) store.recurringOrders = [];
+    if (!store.orders) store.orders = [];
+    const today = todayDateString();
+    const todayWeekday = weekdayOf(today);
+    let generatedCount = 0;
+    for (const rec of store.recurringOrders) {
+      if (!rec.active) continue;
+      if (rec.repeatUntil && today > rec.repeatUntil) continue;
+      if (!Array.isArray(rec.days) || !rec.days.includes(todayWeekday)) continue;
+      if (rec.lastGeneratedDate === today) continue;
+      const exists = store.orders.some((o) => o.recurringId === rec.id);
+      if (!exists) {
+        store.orders.unshift({
+          id: uid("order"),
+          customerName: rec.customerName,
+          room: rec.room,
+          timeSlot: "Break",
+          items: (rec.items || []).map((it) => ({ ...it })),
+          total: rec.total,
+          status: "pending",
+          placedBy: rec.placedBy || "Recurring",
+          createdAt: new Date().toISOString(),
+          recurringId: rec.id
+        });
+        generatedCount += 1;
+      }
+      rec.lastGeneratedDate = today;
+    }
+    if (generatedCount > 0) {
+      scheduleSave();
+    }
+  }
+
+  function formatRecurringDays(days) {
+    return (days || []).map((d) => ORDER_DAY_NAMES[d] || d).join(", ") || "—";
+  }
+
+  function renderRecurringOrderList() {
+    const recs = (store.recurringOrders || []).slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    if (!recs.length) {
+      elements.recurringOrderList.innerHTML = `<div class="order-history-empty">No recurring orders yet.</div>`;
+      return;
+    }
+    elements.recurringOrderList.innerHTML = recs.map((rec) => {
+      const itemsHtml = (rec.items || []).map((li) => `
+        <li><span>${escapeHtml(li.itemName)} × ${li.quantity}</span><span>${money.format(roundMoney(li.itemPrice * li.quantity))}</span></li>
+      `).join("");
+      const statusBadge = rec.active
+        ? `<span class="badge">Active</span>`
+        : `<span class="badge danger">Stopped</span>`;
+      const expireNote = rec.repeatUntil && rec.repeatUntil < todayDateString()
+        ? ' <em>(ended)</em>' : "";
+      return `
+        <article class="recurring-card ${rec.active ? "" : "dormant"}">
+          <div class="recurring-card-header">
+            <div class="name-block">
+              <strong>${escapeHtml(rec.customerName || "Guest")}</strong>
+              ${statusBadge}
+            </div>
+            <span class="recurring-card-meta">${money.format(roundMoney(rec.total))} / delivery</span>
+          </div>
+          <div class="recurring-card-meta">${escapeHtml(rec.room || "No room")} &#183; Every ${formatRecurringDays(rec.days)}</div>
+          <div class="recurring-card-days">Until ${escapeHtml(rec.repeatUntil || "—")}${expireNote}</div>
+          <ul class="recurring-card-items">${itemsHtml}</ul>
+          <div class="recurring-card-total">Total: ${money.format(roundMoney(rec.total))}</div>
+          <div class="recurring-card-actions">
+            <button type="button" class="secondary-button" data-edit-recurring="${rec.id}">Edit</button>
+            ${rec.active
+              ? `<button type="button" class="danger-button" data-stop-recurring="${rec.id}">Stop</button>`
+              : `<button type="button" class="primary-button" data-resume-recurring="${rec.id}">Resume</button>`}
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  function renderOrderHistory() {
+    const hist = (store.orderHistory || []).slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 1);
+    const cutoffIso = cutoff.toISOString();
+    const recent = hist.filter((h) => h.createdAt >= cutoffIso);
+    if (!recent.length) {
+      elements.orderHistoryList.innerHTML = `<div class="order-history-empty">No removed orders in the last month.</div>`;
+      return;
+    }
+    elements.orderHistoryList.innerHTML = recent.map((h) => {
+      const itemsHtml = (h.items || []).map((li) => `
+        <li><span>${escapeHtml(li.itemName)} × ${li.quantity}</span><span>${money.format(roundMoney(li.itemPrice * li.quantity))}</span></li>
+      `).join("");
+      return `
+        <article class="order-history-card">
+          <div class="order-card-header">
+            <strong>${escapeHtml(h.customerName || "Guest")}</strong>
+            <span class="order-status">removed</span>
+          </div>
+          <div class="order-card-meta">${escapeHtml(h.room || "No room")} &#183; ${formatDate(h.createdAt)}</div>
+          <ul class="order-card-items">${itemsHtml}</ul>
+          <div class="order-card-total">Total: ${money.format(roundMoney(h.total))}</div>
+          <div class="order-history-note">
+            <span>Removed by ${escapeHtml(h.removedBy || "Unknown")}</span>
+            Reason: ${escapeHtml(h.reason || "—")}
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
   function renderOrdersTab() {
+    generateDueRecurringOrders();
     renderOrderItemPicker();
     renderOrderTotal();
     renderOrderList();
+    renderRecurringOrderList();
+    renderOrderHistory();
   }
 
   function handleOrderListAction(event) {
     const fulfillBtn = event.target.closest("button[data-fulfill-order]");
-    const cancelBtn = event.target.closest("button[data-cancel-order]");
+    const removeBtn = event.target.closest("button[data-remove-order]");
     if (fulfillBtn) {
       fulfillOrder(fulfillBtn.dataset.fulfillOrder);
       return;
     }
-    if (cancelBtn) {
-      cancelOrder(cancelBtn.dataset.cancelOrder);
+    if (removeBtn) {
+      openRemoveOrderDialog(removeBtn.dataset.removeOrder);
       return;
     }
+  }
+
+  function getSelectedRecurringDays() {
+    return Array.from(elements.orderRecurringDays.querySelectorAll(".day-chip.is-selected"))
+      .map((chip) => chip.dataset.day);
+  }
+
+  function getSelectedPublicRecurringDays() {
+    return Array.from(elements.publicOrderRecurringDays.querySelectorAll(".day-chip.is-selected"))
+      .map((chip) => chip.dataset.day);
+  }
+
+  function getRecurringFormError(totalForError, untilInput, daysEl) {
+    if (!totalForError) return "Select at least one item for the recurring order.";
+    const days = daysEl.querySelectorAll(".day-chip.is-selected").length;
+    if (days === 0) return "Choose at least one weekday.";
+    if (!untilInput.value) return "Choose an end date.";
+    if (untilInput.value < todayDateString()) return "The end date must be in the future.";
+    return "";
   }
 
   function placeOrder() {
@@ -7302,6 +7840,48 @@ body.dark-mode .modal::backdrop {
       itemPrice: roundMoney(line.sellPrice)
     }));
 
+    const isRecurring = elements.orderRecurringToggle.checked;
+    if (isRecurring) {
+      const error = getRecurringFormError(total, elements.orderRecurringUntil, elements.orderRecurringDays);
+      if (error) {
+        elements.orderRecurringError.textContent = error;
+        return;
+      }
+      elements.orderRecurringError.textContent = "";
+      store.recurringOrders = store.recurringOrders || [];
+      const days = getSelectedRecurringDays();
+      const recurringData = {
+        customerName,
+        room,
+        timeSlot: "Break",
+        days,
+        repeatUntil: elements.orderRecurringUntil.value,
+        items,
+        total,
+        placedBy: currentUser ? currentUser.displayName : "Guest",
+        createdBy: currentUser ? currentUser.displayName : "Guest",
+        active: true,
+        createdAt: new Date().toISOString(),
+        lastGeneratedDate: ""
+      };
+      if (editingRecurringId) {
+        const existing = store.recurringOrders.find((r) => r.id === editingRecurringId);
+        if (existing) {
+          Object.assign(existing, recurringData, { createdAt: existing.createdAt, lastGeneratedDate: "" });
+        }
+        editingRecurringId = null;
+        logUserEvent("Edited recurring order", `${customerName} - ${room} (${days.join(",")} until ${elements.orderRecurringUntil.value}) ${money.format(total)}`);
+      } else {
+        store.recurringOrders.unshift({ id: uid("recurring"), ...recurringData });
+        logUserEvent("Created recurring order", `${customerName} - ${room} (${days.join(",")} until ${elements.orderRecurringUntil.value}) ${money.format(total)}`);
+      }
+      clearOrderSelection();
+      scheduleSave();
+      renderRecurringOrderList();
+      showToast(`Recurring order set up for ${customerName}.`);
+      return;
+    }
+
     store.orders = store.orders || [];
     store.orders.unshift({
       id: uid("order"),
@@ -7335,16 +7915,144 @@ body.dark-mode .modal::backdrop {
     showToast(`Order for ${order.customerName} marked fulfilled.`);
   }
 
-  function cancelOrder(id) {
+  function openRemoveOrderDialog(id) {
     const order = (store.orders || []).find((o) => o.id === id);
     if (!order) {
       return;
     }
+    orderRemoveTarget = id;
+    elements.removeOrderName.textContent = `Remove "${order.customerName}" (${order.room}) from the order list?`;
+    elements.removeOrderReasonInput.value = "";
+    openModal(elements.removeOrderDialog);
+    elements.removeOrderReasonInput.focus();
+  }
+
+  function handleRemoveOrderSubmit(event) {
+    event.preventDefault();
+    const id = orderRemoveTarget;
+    const reason = elements.removeOrderReasonInput.value.trim();
+    if (!reason) {
+      showToast("Enter a reason for removing the order.");
+      return;
+    }
+    const order = (store.orders || []).find((o) => o.id === id);
+    if (!order) {
+      closeModal(elements.removeOrderDialog);
+      orderRemoveTarget = null;
+      return;
+    }
     store.orders = (store.orders || []).filter((o) => o.id !== id);
+    store.orderHistory = store.orderHistory || [];
+    store.orderHistory.unshift({
+      id: uid("horder"),
+      customerName: order.customerName,
+      room: order.room,
+      timeSlot: order.timeSlot,
+      items: order.items,
+      total: order.total,
+      removedBy: currentUser ? currentUser.displayName : "Unknown",
+      reason,
+      createdAt: new Date().toISOString()
+    });
+    if (store.orderHistory.length > 500) {
+      store.orderHistory = store.orderHistory.slice(0, 500);
+    }
     scheduleSave();
     renderOrderList();
-    logUserEvent("Cancelled order", `${order.customerName} - ${order.room}`);
-    showToast("Order cancelled.");
+    renderOrderHistory();
+    logUserEvent("Removed order", `${order.customerName} - ${order.room} (${reason})`);
+    closeModal(elements.removeOrderDialog);
+    orderRemoveTarget = null;
+    elements.removeOrderReasonInput.value = "";
+    showToast("Order removed.");
+  }
+
+  function handleRecurringDayClick(event) {
+    const chip = event.target.closest(".day-chip");
+    if (!chip) {
+      return;
+    }
+    chip.classList.toggle("is-selected");
+  }
+
+  function openEditRecurring(id) {
+    const rec = (store.recurringOrders || []).find((r) => r.id === id);
+    if (!rec) {
+      return;
+    }
+    if (!rec.items || !rec.items.length) {
+      showToast("This recurring order has no items to edit.");
+      return;
+    }
+    // Preload recurring details into the placement form for editing
+    elements.orderCustomerInput.value = rec.customerName || "";
+    elements.orderRoomInput.value = rec.room || "";
+    orderSelection = (rec.items || []).map((it) => ({
+      itemId: it.itemId,
+      itemName: it.itemName,
+      quantity: it.quantity,
+      sellPrice: it.itemPrice
+    }));
+    elements.orderRecurringToggle.checked = true;
+    elements.orderRecurringOptions.classList.remove("is-hidden");
+    elements.orderRecurringUntil.value = rec.repeatUntil || "";
+    updateRecurringUntilMin(elements.orderRecurringUntil);
+    elements.orderRecurringDays.querySelectorAll(".day-chip").forEach((c) => {
+      c.classList.toggle("is-selected", (rec.days || []).includes(c.dataset.day));
+    });
+    elements.orderRecurringError.textContent = "";
+    // Replace the form handler temporarily to overwrite the existing recurring order
+    editingRecurringId = id;
+    activeTab = "orders";
+    setActiveTab("orders");
+    renderOrderTotal();
+    showToast(`Editing recurring order for ${rec.customerName}. Adjust and press “Place order”.`);
+  }
+
+  function handleRecurringListAction(event) {
+    const stopBtn = event.target.closest("button[data-stop-recurring]");
+    const resumeBtn = event.target.closest("button[data-resume-recurring]");
+    const editBtn = event.target.closest("button[data-edit-recurring]");
+    if (stopBtn) {
+      const rec = (store.recurringOrders || []).find((r) => r.id === stopBtn.dataset.stopRecurring);
+      if (rec) {
+        if (!window.confirm(`Stop the recurring order for ${rec.customerName}?`)) return;
+        rec.active = false;
+        scheduleSave();
+        renderRecurringOrderList();
+        logUserEvent("Stopped recurring order", `${rec.customerName} - ${rec.room}`);
+        showToast("Recurring order stopped.");
+      }
+      return;
+    }
+    if (resumeBtn) {
+      const rec = (store.recurringOrders || []).find((r) => r.id === resumeBtn.dataset.resumeRecurring);
+      if (rec) {
+        rec.active = true;
+        scheduleSave();
+        renderRecurringOrderList();
+        logUserEvent("Resumed recurring order", `${rec.customerName} - ${rec.room}`);
+        showToast("Recurring order resumed.");
+      }
+      return;
+    }
+    if (editBtn) {
+      openEditRecurring(editBtn.dataset.editRecurring);
+    }
+  }
+
+  function updateRecurringUntilMin(input) {
+    const today = todayDateString();
+    if (input) {
+      input.min = today;
+      if (input.value && input.value < today) {
+        input.value = today;
+      }
+    }
+  }
+
+  function handleOrderHistoryAction(event) {
+    // Reserved for potential future history actions.
   }
 
   function getOrderPageUrl() {
@@ -7450,9 +8158,23 @@ body.dark-mode .modal::backdrop {
     orderSelection = [];
     elements.publicOrderCustomerInput.value = "";
     elements.publicOrderRoomInput.value = "";
+    elements.publicOrderRecurringToggle.checked = false;
+    elements.publicOrderRecurringOptions.classList.add("is-hidden");
+    elements.publicOrderRecurringUntil.value = "";
+    elements.publicOrderRecurringError.textContent = "";
+    elements.publicOrderRecurringDays.querySelectorAll(".day-chip").forEach((c) => c.classList.remove("is-selected"));
     elements.publicOrderFormWrapper.classList.remove("is-hidden");
     elements.publicOrderConfirm.classList.add("is-hidden");
     updatePublicOrderTotal();
+  }
+
+  function getPublicRecurringError(totalForError) {
+    if (!totalForError) return "Select at least one item for the recurring order.";
+    const days = elements.publicOrderRecurringDays.querySelectorAll(".day-chip.is-selected").length;
+    if (days === 0) return "Choose at least one weekday.";
+    if (!elements.publicOrderRecurringUntil.value) return "Choose an end date.";
+    if (elements.publicOrderRecurringUntil.value < todayDateString()) return "The end date must be in the future.";
+    return "";
   }
 
   async function submitPublicOrder() {
@@ -7481,6 +8203,17 @@ body.dark-mode .modal::backdrop {
       }
     }
 
+    const total = getOrderTotal();
+    const isRecurring = elements.publicOrderRecurringToggle.checked;
+    if (isRecurring) {
+      const error = getPublicRecurringError(total);
+      if (error) {
+        elements.publicOrderRecurringError.textContent = error;
+        return;
+      }
+      elements.publicOrderRecurringError.textContent = "";
+    }
+
     const items = orderSelection.map((line) => ({
       itemId: line.itemId,
       itemName: line.itemName,
@@ -7488,12 +8221,21 @@ body.dark-mode .modal::backdrop {
       itemPrice: roundMoney(line.sellPrice)
     }));
 
+    const body = { customerName, room, timeSlot, items };
+    if (isRecurring) {
+      body.recurring = {
+        enabled: true,
+        days: getSelectedPublicRecurringDays(),
+        until: elements.publicOrderRecurringUntil.value
+      };
+    }
+
     elements.publicPlaceOrderButton.disabled = true;
     try {
       const response = await fetch(`${API_URL}/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customerName, room, timeSlot, items })
+        body: JSON.stringify(body)
       });
       const data = await response.json();
       if (!response.ok || !data.ok) {
@@ -7503,8 +8245,12 @@ body.dark-mode .modal::backdrop {
       orderSelection = [];
       elements.publicOrderFormWrapper.classList.add("is-hidden");
       elements.publicOrderConfirm.classList.remove("is-hidden");
-      elements.publicOrderConfirmText.textContent = `${data.order.customerName}, your order totalling ${money.format(roundMoney(data.order.total))} has been sent. Payment must be made in cash.`;
-      showToast("Order placed!");
+      if (isRecurring) {
+        elements.publicOrderConfirmText.textContent = `${data.recurring.customerName}, your recurring order totalling ${money.format(roundMoney(data.recurring.total))} per delivery has been set up. Payment must be made in cash.`;
+      } else {
+        elements.publicOrderConfirmText.textContent = `${data.order.customerName}, your order totalling ${money.format(roundMoney(data.order.total))} has been sent. Payment must be made in cash.`;
+      }
+      showToast(isRecurring ? "Recurring order set up!" : "Order placed!");
     } catch (error) {
       console.error("Public order failed", error);
       showToast("Could not place your order. Please check your connection.");
