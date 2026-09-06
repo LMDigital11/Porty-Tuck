@@ -3754,10 +3754,24 @@ body.dark-mode .modal::backdrop {
     <form id="securityCodePromptForm" method="dialog">
       <h3 id="securityCodePromptTitle">Enter security code</h3>
       <p id="securityCodePromptMessage"></p>
-      <label>
-        Security code
-        <input id="securityCodePromptInput" type="text" inputmode="none" autocomplete="off" required>
-      </label>
+      <div class="quantity-keypad-panel">
+        <div id="securityCodePromptDisplay" class="quantity-display">•</div>
+        <input id="securityCodePromptInput" type="hidden" value="" autocomplete="off" required>
+        <div class="keypad-grid">
+          <button type="button" class="keypad-button" data-key="1">1</button>
+          <button type="button" class="keypad-button" data-key="2">2</button>
+          <button type="button" class="keypad-button" data-key="3">3</button>
+          <button type="button" class="keypad-button" data-key="4">4</button>
+          <button type="button" class="keypad-button" data-key="5">5</button>
+          <button type="button" class="keypad-button" data-key="6">6</button>
+          <button type="button" class="keypad-button" data-key="7">7</button>
+          <button type="button" class="keypad-button" data-key="8">8</button>
+          <button type="button" class="keypad-button" data-key="9">9</button>
+          <button type="button" class="keypad-button keypad-action" data-action="clear">Clear</button>
+          <button type="button" class="keypad-button" data-key="0">0</button>
+          <button type="button" class="keypad-button keypad-action" data-action="backspace">⌫</button>
+        </div>
+      </div>
       <div class="alert-card warning" style="margin-top:4px;" aria-live="polite">
         If you require this code, talk to admin users.
       </div>
@@ -3890,11 +3904,8 @@ body.dark-mode .modal::backdrop {
       elements.securityCodePromptTitle.textContent = title;
       elements.securityCodePromptMessage.textContent = message;
       elements.securityCodePromptInput.value = "";
+      elements.securityCodePromptDisplay.textContent = "•";
       openModal(elements.securityCodePromptDialog);
-      setTimeout(() => {
-        if (elements.moneyInputDialog.open) return;
-        openKeypadForField(elements.securityCodePromptInput);
-      }, 0);
     });
   }
   function handleSecurityCodePromptSubmit(event) {
@@ -3905,6 +3916,25 @@ body.dark-mode .modal::backdrop {
       securityCodePromptResolve(code);
       securityCodePromptResolve = null;
     }
+  }
+  function handleSecurityCodeKeypadInput(event) {
+    const button = event.target.closest("button[data-key], button[data-action]");
+    if (!button) {
+      return;
+    }
+    const action = button.dataset.action;
+    const digit = button.dataset.key;
+    let currentValue = String(elements.securityCodePromptInput.value || "");
+    let nextValue = currentValue;
+    if (action === "clear") {
+      nextValue = "";
+    } else if (action === "backspace") {
+      nextValue = currentValue.length > 0 ? currentValue.slice(0, -1) : "";
+    } else if (digit !== undefined) {
+      nextValue = currentValue + digit;
+    }
+    elements.securityCodePromptInput.value = nextValue;
+    elements.securityCodePromptDisplay.textContent = nextValue ? "•".repeat(nextValue.length) : "•";
   }
   function cancelSecurityCodePrompt() {
     closeModal(elements.securityCodePromptDialog);
@@ -4205,6 +4235,7 @@ body.dark-mode .modal::backdrop {
     elements.securityCodePromptTitle = document.querySelector("#securityCodePromptTitle");
     elements.securityCodePromptMessage = document.querySelector("#securityCodePromptMessage");
     elements.securityCodePromptInput = document.querySelector("#securityCodePromptInput");
+    elements.securityCodePromptDisplay = document.querySelector("#securityCodePromptDisplay");
     elements.cancelSecurityCodePromptButton = document.querySelector("#cancelSecurityCodePromptButton");
 
     elements.maintenanceView = document.querySelector("#maintenanceView");
@@ -4435,7 +4466,7 @@ body.dark-mode .modal::backdrop {
       keypadSuppressRefocus = true;
     });
 
-    ["buyPrice", "sellPrice", "quantity", "lowStock", "barcodeStockQty", "cashReconcileFloatInput", "cashReconcileActualInput", "ownerLoginCode", "lockoutCode", "undoSaleCode", "purgeLogCode", "suspendCodeInput", "cashRemovalCodeInput", "securityCodePromptInput", "removeOrderCodeInput"].forEach((id) => {
+    ["buyPrice", "sellPrice", "quantity", "lowStock", "barcodeStockQty", "cashReconcileFloatInput", "cashReconcileActualInput", "ownerLoginCode", "lockoutCode", "undoSaleCode", "purgeLogCode", "suspendCodeInput", "cashRemovalCodeInput", "removeOrderCodeInput"].forEach((id) => {
       const input = document.getElementById(id);
       if (!input) return;
       input.setAttribute("inputmode", "none");
@@ -4453,6 +4484,7 @@ body.dark-mode .modal::backdrop {
 
     elements.securityCodePromptForm.addEventListener("submit", handleSecurityCodePromptSubmit);
     elements.cancelSecurityCodePromptButton.addEventListener("click", cancelSecurityCodePrompt);
+    elements.securityCodePromptDialog.addEventListener("click", handleSecurityCodeKeypadInput);
     elements.securityCodePromptDialog.addEventListener("close", () => {
       if (securityCodePromptResolve) {
         securityCodePromptResolve(null);
@@ -6032,7 +6064,6 @@ body.dark-mode .modal::backdrop {
     purgeLogCode: { title: "Purge logs code", decimal: false, mask: true },
     suspendCodeInput: { title: "Suspend user code", decimal: false, mask: true },
     cashRemovalCodeInput: { title: "New security code", decimal: false, mask: false },
-    securityCodePromptInput: { title: "Security code", decimal: false, mask: true },
     removeOrderCodeInput: { title: "Security code", decimal: false, mask: true }
   };
 
