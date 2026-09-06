@@ -1129,7 +1129,7 @@ export default {
         normalized.apiConfig.cashRemovalCode = `${salt}:${hash}`;
         await saveStoreToDb(env.DB, normalized);
 
-        return jsonResponse({ ok: true });
+        return jsonResponse({ ok: true, cashRemovalCode: normalized.apiConfig.cashRemovalCode });
       } catch {
         return jsonResponse({ error: "Invalid request body." }, 400);
       }
@@ -1227,6 +1227,8 @@ export default {
           return incUser;
         });
 
+        const preservedCashCode = normalized.apiConfig?.cashRemovalCode || "";
+
         normalized.users = preserved;
         normalized.items = incoming.items;
         normalized.sales = incoming.sales;
@@ -1238,7 +1240,10 @@ export default {
         normalized.orderHistory = incoming.orderHistory;
         normalized.lifetime = incoming.lifetime;
         normalized.money = incoming.money;
-        normalized.apiConfig = incoming.apiConfig;
+        normalized.apiConfig = {
+          ...(incoming.apiConfig ?? {}),
+          cashRemovalCode: preservedCashCode || incoming.apiConfig?.cashRemovalCode || "",
+        };
         normalized.meta = incoming.meta;
         normalized.maintenance = incoming.maintenance;
         normalized.lockout = incoming.lockout;

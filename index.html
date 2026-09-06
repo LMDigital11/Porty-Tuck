@@ -6885,6 +6885,8 @@ body.dark-mode .modal::backdrop {
         return;
       }
       elements.currentCashCodeDisplay.textContent = "••••••••";
+      store.apiConfig = store.apiConfig || {};
+      store.apiConfig.cashRemovalCode = data.cashRemovalCode || store.apiConfig.cashRemovalCode;
       closeModal(elements.changeSecurityCodeDialog);
       changeSecurityCodeStep = 0;
       changeSecurityCodeValue = "";
@@ -7919,6 +7921,7 @@ body.dark-mode .modal::backdrop {
             ${rec.active
               ? `<button type="button" class="danger-button" data-stop-recurring="${rec.id}">Stop</button>`
               : `<button type="button" class="primary-button" data-resume-recurring="${rec.id}">Resume</button>`}
+            ${rec.active ? "" : `<button type="button" class="danger-button" data-delete-recurring="${rec.id}" title="Delete this recurring order entry">Delete</button>`}
           </div>
         </article>
       `;
@@ -8271,6 +8274,7 @@ body.dark-mode .modal::backdrop {
     const stopBtn = event.target.closest("button[data-stop-recurring]");
     const resumeBtn = event.target.closest("button[data-resume-recurring]");
     const editBtn = event.target.closest("button[data-edit-recurring]");
+    const deleteBtn = event.target.closest("button[data-delete-recurring]");
     if (stopBtn) {
       const rec = (store.recurringOrders || []).find((r) => r.id === stopBtn.dataset.stopRecurring);
       if (rec) {
@@ -8286,6 +8290,13 @@ body.dark-mode .modal::backdrop {
         renderRecurringOrderList();
         logUserEvent("Resumed recurring order", `${rec.customerName} - ${rec.room}`);
         showToast("Recurring order resumed.");
+      }
+      return;
+    }
+    if (deleteBtn) {
+      const rec = (store.recurringOrders || []).find((r) => r.id === deleteBtn.dataset.deleteRecurring);
+      if (rec) {
+        handleDeleteRecurring(rec);
       }
       return;
     }
@@ -8308,6 +8319,29 @@ body.dark-mode .modal::backdrop {
     renderRecurringOrderList();
     logUserEvent("Stopped recurring order", `${rec.customerName} - ${rec.room}`);
     showToast("Recurring order stopped.");
+  }
+
+  async function handleDeleteRecurring(rec) {
+    if (rec.active) {
+      showToast("Stop the recurring order first before deleting it.");
+      return;
+    }
+    if (!window.confirm(`Delete the recurring order for "${rec.customerName}" (${rec.room})? This cannot be undone.`)) {
+      return;
+    }
+    const enteredCode = await promptSecurityCode("Delete recurring order", `Type the security code to delete ${rec.customerName}'s recurring order entry.`);
+    if (enteredCode === null || enteredCode === "") {
+      return;
+    }
+    if (!(await verifySecurityCode(enteredCode))) {
+      showToast("Invalid security code.");
+      return;
+    }
+    store.recurringOrders = (store.recurringOrders || []).filter((r) => r.id !== rec.id);
+    scheduleSave();
+    renderRecurringOrderList();
+    logUserEvent("Deleted recurring order", `${rec.customerName} - ${rec.room}`);
+    showToast("Recurring order deleted.");
   }
 
   function updateRecurringUntilMin(input) {
