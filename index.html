@@ -6884,14 +6884,17 @@ body.dark-mode .modal::backdrop {
         updateChangeSecurityCodeUI();
         return;
       }
+      if (data.storeVersion != null) {
+        remoteStoreVersion = data.storeVersion;
+      }
       elements.currentCashCodeDisplay.textContent = "••••••••";
-      store.apiConfig = store.apiConfig || {};
-      store.apiConfig.cashRemovalCode = data.cashRemovalCode || store.apiConfig.cashRemovalCode;
       closeModal(elements.changeSecurityCodeDialog);
       changeSecurityCodeStep = 0;
       changeSecurityCodeValue = "";
       changeSecurityCodeCurrent = "";
       changeSecurityCodeNew = "";
+      store = await loadStore(3, 500);
+      renderAll();
       logUserEvent("Updated security code", "Cash removal code changed");
       showToast("Security code updated.");
     } catch {

@@ -1127,9 +1127,14 @@ export default {
         const salt = generateSalt();
         const hash = await hashPassword(newCode, salt);
         normalized.apiConfig.cashRemovalCode = `${salt}:${hash}`;
+        normalized.storeVersion = (normalized.storeVersion || 1) + 1;
         await saveStoreToDb(env.DB, normalized);
 
-        return jsonResponse({ ok: true, cashRemovalCode: normalized.apiConfig.cashRemovalCode });
+        return jsonResponse({
+          ok: true,
+          cashRemovalCode: normalized.apiConfig.cashRemovalCode,
+          storeVersion: normalized.storeVersion,
+        });
       } catch {
         return jsonResponse({ error: "Invalid request body." }, 400);
       }
