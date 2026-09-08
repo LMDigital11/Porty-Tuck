@@ -878,6 +878,29 @@ select:focus {
   border-color: var(--green);
 }
 
+.icon-button.note-button {
+  border-color: rgba(33, 110, 78, 0.25);
+  background: var(--green-soft);
+  color: var(--green);
+  white-space: nowrap;
+}
+
+.icon-button.note-button:hover {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+}
+
+.sale-note-view-text {
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--soft);
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .full-width {
   width: 100%;
 }
@@ -3309,6 +3332,7 @@ body.dark-mode .modal::backdrop {
                   <th>Qty</th>
                   <th>Revenue</th>
                   <th>Profit</th>
+                  <th>Note</th>
                 </tr>
               </thead>
               <tbody id="salesLogBody"></tbody>
@@ -3518,6 +3542,30 @@ body.dark-mode .modal::backdrop {
     <div class="receipt-actions">
       <button type="button" id="printReceiptButton" class="primary-button">Print</button>
       <button type="button" id="closeReceiptButton" class="secondary-button">No thanks</button>
+    </div>
+  </dialog>
+
+  <dialog id="saleNoteDialog" class="modal">
+    <form id="saleNoteForm" method="dialog">
+      <h3 id="saleNoteTitle">Add a note to this sale</h3>
+      <p id="saleNoteMessage">You can add an optional note that will be shown in the sales log.</p>
+      <label>
+        Note
+        <input id="saleNoteInput" type="text" maxlength="255" placeholder="e.g. Customer asked for extra sauce" autocomplete="off">
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" id="skipSaleNoteButton">Skip</button>
+        <button type="submit" class="primary-button">Add note</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="saleNoteViewDialog" class="modal">
+    <h3 id="saleNoteViewTitle">Sale note</h3>
+    <p id="saleNoteViewMeta" style="opacity:0.75;"></p>
+    <div id="saleNoteViewText" class="sale-note-view-text"></div>
+    <div class="modal-actions">
+      <button type="button" class="primary-button" id="closeSaleNoteViewButton">Close</button>
     </div>
   </dialog>
 
@@ -3923,6 +3971,7 @@ body.dark-mode .modal::backdrop {
   }
 
   let securityCodePromptResolve = null;
+  let saleNoteResolve = null;
   let changeSecurityCodeCurrent = "";
   let changeSecurityCodeNew = "";
   let changeSecurityCodeStep = 0;
@@ -4341,6 +4390,17 @@ body.dark-mode .modal::backdrop {
     elements.receiptContent = document.querySelector("#receiptContent");
     elements.printReceiptButton = document.querySelector("#printReceiptButton");
     elements.closeReceiptButton = document.querySelector("#closeReceiptButton");
+    elements.saleNoteDialog = document.querySelector("#saleNoteDialog");
+    elements.saleNoteForm = document.querySelector("#saleNoteForm");
+    elements.saleNoteTitle = document.querySelector("#saleNoteTitle");
+    elements.saleNoteMessage = document.querySelector("#saleNoteMessage");
+    elements.saleNoteInput = document.querySelector("#saleNoteInput");
+    elements.skipSaleNoteButton = document.querySelector("#skipSaleNoteButton");
+    elements.saleNoteViewDialog = document.querySelector("#saleNoteViewDialog");
+    elements.saleNoteViewTitle = document.querySelector("#saleNoteViewTitle");
+    elements.saleNoteViewMeta = document.querySelector("#saleNoteViewMeta");
+    elements.saleNoteViewText = document.querySelector("#saleNoteViewText");
+    elements.closeSaleNoteViewButton = document.querySelector("#closeSaleNoteViewButton");
     elements.undoSaleBanner = document.querySelector("#undoSaleBanner");
     elements.undoSaleTimer = document.querySelector("#undoSaleTimer");
     elements.undoSaleButton = document.querySelector("#undoSaleButton");
@@ -4580,6 +4640,7 @@ body.dark-mode .modal::backdrop {
     });
 
     elements.salesLogSearch.addEventListener("input", renderSalesLog);
+    elements.salesLogBody.addEventListener("click", handleSalesLogAction);
     elements.userEventsSearch.addEventListener("input", renderUserEvents);
 
     document.getElementById("scanItemBarcodeButton")?.addEventListener("click", handleScanItemBarcode);
@@ -4638,6 +4699,21 @@ body.dark-mode .modal::backdrop {
 
     elements.printReceiptButton.addEventListener("click", printReceipt);
     elements.closeReceiptButton.addEventListener("click", () => closeModal(elements.receiptDialog));
+    elements.saleNoteForm.addEventListener("submit", handleSaleNoteSubmit);
+    elements.skipSaleNoteButton.addEventListener("click", () => {
+      if (saleNoteResolve) {
+        saleNoteResolve("");
+        saleNoteResolve = null;
+      }
+      closeModal(elements.saleNoteDialog);
+    });
+    elements.saleNoteDialog.addEventListener("close", () => {
+      if (saleNoteResolve) {
+        saleNoteResolve("");
+        saleNoteResolve = null;
+      }
+    });
+    elements.closeSaleNoteViewButton.addEventListener("click", () => closeModal(elements.saleNoteViewDialog));
     elements.undoSaleButton.addEventListener("click", openUndoSaleDialog);
     elements.undoSaleForm.addEventListener("submit", handleUndoSaleSubmit);
     elements.cancelUndoSaleButton.addEventListener("click", () => closeModal(elements.undoSaleDialog));
@@ -6750,7 +6826,7 @@ body.dark-mode .modal::backdrop {
         showToast("Invalid code.");
         return;
       }
-      confirmSumupSale(confirmButton.dataset.confirmSaleId);
+      await confirmSumupSale(confirmButton.dataset.confirmSaleId);
       return;
     }
     const cancelButton = event.target.closest("button[data-cancel-sale-id]");
@@ -6904,7 +6980,7 @@ body.dark-mode .modal::backdrop {
     }
   }
 
-  function confirmSumupSale(saleId) {
+  async function confirmSumupSale(saleId) {
     const sale = store.sales.find((s) => s.id === saleId);
     if (!sale || sale.paymentMethod !== "sumup" || sale.paymentStatus !== "pending") {
       showToast("Sale not found or already processed.");
@@ -6941,6 +7017,12 @@ body.dark-mode .modal::backdrop {
     renderAll();
     logUserEvent("Confirmed SumUp sale", `${sale.itemName} x${sale.quantity}, ${money.format(sale.revenue)}`);
     showToast(`SumUp sale confirmed. Stock deducted. Profit: ${money.format(sale.profit)}.`);
+    const note = await promptSaleNote(`${sale.itemName} x${sale.quantity}, ${money.format(sale.revenue)}`);
+    if (note) {
+      sale.note = note;
+      scheduleSave();
+      if (elements.salesLogBody) renderSalesLog();
+    }
   }
 
   function cancelPendingSumupSale(saleId) {
@@ -7015,7 +7097,7 @@ body.dark-mode .modal::backdrop {
         });
 
         if (match) {
-          confirmSumupSale(sale.id);
+          await confirmSumupSale(sale.id);
           confirmed++;
         }
       }
@@ -8738,7 +8820,7 @@ body.dark-mode .modal::backdrop {
     openModal(elements.paymentDialog);
   }
 
-  function handlePaymentChoice(event) {
+  async function handlePaymentChoice(event) {
     const button = event.target.closest("button[data-payment-method]");
     if (!button) {
       return;
@@ -8809,6 +8891,14 @@ body.dark-mode .modal::backdrop {
       const saleIds = sales.map((s) => s.id);
       const summary = `${sales.length} item(s), ${money.format(roundMoney(draft.total))} cash`;
       startUndoSaleTimer(saleIds, summary);
+      const note = await promptSaleNote(summary);
+      if (note) {
+        for (const sale of sales) {
+          sale.note = note;
+        }
+        scheduleSave();
+        if (elements.salesLogBody) renderSalesLog();
+      }
     } else {
       for (const sale of sales) {
         store.sales.unshift(sale);
@@ -9581,12 +9671,12 @@ body.dark-mode .modal::backdrop {
     let sales = store.sales;
     if (query) {
       sales = sales.filter((sale) => {
-        return `${sale.itemName} ${sale.sellerName} ${sale.paymentMethod} ${sale.paymentStatus}`.toLowerCase().includes(query);
+        return `${sale.itemName} ${sale.sellerName} ${sale.paymentMethod} ${sale.paymentStatus} ${sale.note || ""}`.toLowerCase().includes(query);
       });
     }
 
     if (!sales.length) {
-      elements.salesLogBody.innerHTML = `<tr><td colspan="6" class="empty-state">${query ? "No sales match that search." : "No sales recorded yet."}</td></tr>`;
+      elements.salesLogBody.innerHTML = `<tr><td colspan="7" class="empty-state">${query ? "No sales match that search." : "No sales recorded yet."}</td></tr>`;
       return;
     }
 
@@ -9594,6 +9684,9 @@ body.dark-mode .modal::backdrop {
       const statusBadge = sale.paymentStatus === "pending"
         ? ` <span class="badge warning">Pending</span>`
         : "";
+      const noteButton = sale.note
+        ? `<button type="button" class="icon-button note-button" data-sale-note="${escapeHtml(sale.id)}" title="View note">Note</button>`
+        : "—";
       return `
         <tr>
           <td>${formatDate(sale.createdAt)}</td>
@@ -9602,9 +9695,51 @@ body.dark-mode .modal::backdrop {
           <td>${sale.quantity}</td>
           <td>${money.format(roundMoney(sale.revenue))}</td>
           <td>${sale.paymentStatus === "pending" ? "—" : money.format(roundMoney(sale.profit))}</td>
+          <td>${noteButton}</td>
         </tr>
       `;
     }).join("");
+  }
+
+  function handleSalesLogAction(event) {
+    const noteBtn = event.target.closest("button[data-sale-note]");
+    if (noteBtn) {
+      viewSaleNote(noteBtn.dataset.saleNote);
+    }
+  }
+
+  function viewSaleNote(saleId) {
+    const sale = store.sales.find((s) => s.id === saleId);
+    if (!sale || !sale.note) {
+      return;
+    }
+    elements.saleNoteViewTitle.textContent = `Note for ${escapeHtml(sale.itemName)}`;
+    elements.saleNoteViewMeta.textContent = `${escapeHtml(sale.sellerName || "")} ${escapeHtml(formatDate(sale.createdAt))}`;
+    elements.saleNoteViewText.textContent = sale.note;
+    openModal(elements.saleNoteViewDialog);
+  }
+
+  async function promptSaleNote(summaryText) {
+    elements.saleNoteTitle.textContent = "Add a note to this sale?";
+    elements.saleNoteMessage.textContent = summaryText
+      ? `${summaryText}. Add an optional note shown in the sales log.`
+      : "Add an optional note that will be shown in the sales log.";
+    elements.saleNoteInput.value = "";
+    return new Promise((resolve) => {
+      saleNoteResolve = resolve;
+      openModal(elements.saleNoteDialog);
+      setTimeout(() => elements.saleNoteInput.focus(), 0);
+    });
+  }
+
+  function handleSaleNoteSubmit(event) {
+    event.preventDefault();
+    const note = elements.saleNoteInput.value.trim();
+    if (saleNoteResolve) {
+      saleNoteResolve(note);
+      saleNoteResolve = null;
+    }
+    closeModal(elements.saleNoteDialog);
   }
 
   function renderStockLog() {
