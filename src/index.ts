@@ -1326,8 +1326,11 @@ export default {
         const allTx: any[] = [];
         let txUrl: string | null = `https://api.sumup.com/v2.1/merchants/${merchantCode}/transactions/history?limit=100&order=descending`;
         let txPages = 0;
+        const visitedTxUrls = new Set<string>();
 
-        while (txUrl && txPages < 50) {
+        while (txUrl && txPages < 100) {
+          if (visitedTxUrls.has(txUrl)) break;
+          visitedTxUrls.add(txUrl);
           const resp = await fetch(txUrl, { method: "GET", headers });
           if (!resp.ok) {
             const errBody = await resp.text();
@@ -1340,9 +1343,23 @@ export default {
           const nextLink = Array.isArray(data.links)
             ? data.links.find((l: any) => l.rel === "next")
             : null;
-          txUrl = nextLink
-            ? `https://api.sumup.com/v2.1/merchants/${merchantCode}/transactions/history?${nextLink.href}`
-            : null;
+          const nextHrefRaw = (nextLink && nextLink.href) ? String(nextLink.href) : "";
+          if (nextHrefRaw) {
+            const nextParams = new URLSearchParams(nextHrefRaw);
+            if (!nextParams.has("limit")) {
+              nextParams.set("limit", "100");
+            }
+            const nextQuery = nextParams.toString();
+            if (nextHrefRaw.startsWith("http://") || nextHrefRaw.startsWith("https://")) {
+              const nextUrl = new URL(nextHrefRaw);
+              nextParams.forEach((v, k) => nextUrl.searchParams.set(k, v));
+              txUrl = nextUrl.toString();
+            } else {
+              txUrl = `https://api.sumup.com/v2.1/merchants/${merchantCode}/transactions/history?${nextQuery}`;
+            }
+          } else {
+            txUrl = null;
+          }
           txPages++;
         }
 

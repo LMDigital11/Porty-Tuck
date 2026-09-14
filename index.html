@@ -6472,11 +6472,11 @@ body.dark-mode .modal::backdrop {
         const txCount = Number(data.transactionCount || 0);
         statusEl.textContent = txCount === 0
           ? "Synced - no SumUp transactions found (check merchant code)"
-          : `Synced ${new Date().toLocaleTimeString()} - sales ${money.format(data.grossSales)}, payouts ${money.format(data.payouts)}`;
+          : `Synced ${new Date().toLocaleTimeString()} - sales ${money.format(data.grossSales)}, refunds ${money.format(data.refunds)}, payouts ${money.format(data.payouts)}, fees ${money.format(data.fees)}, ${txCount} tx`;
         statusEl.classList.remove("is-hidden");
       }
       if (notify) {
-        showToast(`Actual SumUp: ${money.format(pendingBalance)} (sales ${money.format(data.grossSales)}, payouts ${money.format(data.payouts)}, ${data.transactionCount || 0} tx).`);
+        showToast(`Actual SumUp: ${money.format(pendingBalance)} (sales ${money.format(data.grossSales)}, refunds ${money.format(data.refunds)}, chargebacks ${money.format(data.chargebacks)}, payouts ${money.format(data.payouts)}, fees ${money.format(data.fees)}, ${data.transactionCount || 0} tx).`);
       }
       return true;
     } catch (error) {
@@ -7179,7 +7179,8 @@ body.dark-mode .modal::backdrop {
         }
         const saleTime = new Date(sale.createdAt).getTime();
         const match = items.find((tx) => {
-          if (tx.simple_status !== "successful" && tx.simple_status !== "settled") {
+          const status = String(tx.status || tx.simple_status || "").toUpperCase();
+          if (status !== "SUCCESSFUL" && status !== "PAID_OUT" && status !== "SETTLED" && status !== "RECONCILED") {
             return false;
           }
           const txAmount = Math.round(Number(tx.amount) * 100) / 100;
