@@ -2949,6 +2949,7 @@ body.dark-mode .modal::backdrop {
             <article class="admin-card">
               <span>Actual SumUp</span>
               <strong id="moneyActualSumup">GBP 0.00</strong>
+              <small id="sumupActualStatus" class="is-hidden" style="display:block;margin-top:4px;opacity:0.75;"></small>
             </article>
           </div>
         </div>
@@ -6406,13 +6407,25 @@ body.dark-mode .modal::backdrop {
     const notify = options.notify === true;
     const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
     const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
+    const statusEl = document.getElementById("sumupActualStatus");
     if (!apiKey || !merchantCode) {
+      const message = "SumUp API key or merchant code not set. Configure them in Money > SumUp API.";
+      if (statusEl) {
+        statusEl.textContent = message;
+        statusEl.classList.remove("is-hidden");
+      }
       if (notify) {
-        showToast("Set your SumUp API key and merchant code in Money > SumUp API first.");
+        if (!apiKey && !merchantCode) {
+          showToast("Set your SumUp API key AND merchant code in Money > SumUp API first.");
+        } else if (!merchantCode) {
+          showToast("Merchant code is missing. Add it in Money > SumUp API first.");
+        } else {
+          showToast("SumUp API key is missing. Add it in Money > SumUp API first.");
+        }
       }
       const errEl = document.getElementById("sumupBalanceError");
       if (errEl) {
-        errEl.textContent = "SumUp API key or merchant code not configured. Set them in Money > SumUp API settings.";
+        errEl.textContent = message;
         errEl.classList.remove("is-hidden");
       }
       return false;
@@ -6455,12 +6468,23 @@ body.dark-mode .modal::backdrop {
       lastSumUpBalanceFetchAt = Date.now();
       scheduleSave();
       renderMoneyTab();
+      if (statusEl) {
+        const txCount = Number(data.transactionCount || 0);
+        statusEl.textContent = txCount === 0
+          ? "Synced - no SumUp transactions found (check merchant code)"
+          : `Synced ${new Date().toLocaleTimeString()} - sales ${money.format(data.grossSales)}, payouts ${money.format(data.payouts)}`;
+        statusEl.classList.remove("is-hidden");
+      }
       if (notify) {
-        showToast(`Actual SumUp updated from the API: ${money.format(pendingBalance)}.`);
+        showToast(`Actual SumUp: ${money.format(pendingBalance)} (sales ${money.format(data.grossSales)}, payouts ${money.format(data.payouts)}, ${data.transactionCount || 0} tx).`);
       }
       return true;
     } catch (error) {
       console.error("SumUp balance fetch failed", error);
+      if (statusEl) {
+        statusEl.textContent = "Last sync failed: " + (error.message || "Unknown error");
+        statusEl.classList.remove("is-hidden");
+      }
       if (errEl) {
         errEl.textContent = "Failed to load SumUp balance: " + (error.message || "Unknown error");
         errEl.classList.remove("is-hidden");
@@ -6475,13 +6499,7 @@ body.dark-mode .modal::backdrop {
   }
 
   function handleFetchSumUpClick() {
-    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
-    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
-    if (apiKey && merchantCode) {
-      fetchSumUpBalance({ notify: true, force: true });
-    } else {
-      fetchSumUpAmountFromApi();
-    }
+    fetchSumUpBalance({ notify: true, force: true });
   }
 
   let html5QrCode = null;
