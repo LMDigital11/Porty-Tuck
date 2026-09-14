@@ -4105,6 +4105,11 @@ body.dark-mode .modal::backdrop {
     if (currentUser && authToken) startSessionExpiryTimer();
     checkBackupReminder();
     setInterval(refreshStore, 10000);
+    setInterval(() => {
+      if (isAdmin() && currentUser) {
+        fetchSumUpBalance({ force: true });
+      }
+    }, SUMUP_BALANCE_REFRESH_MS);
   }
 
   async function refreshStore() {
@@ -4563,7 +4568,7 @@ body.dark-mode .modal::backdrop {
     elements.enterSumupButton.addEventListener("click", () => enterSumUpAmount());
     elements.removeSumupButton.addEventListener("click", () => removeSumUpAmount());
     elements.removeSumupActualButton.addEventListener("click", () => removeSumUpActualAmount());
-    elements.fetchSumupButton.addEventListener("click", () => fetchSumUpAmountFromApi());
+    elements.fetchSumupButton.addEventListener("click", handleFetchSumUpClick);
     elements.reconcileCashButton.addEventListener("click", openCashReconcileDialog);
     elements.cancelCashReconcileButton.addEventListener("click", () => closeModal(elements.cashReconcileDialog));
     elements.cashReconcileForm.addEventListener("submit", handleCashReconcileSubmit);
@@ -4625,7 +4630,7 @@ body.dark-mode .modal::backdrop {
     elements.testSumupApiDialogButton.addEventListener("click", () => testSumupApiFromDialog());
     elements.sumupApiForm.addEventListener("submit", handleSaveSumupApiUrl);
     elements.pollSumupButton.addEventListener("click", pollSumupTransactions);
-    document.getElementById("sumupBalanceRefreshButton")?.addEventListener("click", fetchSumUpBalance);
+    document.getElementById("sumupBalanceRefreshButton")?.addEventListener("click", () => fetchSumUpBalance({ force: true, notify: true }));
     elements.pendingSumupBody.addEventListener("click", handlePendingSumupAction);
     elements.changeSecurityCodeButton.addEventListener("click", openChangeSecurityCode);
     elements.changeSecurityCodeForm.addEventListener("submit", handleChangeSecurityCodeSubmit);
@@ -6393,16 +6398,27 @@ body.dark-mode .modal::backdrop {
     }
   }
 
-  async function fetchSumUpBalance() {
+  let lastSumUpBalanceFetchAt = 0;
+  const SUMUP_BALANCE_REFRESH_MS = 15 * 60 * 1000;
+
+  async function fetchSumUpBalance(options = {}) {
+    const force = options.force === true;
+    const notify = options.notify === true;
     const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
     const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
     if (!apiKey || !merchantCode) {
+      if (notify) {
+        showToast("Set your SumUp API key and merchant code in Money > SumUp API first.");
+      }
       const errEl = document.getElementById("sumupBalanceError");
       if (errEl) {
         errEl.textContent = "SumUp API key or merchant code not configured. Set them in Money > SumUp API settings.";
         errEl.classList.remove("is-hidden");
       }
-      return;
+      return false;
+    }
+    if (!force && Date.now() - lastSumUpBalanceFetchAt < SUMUP_BALANCE_REFRESH_MS) {
+      return false;
     }
 
     const refreshBtn = document.getElementById("sumupBalanceRefreshButton");
@@ -6418,22 +6434,53 @@ body.dark-mode .modal::backdrop {
         throw new Error(data.error || `HTTP ${response.status}`);
       }
 
-      document.getElementById("sumupBalanceGrossSales").textContent = money.format(data.grossSales);
-      document.getElementById("sumupBalanceRefunds").textContent = money.format(data.refunds);
-      document.getElementById("sumupBalanceChargebacks").textContent = money.format(data.chargebacks);
-      document.getElementById("sumupBalanceFees").textContent = money.format(data.fees);
-      document.getElementById("sumupBalancePayouts").textContent = money.format(data.payouts);
-      document.getElementById("sumupBalancePending").textContent = money.format(data.pendingBalance);
-      document.getElementById("sumupBalanceTxCount").textContent = String(data.transactionCount || 0);
-      document.getElementById("sumupBalanceTimestamp").textContent = new Date().toLocaleString();
+      const setText = (id, value) => {
+        const node = document.getElementById(id);
+        if (node) node.textContent = value;
+      };
+      setText("sumupBalanceGrossSales", money.format(data.grossSales));
+      setText("sumupBalanceRefunds", money.format(data.refunds));
+      setText("sumupBalanceChargebacks", money.format(data.chargebacks));
+      setText("sumupBalanceFees", money.format(data.fees));
+      setText("sumupBalancePayouts", money.format(data.payouts));
+      setText("sumupBalancePending", money.format(data.pendingBalance));
+      setText("sumupBalanceTxCount", String(data.transactionCount || 0));
+      setText("sumupBalanceTimestamp", new Date().toLocaleString());
+
+      const pendingBalance = roundMoney(Number(data.pendingBalance || 0));
+      store.money = store.money || { cash: { actual: 0 }, sumup: { actual: 0 } };
+      store.money.sumup = store.money.sumup || { actual: 0 };
+      store.money.sumup.actual = pendingBalance;
+      store.money.sumup.lastUpdatedAt = new Date().toISOString();
+      lastSumUpBalanceFetchAt = Date.now();
+      scheduleSave();
+      renderMoneyTab();
+      if (notify) {
+        showToast(`Actual SumUp updated from the API: ${money.format(pendingBalance)}.`);
+      }
+      return true;
     } catch (error) {
       console.error("SumUp balance fetch failed", error);
       if (errEl) {
         errEl.textContent = "Failed to load SumUp balance: " + (error.message || "Unknown error");
         errEl.classList.remove("is-hidden");
       }
+      if (notify) {
+        showToast("Could not fetch the SumUp balance. Check your API settings.");
+      }
+      return false;
     } finally {
       if (refreshBtn) refreshBtn.disabled = false;
+    }
+  }
+
+  function handleFetchSumUpClick() {
+    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
+    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
+    if (apiKey && merchantCode) {
+      fetchSumUpBalance({ notify: true, force: true });
+    } else {
+      fetchSumUpAmountFromApi();
     }
   }
 
