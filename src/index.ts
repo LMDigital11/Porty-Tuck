@@ -1366,20 +1366,30 @@ export default {
           payouts = [];
         }
 
+        const SUCCESS_STATUSES = ["SUCCESSFUL", "PAID_OUT", "SETTLED", "RECONCILED"];
         let grossSales = 0;
         let refunds = 0;
         let chargebacks = 0;
 
         for (const tx of allTx) {
-          const amount = Number(tx.amount || 0);
+          const amount = Number(tx.amount || 0) || 0;
+          const refunded = Number(tx.refunded_amount || 0) || 0;
           const type = String(tx.type || "").toUpperCase();
-          const status = String(tx.status || "").toUpperCase();
+          const simple = String(tx.simple_status || tx.status || "").toUpperCase();
+          const isSuccess = SUCCESS_STATUSES.includes(simple);
 
-          if (type === "PAYMENT" && status === "SUCCESSFUL") {
-            grossSales += amount;
-          } else if (type === "REFUND") {
+          if (type === "REFUND") {
             refunds += amount;
           } else if (type === "CHARGE_BACK") {
+            chargebacks += amount;
+          } else if (type === "PAYMENT" || isSuccess) {
+            if (simple !== "REFUNDED" && simple !== "CANCELLED" && simple !== "FAILED") {
+              grossSales += amount;
+            }
+            if (refunded > 0) refunds += refunded;
+          } else if (simple === "REFUNDED") {
+            refunds += amount;
+          } else if (simple === "CHARGEBACK" || simple === "NON_COLLECTION") {
             chargebacks += amount;
           }
         }
@@ -1404,7 +1414,7 @@ export default {
 
         const pendingBalance = Math.round((grossSales - refunds - chargebacks - totalFees - totalPayouts) * 100) / 100;
 
-        return jsonResponse({
+        const response: Record<string, any> = {
           grossSales: Math.round(grossSales * 100) / 100,
           refunds: Math.round(refunds * 100) / 100,
           chargebacks: Math.round(chargebacks * 100) / 100,
@@ -1415,7 +1425,24 @@ export default {
           transactionCount: allTx.length,
           payoutCount: payouts.length,
           fetchedAt: new Date().toISOString(),
-        });
+        };
+
+        if (url.searchParams.get("debug") === "1") {
+          response.debug = {
+            sampleTransactions: allTx.slice(0, 5).map((tx) => ({
+              type: tx.type,
+              status: tx.status,
+              simple_status: tx.simple_status,
+              amount: tx.amount,
+              refunded_amount: tx.refunded_amount,
+              timestamp: tx.timestamp,
+            })),
+            samplePayouts: payouts.slice(0, 5),
+            totalTransactions: allTx.length,
+          };
+        }
+
+        return jsonResponse(response);
       } catch (error) {
         console.error("SumUp balance calc error:", error);
         return jsonResponse({ error: "Failed to calculate SumUp balance." }, 502);
