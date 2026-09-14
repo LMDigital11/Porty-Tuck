@@ -783,6 +783,7 @@ export default {
           customerName?: string;
           room?: string;
           timeSlot?: string;
+          deliveryDate?: string;
           items?: any[];
           recurring?: any;
         }>();
@@ -792,6 +793,10 @@ export default {
         const timeSlot = ["Break", "Lunch"].includes(String(body.timeSlot))
           ? String(body.timeSlot)
           : "Break";
+
+        const defaultDate = new Date().toISOString().slice(0, 10);
+        const rawDate = String(body.deliveryDate || "").trim();
+        const deliveryDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : defaultDate;
 
         if (!customerName || !room) {
           return jsonResponse({ error: "Name and room are required." }, 400);
@@ -861,6 +866,7 @@ export default {
           customerName,
           room,
           timeSlot,
+          deliveryDate,
           items: cleanItems,
           total,
           status: "pending",

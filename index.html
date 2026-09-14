@@ -2449,6 +2449,9 @@ body.dark-mode .modal::backdrop {
           <label>Room / delivery location
             <input id="publicOrderRoomInput" type="text" placeholder="e.g. 4F12" autocomplete="off" maxlength="80">
           </label>
+          <label id="publicOrderDeliveryDateField">Delivery date
+            <input id="publicOrderDeliveryDate" type="date" required>
+          </label>
           <p class="delivery-note">All orders will be delivered at Break.</p>
         </div>
         <label class="recurring-toggle">
@@ -2750,6 +2753,9 @@ body.dark-mode .modal::backdrop {
               <label>Room / delivery location
                 <input id="orderRoomInput" type="text" placeholder="e.g. 4F12" autocomplete="off">
               </label>
+              <label id="orderDeliveryDateField">Delivery date
+                <input id="orderDeliveryDate" type="date" required>
+              </label>
               <p class="delivery-note">All orders will be delivered at Break.</p>
             </div>
             <label class="recurring-toggle">
@@ -2792,10 +2798,16 @@ body.dark-mode .modal::backdrop {
 
           <section class="panel-block">
             <h4>Current orders</h4>
-            <p>Orders waiting to be delivered. Mark one fulfilled when it is handed over, or remove one with a reason.</p>
+            <p>Orders due today. Mark one fulfilled when it is handed over, or remove one with a reason.</p>
             <div id="orderList" class="order-list"></div>
           </section>
         </div>
+
+        <section class="panel-block is-hidden" id="upcomingOrdersSection" style="margin-top:16px">
+          <h4>Upcoming orders</h4>
+          <p>Orders scheduled for delivery on a future day will appear here until their delivery date.</p>
+          <div id="upcomingOrderList" class="order-list"></div>
+        </section>
 
         <section class="panel-block" style="margin-top:16px">
           <h4>Recurring orders</h4>
@@ -4077,6 +4089,7 @@ body.dark-mode .modal::backdrop {
   async function init() {
     cacheElements();
     store = await loadStore();
+    updateOrderDateDefaults();
     fetchClientIp();
     bindEvents();
     await updateLoginHint();
@@ -4113,6 +4126,14 @@ body.dark-mode .modal::backdrop {
         persistCurrentUser();
         renderAuth();
         showToast("System locked. You have been signed out.");
+      }
+      const today = todayDateString();
+      if (today !== lastOrderDate) {
+        lastOrderDate = today;
+        updateOrderDateDefaults();
+        if (currentUser) {
+          renderOrdersTab();
+        }
       }
     } catch (error) {
       console.error("Background store refresh failed:", error);
@@ -4190,6 +4211,10 @@ body.dark-mode .modal::backdrop {
     elements.placeOrderButton = document.querySelector("#placeOrderButton");
     elements.clearOrderButton = document.querySelector("#clearOrderButton");
     elements.orderList = document.querySelector("#orderList");
+    elements.orderDeliveryDate = document.querySelector("#orderDeliveryDate");
+    elements.orderDeliveryDateField = document.querySelector("#orderDeliveryDateField");
+    elements.upcomingOrderList = document.querySelector("#upcomingOrderList");
+    elements.upcomingOrdersSection = document.querySelector("#upcomingOrdersSection");
     elements.copyOrderLinkButton = document.querySelector("#copyOrderLinkButton");
     elements.publicOrderView = document.querySelector("#publicOrderView");
     elements.publicOrderFormWrapper = document.querySelector("#publicOrderFormWrapper");
@@ -4199,6 +4224,8 @@ body.dark-mode .modal::backdrop {
     elements.publicOrderCustomerInput = document.querySelector("#publicOrderCustomerInput");
     elements.publicOrderRoomInput = document.querySelector("#publicOrderRoomInput");
     elements.publicOrderTotalDisplay = document.querySelector("#publicOrderTotalDisplay");
+    elements.publicOrderDeliveryDate = document.querySelector("#publicOrderDeliveryDate");
+    elements.publicOrderDeliveryDateField = document.querySelector("#publicOrderDeliveryDateField");
     elements.publicPlaceOrderButton = document.querySelector("#publicPlaceOrderButton");
     elements.publicClearOrderButton = document.querySelector("#publicClearOrderButton");
     elements.publicOrderNewOrderButton = document.querySelector("#publicOrderNewOrderButton");
@@ -4494,6 +4521,7 @@ body.dark-mode .modal::backdrop {
 
     elements.orderItemPicker.addEventListener("click", handleOrderItemPick);
     elements.orderList.addEventListener("click", handleOrderListAction);
+    elements.upcomingOrderList.addEventListener("click", handleOrderListAction);
     elements.copyOrderLinkButton.addEventListener("click", copyOrderLink);
     elements.placeOrderButton.addEventListener("click", placeOrder);
     elements.clearOrderButton.addEventListener("click", clearOrderSelection);
@@ -4509,11 +4537,13 @@ body.dark-mode .modal::backdrop {
     elements.orderRecurringToggle.addEventListener("change", () => {
       elements.orderRecurringOptions.classList.toggle("is-hidden", !elements.orderRecurringToggle.checked);
       updateRecurringUntilMin(elements.orderRecurringUntil);
+      elements.orderDeliveryDateField.classList.toggle("is-hidden", elements.orderRecurringToggle.checked);
     });
     elements.orderRecurringDays.addEventListener("click", handleRecurringDayClick);
     elements.publicOrderRecurringToggle.addEventListener("change", () => {
       elements.publicOrderRecurringOptions.classList.toggle("is-hidden", !elements.publicOrderRecurringToggle.checked);
       updateRecurringUntilMin(elements.publicOrderRecurringUntil);
+      elements.publicOrderDeliveryDateField.classList.toggle("is-hidden", elements.publicOrderRecurringToggle.checked);
     });
     elements.publicOrderRecurringDays.addEventListener("click", handleRecurringDayClick);
     elements.recurringOrderList.addEventListener("click", handleRecurringListAction);
@@ -7878,6 +7908,12 @@ body.dark-mode .modal::backdrop {
       if (elements.orderRecurringError) elements.orderRecurringError.textContent = "";
       elements.orderRecurringDays.querySelectorAll(".day-chip").forEach((c) => c.classList.remove("is-selected"));
     }
+    if (elements.orderDeliveryDateField) {
+      elements.orderDeliveryDateField.classList.remove("is-hidden");
+    }
+    if (elements.orderDeliveryDate) {
+      elements.orderDeliveryDate.value = todayDateString();
+    }
   }
 
   function clearOrderSelection() {
@@ -7887,35 +7923,54 @@ body.dark-mode .modal::backdrop {
     resetRecurringForm();
     renderOrderTotal();
   }
+  function buildOrderCard(order) {
+    const itemsHtml = order.items.map((li) => `
+      <li><span>${escapeHtml(li.itemName)} × ${li.quantity}</span><span>${money.format(roundMoney(li.itemPrice * li.quantity))}</span></li>
+    `).join("");
+    const isFulfilled = order.status === "fulfilled";
+    const dateMeta = order.deliveryDate ? ` &#183; due ${escapeHtml(order.deliveryDate)}` : "";
+    return `
+      <article class="order-card">
+        <div class="order-card-header">
+          <strong>${escapeHtml(order.customerName || "Guest")}</strong>
+          <span class="order-status ${escapeHtml(order.status)}">${escapeHtml(order.status)}</span>
+        </div>
+        <div class="order-card-meta">${escapeHtml(order.room || "No room")} &#183; ${escapeHtml(order.timeSlot || "Break")}${dateMeta} &#183; ${formatDate(order.createdAt)}</div>
+        <ul class="order-card-items">${itemsHtml}</ul>
+        <div class="order-card-total">Total: ${money.format(roundMoney(order.total))} &#8211; pay in cash</div>
+        ${isFulfilled ? "" : `
+        <div class="order-card-actions">
+          <button type="button" class="primary-button" data-fulfill-order="${order.id}">Fulfil</button>
+          <button type="button" class="danger-button" data-remove-order="${order.id}">Remove</button>
+        </div>`}
+      </article>
+    `;
+  }
+
+  function isOrderDue(order, today) {
+    if (order.status === "fulfilled") return true;
+    if (!order.deliveryDate) return true;
+    return order.deliveryDate <= today;
+  }
 
   function renderOrderList() {
     const orders = store.orders || [];
-    if (!orders.length) {
-      elements.orderList.innerHTML = `<div class="empty-state">No orders yet. Place one on the left.</div>`;
-      return;
+    const today = todayDateString();
+    const current = orders.filter((order) => isOrderDue(order, today));
+    const upcoming = orders
+      .filter((order) => order.status !== "fulfilled" && order.deliveryDate && order.deliveryDate > today)
+      .sort((a, b) => String(a.deliveryDate).localeCompare(String(b.deliveryDate)));
+
+    elements.orderList.innerHTML = current.length
+      ? current.map(buildOrderCard).join("")
+      : `<div class="empty-state">No orders due today. Place one on the left.</div>`;
+
+    if (elements.upcomingOrderList) {
+      if (elements.upcomingOrdersSection) {
+        elements.upcomingOrdersSection.classList.toggle("is-hidden", !upcoming.length);
+      }
+      elements.upcomingOrderList.innerHTML = upcoming.map(buildOrderCard).join("");
     }
-    elements.orderList.innerHTML = orders.map((order) => {
-      const itemsHtml = order.items.map((li) => `
-        <li><span>${escapeHtml(li.itemName)} × ${li.quantity}</span><span>${money.format(roundMoney(li.itemPrice * li.quantity))}</span></li>
-      `).join("");
-      const isFulfilled = order.status === "fulfilled";
-      return `
-        <article class="order-card">
-          <div class="order-card-header">
-            <strong>${escapeHtml(order.customerName || "Guest")}</strong>
-            <span class="order-status ${escapeHtml(order.status)}">${escapeHtml(order.status)}</span>
-          </div>
-          <div class="order-card-meta">${escapeHtml(order.room || "No room")} &#183; ${escapeHtml(order.timeSlot || "Break")} &#183; ${formatDate(order.createdAt)}</div>
-          <ul class="order-card-items">${itemsHtml}</ul>
-          <div class="order-card-total">Total: ${money.format(roundMoney(order.total))} &#8211; pay in cash</div>
-          ${isFulfilled ? "" : `
-          <div class="order-card-actions">
-            <button type="button" class="primary-button" data-fulfill-order="${order.id}">Fulfil</button>
-            <button type="button" class="danger-button" data-remove-order="${order.id}">Remove</button>
-          </div>`}
-        </article>
-      `;
-    }).join("");
   }
 
   const ORDER_DAY_NAMES = {
@@ -7953,6 +8008,7 @@ body.dark-mode .modal::backdrop {
           customerName: rec.customerName,
           room: rec.room,
           timeSlot: "Break",
+          deliveryDate: today,
           items: (rec.items || []).map((it) => ({ ...it })),
           total: rec.total,
           status: "pending",
@@ -8103,6 +8159,17 @@ body.dark-mode .modal::backdrop {
       return;
     }
 
+    const isRecurring = elements.orderRecurringToggle.checked;
+    const deliveryDate = isRecurring ? "" : elements.orderDeliveryDate.value;
+    if (!isRecurring && !deliveryDate) {
+      showToast("Pick a delivery date.");
+      return;
+    }
+    if (!isRecurring && deliveryDate < todayDateString()) {
+      showToast("The delivery date must be today or in the future.");
+      return;
+    }
+
     for (const line of orderSelection) {
       const item = findItem(line.itemId);
       if (item && !isInfiniteStock(item) && line.quantity > item.quantity) {
@@ -8120,7 +8187,6 @@ body.dark-mode .modal::backdrop {
       itemPrice: roundMoney(line.sellPrice)
     }));
 
-    const isRecurring = elements.orderRecurringToggle.checked;
     if (isRecurring) {
       const error = getRecurringFormError(total, elements.orderRecurringUntil, elements.orderRecurringDays);
       if (error) {
@@ -8168,6 +8234,7 @@ body.dark-mode .modal::backdrop {
       customerName,
       room,
       timeSlot,
+      deliveryDate,
       items,
       total,
       status: "pending",
@@ -8179,7 +8246,9 @@ body.dark-mode .modal::backdrop {
     scheduleSave();
     renderOrderList();
     logUserEvent("Placed order", `${customerName} - ${room} (${timeSlot}) ${money.format(total)}`);
-    showToast(`Order placed for ${customerName}. Total ${money.format(total)} - payment in cash.`);
+    showToast(deliveryDate && deliveryDate > todayDateString()
+      ? `Order placed for ${customerName} on ${deliveryDate}. Total ${money.format(total)} - payment in cash.`
+      : `Order placed for ${customerName}. Total ${money.format(total)} - payment in cash.`);
   }
 
   function fulfillOrder(id) {
@@ -8341,6 +8410,7 @@ body.dark-mode .modal::backdrop {
     }));
     elements.orderRecurringToggle.checked = true;
     elements.orderRecurringOptions.classList.remove("is-hidden");
+    elements.orderDeliveryDateField.classList.add("is-hidden");
     elements.orderRecurringUntil.value = rec.repeatUntil || "";
     updateRecurringUntilMin(elements.orderRecurringUntil);
     elements.orderRecurringDays.querySelectorAll(".day-chip").forEach((c) => {
@@ -8437,6 +8507,24 @@ body.dark-mode .modal::backdrop {
         input.value = today;
       }
     }
+  }
+
+  let lastOrderDate = todayDateString();
+
+  function updateOrderDateDefaults() {
+    const today = todayDateString();
+    [elements.orderDeliveryDate, elements.publicOrderDeliveryDate].forEach((input) => {
+      if (input) {
+        input.min = today;
+        if (!input.value) input.value = today;
+      }
+    });
+    lastOrderDate = today;
+  }
+
+  function setOrderDateHiddenForRecurring(showRecurring) {
+    if (elements.orderDeliveryDateField) elements.orderDeliveryDateField.classList.toggle("is-hidden", showRecurring);
+    if (elements.publicOrderDeliveryDateField) elements.publicOrderDeliveryDateField.classList.toggle("is-hidden", showRecurring);
   }
 
   function handleOrderHistoryAction(event) {
@@ -8551,6 +8639,8 @@ body.dark-mode .modal::backdrop {
     elements.publicOrderRecurringUntil.value = "";
     elements.publicOrderRecurringError.textContent = "";
     elements.publicOrderRecurringDays.querySelectorAll(".day-chip").forEach((c) => c.classList.remove("is-selected"));
+    elements.publicOrderDeliveryDateField.classList.remove("is-hidden");
+    elements.publicOrderDeliveryDate.value = todayDateString();
     elements.publicOrderFormWrapper.classList.remove("is-hidden");
     elements.publicOrderConfirm.classList.add("is-hidden");
     updatePublicOrderTotal();
@@ -8582,6 +8672,17 @@ body.dark-mode .modal::backdrop {
       return;
     }
 
+    const isRecurring = elements.publicOrderRecurringToggle.checked;
+    const deliveryDate = isRecurring ? "" : elements.publicOrderDeliveryDate.value;
+    if (!isRecurring && !deliveryDate) {
+      showToast("Pick a delivery date.");
+      return;
+    }
+    if (!isRecurring && deliveryDate < todayDateString()) {
+      showToast("The delivery date must be today or in the future.");
+      return;
+    }
+
     for (const line of orderSelection) {
       const item = findItem(line.itemId);
       if (item && !isInfiniteStock(item) && line.quantity > item.quantity) {
@@ -8592,7 +8693,6 @@ body.dark-mode .modal::backdrop {
     }
 
     const total = getOrderTotal();
-    const isRecurring = elements.publicOrderRecurringToggle.checked;
     if (isRecurring) {
       const error = getPublicRecurringError(total);
       if (error) {
@@ -8610,6 +8710,9 @@ body.dark-mode .modal::backdrop {
     }));
 
     const body = { customerName, room, timeSlot, items };
+    if (!isRecurring) {
+      body.deliveryDate = deliveryDate;
+    }
     if (isRecurring) {
       body.recurring = {
         enabled: true,
