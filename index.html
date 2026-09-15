@@ -1804,6 +1804,78 @@ tbody tr:last-child td {
   border-color: rgba(179, 72, 53, 0.35);
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+/* Money tab layout */
+.money-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.money-subtab {
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 0.85rem;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.money-subtab:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.money-panel {
+  scroll-margin-top: 14px;
+}
+
+.money-panel .section-heading {
+  margin-bottom: 12px;
+}
+
+.money-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.money-card-action {
+  margin-top: 10px;
+  width: fit-content;
+}
+
+.money-filter-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: end;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 700px) {
+  .money-actions {
+    justify-content: stretch;
+  }
+
+  .money-actions > * {
+    flex: 1 1 100%;
+  }
+
+  .money-filter-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1040px) {
   .sell-layout {
     grid-template-columns: 1fr;
@@ -2905,33 +2977,18 @@ body.dark-mode .modal::backdrop {
           </div>
         </div>
 
-        <div class="money-overview">
-          <div class="money-overview-head">
-            <div>
-              <h4>Overall position</h4>
-              <p>Expected sales totals vs. the actual money recorded in each float.</p>
-            </div>
-          </div>
-          <div class="money-overview-row">
-            <div class="form-readout">
-              <span>Expected total</span>
-              <strong id="moneyExpectedTotal">GBP 0.00</strong>
-            </div>
-            <div class="form-readout">
-              <span>Actual total</span>
-              <strong id="moneyActualTotal">GBP 0.00</strong>
-            </div>
-            <div class="form-readout money-total-diff" id="moneyTotalDifferenceBox">
-              <span>Total difference</span>
-              <strong id="moneyTotalDifference">GBP 0.00</strong>
-            </div>
-          </div>
-        </div>
+        <nav class="money-subtabs" aria-label="Money sections">
+          <a class="money-subtab" href="#moneySectionBalances">Balances</a>
+          <a class="money-subtab" href="#moneySectionCash">Cash</a>
+          <a class="money-subtab" href="#moneySectionSumup">SumUp</a>
+          <a class="money-subtab" href="#moneySectionPending">Pending payments</a>
+          <a class="money-subtab" href="#moneySectionReports">Sales</a>
+        </nav>
 
-        <div class="money-section">
-          <div class="money-section-head">
-            <h4 class="money-section-title">Floats</h4>
-            <p class="money-section-desc">Expected vs. recorded amounts for cash and SumUp.</p>
+        <section class="panel-block money-panel" id="moneySectionBalances">
+          <div class="money-section-head" style="margin-bottom:12px;">
+            <h4 class="money-section-title">Balances</h4>
+            <p class="money-section-desc">Expected sales vs. the actual cash and SumUp amounts on record.</p>
           </div>
           <div class="admin-grid">
             <article class="admin-card">
@@ -2950,46 +3007,45 @@ body.dark-mode .modal::backdrop {
               <span>Actual SumUp</span>
               <strong id="moneyActualSumup">GBP 0.00</strong>
               <small id="sumupActualStatus" class="is-hidden" style="display:block;margin-top:4px;opacity:0.75;"></small>
+              <button type="button" id="fetchSumupButton" class="ghost-button money-card-action">Fetch from API</button>
             </article>
           </div>
-        </div>
+          <div class="money-overview">
+            <div class="money-overview-head">
+              <h4>Overall position</h4>
+              <p>Expected sales totals vs. the actual money recorded in each float.</p>
+            </div>
+            <div class="money-overview-row">
+              <div class="form-readout">
+                <span>Expected total</span>
+                <strong id="moneyExpectedTotal">GBP 0.00</strong>
+              </div>
+              <div class="form-readout">
+                <span>Actual total</span>
+                <strong id="moneyActualTotal">GBP 0.00</strong>
+              </div>
+              <div class="form-readout money-total-diff" id="moneyTotalDifferenceBox">
+                <span>Total difference</span>
+                <strong id="moneyTotalDifference">GBP 0.00</strong>
+              </div>
+            </div>
+          </div>
+        </section>
 
-        <div class="split-layout">
-          <section class="panel-block">
-            <h4>Cash</h4>
-            <p>Actual cash in the till (set during cash drawer reconciliation) vs. expected cash sales.</p>
-            <div class="form-readout">
-              <span>Difference</span>
-              <strong id="moneyCashDifference">GBP 0.00</strong>
-            </div>
-            <div class="modal-actions">
-              <button type="button" id="removeCashButton" class="danger-button">Remove from expected</button>
-            </div>
-          </section>
-
-          <section class="panel-block">
-            <h4>SumUp</h4>
-            <p>Expected SumUp income and the amount seen on the reader.</p>
-            <div class="form-readout">
-              <span>Difference</span>
-              <strong id="moneySumupDifference">GBP 0.00</strong>
-            </div>
-            <div class="modal-actions">
-              <button type="button" id="fetchSumupButton" class="secondary-button">Fetch from API</button>
-              <button type="button" id="enterSumupButton" class="primary-button">Enter SumUp total</button>
-              <button type="button" id="removeSumupButton" class="danger-button">Remove from expected</button>
-              <button type="button" id="removeSumupActualButton" class="danger-button">Remove from actual</button>
-            </div>
-          </section>
-        </div>
-
-        <section class="panel-block">
+        <section class="panel-block money-panel" id="moneySectionCash">
           <div class="section-heading tight">
             <div>
-              <h4>Cash Drawer</h4>
-              <p>Reconcile the cash drawer by counting the physical cash and comparing it to expected totals.</p>
+              <h4>Cash</h4>
+              <p>Actual cash in the till is set by reconciling the cash drawer. Compare it against expected cash sales.</p>
             </div>
-            <button type="button" id="reconcileCashButton" class="primary-button">Reconcile</button>
+            <div class="money-actions">
+              <button type="button" id="reconcileCashButton" class="primary-button">Reconcile</button>
+              <button type="button" id="removeCashButton" class="danger-button">Remove from expected</button>
+            </div>
+          </div>
+          <div class="form-readout" style="margin-bottom:12px;">
+            <span>Cash difference</span>
+            <strong id="moneyCashDifference">GBP 0.00</strong>
           </div>
           <div id="cashDrawerLastReconciliation" class="form-readout" style="margin-bottom:12px;">
             <span>Last reconciliation</span>
@@ -3024,25 +3080,44 @@ body.dark-mode .modal::backdrop {
           </div>
         </section>
 
-        <section class="panel-block">
-          <h4>SumUp API</h4>
-          <p>Configure and test a SumUp reporting endpoint to auto-fetch totals.</p>
-          <div class="form-readout">
-            <span>Current endpoint</span>
-            <strong id="sumupApiCurrentUrl">Not configured</strong>
+        <section class="panel-block money-panel" id="moneySectionSumup">
+          <div class="section-heading tight">
+            <div>
+              <h4>SumUp</h4>
+              <p>Expected SumUp income and the amount fetched from the SumUp API (auto-refreshes every 15 minutes).</p>
+            </div>
+            <div class="money-actions">
+              <button type="button" id="enterSumupButton" class="primary-button">Enter SumUp total</button>
+              <button type="button" id="removeSumupButton" class="danger-button">Remove from expected</button>
+              <button type="button" id="removeSumupActualButton" class="danger-button">Remove from actual</button>
+            </div>
           </div>
-          <div id="sumupApiStatus" class="alert-card is-hidden" aria-live="polite"></div>
-          <div class="modal-actions">
-            <button type="button" id="configureSumupApiButton" class="primary-button">Configure API URL</button>
-            <button type="button" id="testSumupApiButton" class="secondary-button">Test connection</button>
+          <div class="form-readout">
+            <span>SumUp difference</span>
+            <strong id="moneySumupDifference">GBP 0.00</strong>
+          </div>
+          <div class="panel-block money-panel" style="margin-top:14px;">
+            <div class="money-section-head" style="margin-bottom:10px;">
+              <h4 class="money-section-title">SumUp API</h4>
+              <p class="money-section-desc">Configure and test the SumUp reporting connection used to auto-fetch totals.</p>
+            </div>
+            <div class="form-readout">
+              <span>API key / merchant code</span>
+              <strong id="sumupApiCurrentUrl">Not configured</strong>
+            </div>
+            <div id="sumupApiStatus" class="alert-card is-hidden" aria-live="polite" style="margin-top:10px;"></div>
+            <div class="modal-actions" style="margin-top:12px;justify-content:flex-start;">
+              <button type="button" id="configureSumupApiButton" class="primary-button">Configure</button>
+              <button type="button" id="testSumupApiButton" class="secondary-button">Test connection</button>
+            </div>
           </div>
         </section>
 
-        <section class="panel-block">
+        <section class="panel-block money-panel" id="moneySectionPending">
           <div class="section-heading tight">
             <div>
-              <h4>Pending SumUp Sales</h4>
-              <p>Sales waiting for SumUp API confirmation. Stock is held until confirmed.</p>
+              <h4>Pending SumUp payments</h4>
+              <p>Sales waiting for SumUp confirmation. Stock is held until the payment clears or the sale is cancelled.</p>
             </div>
             <button type="button" id="pollSumupButton" class="secondary-button">Check for payments</button>
           </div>
@@ -3062,15 +3137,15 @@ body.dark-mode .modal::backdrop {
           </div>
         </section>
 
-        <section class="panel-block">
+        <section class="panel-block money-panel" id="moneySectionReports">
           <div class="section-heading tight">
             <div>
               <h4>Sales Reports</h4>
-              <p>Filter sales by date range, view breakdowns, and export to CSV.</p>
+              <p>Filter sales by date range, view breakdowns, and export all sales data to CSV.</p>
             </div>
             <button type="button" id="exportReportCsvButton" class="secondary-button">Export CSV</button>
           </div>
-          <div class="form-grid" style="grid-template-columns:1fr 1fr auto;align-items:end;gap:8px;margin-bottom:12px;">
+          <div class="money-filter-row">
             <label>
               From
               <input id="reportStartDate" type="date">
@@ -8326,6 +8401,31 @@ body.dark-mode .modal::backdrop {
     if (!order) {
       return;
     }
+    if (!(order.items || []).length) {
+      markOrderFulfilled(order);
+      return;
+    }
+    const items = order.items.map((li) => {
+      const item = findItem(li.itemId);
+      return {
+        itemId: li.itemId,
+        itemName: li.itemName,
+        quantity: li.quantity,
+        sellPrice: li.itemPrice,
+        buyPrice: item ? item.buyPrice : 0
+      };
+    });
+    pendingSaleDraft = { items, total: order.total, fulfilOrderId: id };
+    elements.paymentDialogMeta.textContent = `${items.length} item${items.length === 1 ? "" : "s"} to collect for ${order.customerName}.`;
+    elements.paymentAmount.textContent = money.format(roundMoney(order.total));
+    elements.sumupPaymentButton.classList.toggle("is-hidden", (Number(order.total) || 0) < 1);
+    openModal(elements.paymentDialog);
+  }
+
+  function markOrderFulfilled(order) {
+    if (!order || order.status === "fulfilled") {
+      return;
+    }
     order.status = "fulfilled";
     order.fulfilledAt = new Date().toISOString();
     scheduleSave();
@@ -8333,6 +8433,13 @@ body.dark-mode .modal::backdrop {
     logUserEvent("Fulfilled order", `${order.customerName} - ${order.room}`);
     showToast(`Order for ${order.customerName} marked fulfilled.`);
     startUndoFulfillTimer(order.id, order.customerName, order.room);
+  }
+
+  function finalizeFulfilledOrder(orderId) {
+    const order = (store.orders || []).find((o) => o.id === orderId);
+    if (order && order.status !== "fulfilled") {
+      markOrderFulfilled(order);
+    }
   }
 
   function startUndoFulfillTimer(orderId, customerName, room) {
@@ -9005,6 +9112,7 @@ body.dark-mode .modal::backdrop {
       closeModal(elements.paymentDialog);
       return;
     }
+    const isFulfil = !!draft.fulfilOrderId;
 
     const sales = [];
     let sumupRef = "";
@@ -9063,11 +9171,15 @@ body.dark-mode .modal::backdrop {
         recordSaleForActiveEvent(sale);
       }
       scheduleSave();
-      basket = [];
+      if (!isFulfil) {
+        basket = [];
+      }
       pendingSaleDraft = null;
       closeModal(elements.paymentDialog);
-      renderBasket();
-      renderSellGrid();
+      if (!isFulfil) {
+        renderBasket();
+        renderSellGrid();
+      }
       renderAll();
       logUserEvent("Recorded sale", `${sales.length} item(s), ${money.format(roundMoney(draft.total))} cash`);
       const saleIds = sales.map((s) => s.id);
@@ -9081,18 +9193,28 @@ body.dark-mode .modal::backdrop {
         scheduleSave();
         if (elements.salesLogBody) renderSalesLog();
       }
+      if (isFulfil) {
+        finalizeFulfilledOrder(draft.fulfilOrderId);
+      }
     } else {
       for (const sale of sales) {
         store.sales.unshift(sale);
       }
       scheduleSave();
-      basket = [];
+      if (!isFulfil) {
+        basket = [];
+      }
       pendingSaleDraft = null;
       closeModal(elements.paymentDialog);
-      renderBasket();
-      renderSellGrid();
+      if (!isFulfil) {
+        renderBasket();
+        renderSellGrid();
+      }
       renderMoneyTab();
       logUserEvent("Recorded sale", `${sales.length} item(s), ${money.format(roundMoney(draft.total))} SumUp`);
+      if (isFulfil) {
+        finalizeFulfilledOrder(draft.fulfilOrderId);
+      }
       openSumUpPayment(draft.total, sumupRef);
       showToast(`SumUp payment started for ${money.format(roundMoney(draft.total))}. Stock held until confirmed.`);
     }
