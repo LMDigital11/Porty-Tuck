@@ -1269,6 +1269,42 @@ export default {
       }
     }
 
+    // ── API: SumUp connection test (POST body, no key in URL) ──
+    if (request.method === "POST" && url.pathname === "/api/sumup/transactions/test") {
+      let body: any = {};
+      try {
+        body = await request.json();
+      } catch {
+        body = {};
+      }
+      const apiKey = String(body.api_key || "").trim();
+      const merchantCode = String(body.merchant_code || "").trim();
+      if (!apiKey || !merchantCode) {
+        return jsonResponse({ error: "SumUp API key or merchant code not configured." }, 400);
+      }
+      try {
+        const testResp = await fetch(`https://api.sumup.com/v2.1/merchants/${merchantCode}/transactions/history?limit=1`, {
+          method: "GET",
+          headers: {
+            "Accept": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
+          },
+        });
+        if (testResp.status === 401 || testResp.status === 403) {
+          return jsonResponse({ error: "Authentication failed. The API key is invalid or expired." }, testResp.status);
+        }
+        if (!testResp.ok) {
+          return jsonResponse({ error: `SumUp API returned HTTP ${testResp.status}` }, testResp.status);
+        }
+        const testData: any = await testResp.json();
+        const itemCount = Array.isArray(testData?.items) ? testData.items.length : 0;
+        return jsonResponse({ ok: true, itemCount });
+      } catch (error) {
+        console.error("SumUp API test error:", error);
+        return jsonResponse({ error: "Failed to reach SumUp API." }, 502);
+      }
+    }
+
     // ── API: SumUp transaction history proxy ──
     if (request.method === "GET" && url.pathname === "/api/sumup/transactions") {
       const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
@@ -1384,36 +1420,40 @@ export default {
         }
 
         const SUCCESS_STATUSES = ["SUCCESSFUL", "PAID_OUT", "SETTLED", "RECONCILED"];
+        const COUNTED_STATUSES = [...SUCCESS_STATUSES, "REFUNDED"];
         let grossSales = 0;
         let refunds = 0;
         let chargebacks = 0;
+        let countByTypeStatus: Record<string, number> = {};
 
         for (const tx of allTx) {
           const amount = Number(tx.amount || 0) || 0;
-          const refunded = Number(tx.refunded_amount || 0) || 0;
           const type = String(tx.type || "").toUpperCase();
           const simple = String(tx.simple_status || tx.status || "").toUpperCase();
-          const isSuccess = SUCCESS_STATUSES.includes(simple);
+          const key = `${type || "(none)"}:${simple || "(none)"}`;
+          countByTypeStatus[key] = (countByTypeStatus[key] || 0) + 1;
 
           if (type === "REFUND") {
-            refunds += amount;
+            refunds += Math.abs(amount);
           } else if (type === "CHARGE_BACK") {
-            chargebacks += amount;
-          } else if (type === "PAYMENT" || isSuccess) {
-            if (simple !== "REFUNDED" && simple !== "CANCELLED" && simple !== "FAILED") {
+            chargebacks += Math.abs(amount);
+          } else if (type === "PAYMENT" || type === "") {
+            if (COUNTED_STATUSES.includes(simple)) {
               grossSales += amount;
             }
-            if (refunded > 0) refunds += refunded;
           } else if (simple === "REFUNDED") {
-            refunds += amount;
+            refunds += Math.abs(amount);
           } else if (simple === "CHARGEBACK" || simple === "NON_COLLECTION") {
-            chargebacks += amount;
+            chargebacks += Math.abs(amount);
           }
         }
 
         let totalPayouts = 0;
         let totalFees = 0;
-        let payoutDeductions = 0;
+        let refundDeductions = 0;
+        let chargebackDeductions = 0;
+        let ddReturnDeductions = 0;
+        let balanceDeductions = 0;
 
         for (const p of payouts) {
           const amount = Number(p.amount || 0);
@@ -1424,12 +1464,22 @@ export default {
           if (pType === "PAYOUT" && pStatus === "SUCCESSFUL") {
             totalPayouts += amount;
             totalFees += fee;
-          } else if (pType === "REFUND_DEDUCTION" || pType === "CHARGE_BACK_DEDUCTION" || pType === "DD_RETURN_DEDUCTION" || pType === "BALANCE_DEDUCTION") {
-            payoutDeductions += amount;
+          } else if (pType === "REFUND_DEDUCTION") {
+            refundDeductions += Math.abs(amount);
+          } else if (pType === "CHARGE_BACK_DEDUCTION") {
+            chargebackDeductions += Math.abs(amount);
+          } else if (pType === "DD_RETURN_DEDUCTION") {
+            ddReturnDeductions += Math.abs(amount);
+          } else if (pType === "BALANCE_DEDUCTION") {
+            balanceDeductions += Math.abs(amount);
           }
         }
 
-        const pendingBalance = Math.round((grossSales - refunds - chargebacks - totalFees - totalPayouts) * 100) / 100;
+        const excessRefundDeductions = Math.max(0, refundDeductions - refunds);
+        const excessChargebackDeductions = Math.max(0, chargebackDeductions - chargebacks);
+        const adjustedDeductions = excessRefundDeductions + excessChargebackDeductions + ddReturnDeductions + balanceDeductions;
+
+        const pendingBalance = Math.round((grossSales - refunds - chargebacks - totalFees - totalPayouts - adjustedDeductions) * 100) / 100;
 
         const response: Record<string, any> = {
           grossSales: Math.round(grossSales * 100) / 100,
@@ -1437,7 +1487,8 @@ export default {
           chargebacks: Math.round(chargebacks * 100) / 100,
           fees: Math.round(totalFees * 100) / 100,
           payouts: Math.round(totalPayouts * 100) / 100,
-          payoutDeductions: Math.round(payoutDeductions * 100) / 100,
+          payoutDeductions: Math.round((refundDeductions + chargebackDeductions + ddReturnDeductions + balanceDeductions) * 100) / 100,
+          excessDeductions: Math.round(adjustedDeductions * 100) / 100,
           pendingBalance,
           transactionCount: allTx.length,
           payoutCount: payouts.length,
@@ -1452,10 +1503,21 @@ export default {
               simple_status: tx.simple_status,
               amount: tx.amount,
               refunded_amount: tx.refunded_amount,
+              client_transaction_id: tx.client_transaction_id,
               timestamp: tx.timestamp,
             })),
             samplePayouts: payouts.slice(0, 5),
             totalTransactions: allTx.length,
+            countByTypeStatus,
+            breakdown: {
+              grossSales: response.grossSales,
+              refunds: response.refunds,
+              chargebacks: response.chargebacks,
+              fees: response.fees,
+              payouts: response.payouts,
+              excessDeductions: response.excessDeductions,
+              pendingBalance: response.pendingBalance,
+            },
           };
         }
 

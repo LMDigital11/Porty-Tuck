@@ -6472,11 +6472,11 @@ body.dark-mode .modal::backdrop {
         const txCount = Number(data.transactionCount || 0);
         statusEl.textContent = txCount === 0
           ? "Synced - no SumUp transactions found (check merchant code)"
-          : `Synced ${new Date().toLocaleTimeString()} - sales ${money.format(data.grossSales)}, refunds ${money.format(data.refunds)}, payouts ${money.format(data.payouts)}, fees ${money.format(data.fees)}, ${txCount} tx`;
+          : `sales ${money.format(data.grossSales)} - refunds ${money.format(data.refunds)} - chargebacks ${money.format(data.chargebacks)} - payouts ${money.format(data.payouts)} - fees ${money.format(data.fees)} = ${money.format(pendingBalance)} (${txCount} tx)`;
         statusEl.classList.remove("is-hidden");
       }
       if (notify) {
-        showToast(`Actual SumUp: ${money.format(pendingBalance)} (sales ${money.format(data.grossSales)}, refunds ${money.format(data.refunds)}, chargebacks ${money.format(data.chargebacks)}, payouts ${money.format(data.payouts)}, fees ${money.format(data.fees)}, ${data.transactionCount || 0} tx).`);
+        showToast(`Actual SumUp = ${money.format(pendingBalance)} (sales ${money.format(data.grossSales)} - refunds ${money.format(data.refunds)} - chargebacks ${money.format(data.chargebacks)} - payouts ${money.format(data.payouts)} - fees ${money.format(data.fees)}, ${data.transactionCount || 0} tx).`);
       }
       return true;
     } catch (error) {
@@ -7183,6 +7183,12 @@ body.dark-mode .modal::backdrop {
           if (status !== "SUCCESSFUL" && status !== "PAID_OUT" && status !== "SETTLED" && status !== "RECONCILED") {
             return false;
           }
+          if (sale.foreignTxId) {
+            const clientRef = String(tx.client_transaction_id || tx.foreign_transaction_id || "").trim();
+            if (clientRef && clientRef === sale.foreignTxId) {
+              return true;
+            }
+          }
           const txAmount = Math.round(Number(tx.amount) * 100) / 100;
           if (Math.abs(txAmount - sale.revenue) > 0.01) {
             return false;
@@ -7239,8 +7245,11 @@ body.dark-mode .modal::backdrop {
     }
 
     try {
-      const params = new URLSearchParams({ api_key: apiKey, merchant_code: merchantCode, limit: "1" });
-      const response = await fetch(`/api/sumup/transactions?${params.toString()}`);
+      const response = await fetch(`${API_URL}/sumup/transactions/test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey, merchant_code: merchantCode }),
+      });
       if (response.status === 400) {
         const err = await response.json().catch(() => ({}));
         return { ok: false, message: err.error || "SumUp API key or merchant code not configured." };
@@ -7254,8 +7263,8 @@ body.dark-mode .modal::backdrop {
       }
 
       const data = await response.json();
-      if (data.items) {
-        return { ok: true, message: `Connected successfully. Transaction history returned ${data.items.length} transaction(s).` };
+      if (data.ok) {
+        return { ok: true, message: `Connected successfully. Transaction history returned ${data.itemCount || 0} transaction(s).` };
       }
       return { ok: true, message: "Connected successfully. The SumUp API is reachable." };
     } catch (error) {
@@ -7283,14 +7292,9 @@ body.dark-mode .modal::backdrop {
   }
 
   async function testSumupApiFromPanel() {
-    const url = (store.apiConfig?.sumupApiUrl || "").trim();
     const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
-    if (!url) {
-      showToast("No API URL configured. Click Configure API URL first.");
-      return;
-    }
     if (!apiKey) {
-      showToast("No API key configured. Click Configure API URL and enter your key.");
+      showToast("No SumUp API key configured. Click Configure API settings and enter your key.");
       return;
     }
 
@@ -9003,6 +9007,14 @@ body.dark-mode .modal::backdrop {
     }
 
     const sales = [];
+    let sumupRef = "";
+    if (paymentMethod === "sumup") {
+      try {
+        sumupRef = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : "";
+      } catch (e) {
+        sumupRef = "";
+      }
+    }
     for (const line of draft.items) {
       const item = findItem(line.itemId);
       if (!item || (!isInfiniteStock(item) && line.quantity > item.quantity)) {
@@ -9026,6 +9038,7 @@ body.dark-mode .modal::backdrop {
         profit,
         paymentMethod,
         paymentStatus: paymentMethod === "sumup" ? "pending" : "paid",
+        foreignTxId: sumupRef || undefined,
         sellerId: currentUser.id,
         sellerName: currentUser.displayName,
         createdAt: new Date().toISOString()
@@ -9080,7 +9093,7 @@ body.dark-mode .modal::backdrop {
       renderSellGrid();
       renderMoneyTab();
       logUserEvent("Recorded sale", `${sales.length} item(s), ${money.format(roundMoney(draft.total))} SumUp`);
-      openSumUpPayment(draft.total);
+      openSumUpPayment(draft.total, sumupRef);
       showToast(`SumUp payment started for ${money.format(roundMoney(draft.total))}. Stock held until confirmed.`);
     }
   }
@@ -9109,18 +9122,20 @@ body.dark-mode .modal::backdrop {
     return "other";
   }
 
-  function openSumUpPayment(amount) {
+  function openSumUpPayment(amount, foreignTxId) {
     const pounds = Number(amount || 0);
     const sumUpAmount = pounds.toFixed(2);
     const affiliateKey = (store.apiConfig?.affiliateKey || "").trim();
     const appId = (store.apiConfig?.appId || "").trim();
     const os = getMobileOS();
 
-    let foreignTxId = "";
-    try {
-      foreignTxId = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : "";
-    } catch (e) {
-      foreignTxId = "";
+    let resolvedForeignTxId = foreignTxId || "";
+    if (!resolvedForeignTxId) {
+      try {
+        resolvedForeignTxId = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : "";
+      } catch (e) {
+        resolvedForeignTxId = "";
+      }
     }
 
     let sumUpUrl;
