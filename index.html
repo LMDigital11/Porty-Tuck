@@ -4614,6 +4614,17 @@ body.dark-mode .modal::backdrop {
     elements.lowStockBanner = document.querySelector("#lowStockBanner");
   }
 
+  function handleSumupPaymentMethodChange() {
+    const value = elements.sumupPaymentMethodSelect.value;
+    if (!value) return;
+    store.apiConfig.sumupPaymentMethod = value;
+    const option = elements.sumupPaymentMethodSelect.selectedOptions[0];
+    if (option && elements.sumupPaymentMethodText) {
+      elements.sumupPaymentMethodText.textContent = option.textContent.trim();
+    }
+    scheduleSave();
+  }
+
   function bindEvents() {
     elements.loginForm.addEventListener("submit", handleLogin);
     elements.logoutButton.addEventListener("click", async () => {
@@ -4788,13 +4799,21 @@ body.dark-mode .modal::backdrop {
         const option = elements.sumupReaderSelect.selectedOptions[0];
         store.apiConfig.sumupReaderName = option ? option.textContent.trim() : "";
         scheduleSave();
-        refreshSumupReaderStatus();
+        if (typeof refreshSumupReaderStatus === "function") refreshSumupReaderStatus();
       }
     });
-    elements.sumupPairReaderButton.addEventListener("click", pairSumupReader);
-    elements.sumupRefreshReadersButton.addEventListener("click", refreshSumupReaders);
-    elements.sumupRemoveReaderButton.addEventListener("click", removeSumupReader);
-    elements.sumupSaveWebhookSecretButton.addEventListener("click", saveSumupWebhookSecret);
+    if (typeof pairSumupReader === "function") {
+      elements.sumupPairReaderButton.addEventListener("click", pairSumupReader);
+    }
+    if (typeof refreshSumupReaders === "function") {
+      elements.sumupRefreshReadersButton.addEventListener("click", refreshSumupReaders);
+    }
+    if (typeof removeSumupReader === "function") {
+      elements.sumupRemoveReaderButton.addEventListener("click", removeSumupReader);
+    }
+    if (typeof saveSumupWebhookSecret === "function") {
+      elements.sumupSaveWebhookSecretButton.addEventListener("click", saveSumupWebhookSecret);
+    }
     elements.pendingSumupBody.addEventListener("click", handlePendingSumupAction);
     elements.changeSecurityCodeButton.addEventListener("click", openChangeSecurityCode);
     elements.changeSecurityCodeForm.addEventListener("submit", handleChangeSecurityCodeSubmit);
