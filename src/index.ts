@@ -32,6 +32,10 @@ interface StoreDocument {
     affiliateKey: string;
     appId: string;
     cashRemovalCode: string;
+    sumupPaymentMethod: string;
+    sumupReaderId: string;
+    sumupReaderName: string;
+    sumupWebhookSecret: string;
   };
   meta: {
     createdAt: string;
@@ -611,6 +615,65 @@ async function saveStoreToDb(db: D1Database, store: StoreDocument): Promise<void
   await saveSections(db, store);
 }
 
+// ── SumUp Cloud API webhook event store ──
+// Events are kept in their own app_state row to avoid rewriting the whole
+// store on every webhook callback.
+
+const SUMUP_WEBHOOK_EVENTS_KEY = "tuck:sumup_webhook_events";
+const SUMUP_WEBHOOK_EVENTS_MAX = 200;
+
+async function loadSumupWebhookEvents(db: D1Database): Promise<any[]> {
+  const row = await db
+    .prepare(`SELECT data FROM app_state WHERE id = ?`)
+    .bind(SUMUP_WEBHOOK_EVENTS_KEY)
+    .first<{ data: string }>();
+  if (!row?.data) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(row.data);
+    return Array.isArray(parsed?.events) ? parsed.events : [];
+  } catch {
+    return [];
+  }
+}
+
+async function appendSumupWebhookEvent(db: D1Database, event: any): Promise<void> {
+  const events = await loadSumupWebhookEvents(db);
+  const trimmed = events.length >= SUMUP_WEBHOOK_EVENTS_MAX ? events.slice(-(SUMUP_WEBHOOK_EVENTS_MAX - 1)) : events;
+  trimmed.push({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    receivedAt: new Date().toISOString(),
+    ...event,
+  });
+  await db
+    .prepare(`INSERT OR REPLACE INTO app_state (id, data, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
+    .bind(SUMUP_WEBHOOK_EVENTS_KEY, JSON.stringify({ events: trimmed }))
+    .run();
+}
+
+async function sumupVerifyWebhookSignature(rawBody: string, secret: string, signatureHeader: string | null): Promise<boolean> {
+  if (!signatureHeader) {
+    return false;
+  }
+  try {
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const signature = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(rawBody));
+    const hex = Array.from(new Uint8Array(signature))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    return hex === signatureHeader;
+  } catch {
+    return false;
+  }
+}
+
 // ── Blank store & normalizer ──
 
 function blankStore(): StoreDocument {
@@ -640,6 +703,10 @@ function blankStore(): StoreDocument {
       affiliateKey: "",
       appId: "",
       cashRemovalCode: "",
+      sumupPaymentMethod: "app",
+      sumupReaderId: "",
+      sumupReaderName: "",
+      sumupWebhookSecret: "",
     },
     money: {
       cash: { actual: 0, float: 0, expectedAdjustment: 0, lastUpdatedAt: null },
@@ -1526,6 +1593,235 @@ export default {
         console.error("SumUp balance calc error:", error);
         return jsonResponse({ error: "Failed to calculate SumUp balance." }, 502);
       }
+    }
+
+    // ── API: SumUp Cloud API — Solo reader & checkout proxy ──
+    // Credentials ride in the JSON body (same as the other SumUp endpoints) so
+    // keys never appear in URLs or logs.
+
+    const sumupCloudApi = async (path: string, apiKey: string, init: RequestInit = {}) => {
+      const headers = new Headers(init.headers || {});
+      headers.set("Accept", "application/json");
+      headers.set("Authorization", `Bearer ${apiKey}`);
+      return fetch(`https://api.sumup.com${path}`, { ...init, headers });
+    };
+
+    const readSumupBody = async (input: Request) => {
+      try {
+        return await input.json();
+      } catch {
+        return {};
+      }
+    };
+
+    if (request.method === "POST" && url.pathname === "/api/sumup/readers/list") {
+      const body: any = await readSumupBody(request);
+      const apiKey = String(body.api_key || "").trim();
+      const merchantCode = String(body.merchant_code || "").trim();
+      if (!apiKey || !merchantCode) {
+        return jsonResponse({ error: "SumUp API key or merchant code not configured." }, 400);
+      }
+      try {
+        const resp = await sumupCloudApi(`/v0.1/merchants/${merchantCode}/readers`, apiKey);
+        const data = await resp.json();
+        if (!resp.ok) {
+          return jsonResponse({ error: data?.message || data?.error_description || `SumUp API returned HTTP ${resp.status}` }, resp.status);
+        }
+        return jsonResponse(Array.isArray(data?.items) ? data : { items: data?.items ?? [] });
+      } catch (error) {
+        console.error("SumUp readers list error:", error);
+        return jsonResponse({ error: "Failed to reach SumUp API." }, 502);
+      }
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/sumup/readers/create") {
+      const body: any = await readSumupBody(request);
+      const apiKey = String(body.api_key || "").trim();
+      const merchantCode = String(body.merchant_code || "").trim();
+      const pairingCode = String(body.pairing_code || "").trim();
+      if (!apiKey || !merchantCode || !pairingCode) {
+        return jsonResponse({ error: "API key, merchant code and pairing code are required." }, 400);
+      }
+      try {
+        const payload: Record<string, string> = { pairing_code: pairingCode };
+        if (String(body.name || "").trim()) {
+          payload.name = String(body.name).trim();
+        }
+        const resp = await sumupCloudApi(`/v0.1/merchants/${merchantCode}/readers`, apiKey, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          return jsonResponse({ error: data?.message || data?.error_description || `SumUp API returned HTTP ${resp.status}`, detail: data }, resp.status);
+        }
+        return jsonResponse(data);
+      } catch (error) {
+        console.error("SumUp readers create error:", error);
+        return jsonResponse({ error: "Failed to reach SumUp API." }, 502);
+      }
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/sumup/readers/status") {
+      const body: any = await readSumupBody(request);
+      const apiKey = String(body.api_key || "").trim();
+      const merchantCode = String(body.merchant_code || "").trim();
+      const readerId = String(body.reader_id || "").trim();
+      if (!apiKey || !merchantCode || !readerId) {
+        return jsonResponse({ error: "API key, merchant code and reader id are required." }, 400);
+      }
+      try {
+        const resp = await sumupCloudApi(`/v0.1/merchants/${merchantCode}/readers/${readerId}/status`, apiKey);
+        const data = await resp.json();
+        if (!resp.ok) {
+          return jsonResponse({ error: data?.message || `SumUp API returned HTTP ${resp.status}` }, resp.status);
+        }
+        return jsonResponse(data);
+      } catch (error) {
+        console.error("SumUp reader status error:", error);
+        return jsonResponse({ error: "Failed to reach SumUp API." }, 502);
+      }
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/sumup/readers/delete") {
+      const body: any = await readSumupBody(request);
+      const apiKey = String(body.api_key || "").trim();
+      const merchantCode = String(body.merchant_code || "").trim();
+      const readerId = String(body.reader_id || "").trim();
+      if (!apiKey || !merchantCode || !readerId) {
+        return jsonResponse({ error: "API key, merchant code and reader id are required." }, 400);
+      }
+      try {
+        const resp = await sumupCloudApi(`/v0.1/merchants/${merchantCode}/readers/${readerId}`, apiKey, { method: "DELETE" });
+        return jsonResponse({ ok: resp.ok || resp.status === 204 || resp.status === 200, status: resp.status });
+      } catch (error) {
+        console.error("SumUp readers delete error:", error);
+        return jsonResponse({ error: "Failed to reach SumUp API." }, 502);
+      }
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/sumup/readers/checkout") {
+      const body: any = await readSumupBody(request);
+      const apiKey = String(body.api_key || "").trim();
+      const merchantCode = String(body.merchant_code || "").trim();
+      const readerId = String(body.reader_id || "").trim();
+      const amount = Number(body.amount);
+      if (!apiKey || !merchantCode || !readerId || !isFinite(amount) || amount <= 0) {
+        return jsonResponse({ error: "API key, merchant code, reader id and a positive amount are required." }, 400);
+      }
+      const affiliateKeyVal = String(body.affiliate_key || "").trim();
+      const appIdVal = String(body.app_id || "").trim();
+      const foreignTxId = String(body.foreign_transaction_id || "").trim();
+      if (!affiliateKeyVal || !appIdVal || !foreignTxId) {
+        return jsonResponse({ error: "Affiliate key, app id and a payment reference are required." }, 400);
+      }
+      const payload: Record<string, unknown> = {
+        total_amount: {
+          currency: String(body.currency || "GBP").toUpperCase(),
+          minor_unit: 2,
+          value: Math.round(amount * 100),
+        },
+        affiliate: {
+          key: affiliateKeyVal,
+          app_id: appIdVal,
+          foreign_transaction_id: foreignTxId,
+        },
+      };
+      if (String(body.description || "").trim()) {
+        payload.description = String(body.description).trim();
+      }
+      try {
+        const resp = await sumupCloudApi(`/v0.1/merchants/${merchantCode}/readers/${readerId}/checkout`, apiKey, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          return jsonResponse({ error: data?.message || data?.error_description || `SumUp API returned HTTP ${resp.status}`, detail: data }, resp.status);
+        }
+        return jsonResponse(data);
+      } catch (error) {
+        console.error("SumUp reader checkout error:", error);
+        return jsonResponse({ error: "Failed to reach SumUp API." }, 502);
+      }
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/sumup/readers/terminate") {
+      const body: any = await readSumupBody(request);
+      const apiKey = String(body.api_key || "").trim();
+      const merchantCode = String(body.merchant_code || "").trim();
+      const readerId = String(body.reader_id || "").trim();
+      if (!apiKey || !merchantCode || !readerId) {
+        return jsonResponse({ error: "API key, merchant code and reader id are required." }, 400);
+      }
+      try {
+        const resp = await sumupCloudApi(`/v0.1/merchants/${merchantCode}/readers/${readerId}/terminate`, apiKey, { method: "POST" });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          return jsonResponse({ error: data?.message || `SumUp API returned HTTP ${resp.status}` }, resp.status);
+        }
+        return jsonResponse(data);
+      } catch (error) {
+        console.error("SumUp reader terminate error:", error);
+        return jsonResponse({ error: "Failed to reach SumUp API." }, 502);
+      }
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/sumup/readers/checkout") {
+      const apiKey = String(url.searchParams.get("api_key") || "").trim();
+      const merchantCode = String(url.searchParams.get("merchant_code") || "").trim();
+      const readerId = String(url.searchParams.get("reader_id") || "").trim();
+      const checkoutId = String(url.searchParams.get("checkout_id") || "").trim();
+      if (!apiKey || !merchantCode || !readerId || !checkoutId) {
+        return jsonResponse({ error: "API key, merchant code, reader id and checkout id are required." }, 400);
+      }
+      try {
+        const resp = await sumupCloudApi(`/v0.1/merchants/${merchantCode}/readers/${readerId}/checkout/${checkoutId}`, apiKey);
+        const data = await resp.json();
+        if (!resp.ok) {
+          return jsonResponse({ error: data?.message || `SumUp API returned HTTP ${resp.status}` }, resp.status);
+        }
+        return jsonResponse(data);
+      } catch (error) {
+        console.error("SumUp reader checkout status error:", error);
+        return jsonResponse({ error: "Failed to reach SumUp API." }, 502);
+      }
+    }
+
+    // ── API: SumUp webhook (Cloud API payment notifications) ──
+    if (request.method === "POST" && url.pathname === "/api/sumup/webhook") {
+      const rawBody = await request.text();
+      let body: any = {};
+      try {
+        body = JSON.parse(rawBody);
+      } catch {
+        body = {};
+      }
+      const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
+      const normalized = normalizeStore(store);
+      const secret = String(normalized.apiConfig?.sumupWebhookSecret || "").trim();
+      if (secret) {
+        const valid = await sumupVerifyWebhookSignature(rawBody, secret, request.headers.get("x-sumup-signature"));
+        if (!valid) {
+          return jsonResponse({ error: "Invalid webhook signature." }, 401);
+        }
+      }
+      const payload = body.payload && typeof body.payload === "object" ? body.payload : {};
+      await appendSumupWebhookEvent(env.DB, {
+        event_type: String(body.event_type || body.type || "unknown"),
+        payload,
+        merchant_code: String(body.merchant_code || payload.merchant_code || ""),
+      });
+      return jsonResponse({ ok: true });
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/sumup/webhook/events") {
+      const after = String(url.searchParams.get("after") || "");
+      const events = await loadSumupWebhookEvents(env.DB);
+      const filtered = after ? events.filter((e) => String(e.receivedAt || "") > after) : events.slice(-50);
+      return jsonResponse({ events: filtered });
     }
 
     // ── API: Debug — show all stored rows (requires auth) ──
