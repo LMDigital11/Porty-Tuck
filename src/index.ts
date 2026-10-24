@@ -13,6 +13,7 @@ interface StoreDocument {
   orders: any[];
   recurringOrders: any[];
   orderHistory: any[];
+  deals: any[];
   lifetime: {
     revenue: number;
     cost: number;
@@ -110,6 +111,7 @@ const SECTIONS = [
   "orders",
   "recurringOrders",
   "orderHistory",
+  "deals",
   "config",
 ] as const;
 
@@ -271,6 +273,8 @@ async function removeSessionsForUser(db: D1Database, userId: string): Promise<vo
 
 const LOGIN_MAX_ATTEMPTS = 10;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+const OWNER_LOGIN_MAX_ATTEMPTS = 5;
+const OWNER_LOGIN_LOCKOUT_MS = 30 * 60 * 1000;
 
 async function checkRateLimit(db: D1Database, ip: string): Promise<{ allowed: boolean; retryAfterMs?: number }> {
   const entry = await db
@@ -309,6 +313,46 @@ async function recordFailedLogin(db: D1Database, ip: string): Promise<void> {
   await db
     .prepare(`DELETE FROM rate_limit WHERE first_at < ?`)
     .bind(now - LOGIN_LOCKOUT_MS * 2)
+    .run();
+}
+
+async function checkOwnerRateLimit(db: D1Database, ip: string): Promise<{ allowed: boolean; retryAfterMs?: number }> {
+  const entry = await db
+    .prepare(`SELECT attempts, first_at FROM rate_limit WHERE ip = ?`)
+    .bind(ip)
+    .first<{ attempts: number; first_at: number }>();
+  if (!entry) return { allowed: true };
+
+  const now = Date.now();
+  if (now - entry.first_at > OWNER_LOGIN_LOCKOUT_MS) {
+    await clearRateLimit(db, ip);
+    return { allowed: true };
+  }
+
+  if (entry.attempts >= OWNER_LOGIN_MAX_ATTEMPTS) {
+    const retryAfterMs = entry.first_at + OWNER_LOGIN_LOCKOUT_MS - now;
+    return { allowed: false, retryAfterMs: Math.max(0, retryAfterMs) };
+  }
+
+  return { allowed: true };
+}
+
+async function recordFailedOwnerLogin(db: D1Database, ip: string): Promise<void> {
+  const now = Date.now();
+  await db
+    .prepare(
+      `INSERT INTO rate_limit (ip, attempts, first_at)
+       VALUES (?, 1, ?)
+       ON CONFLICT(ip) DO UPDATE SET
+         attempts = CASE WHEN ? - first_at > ${OWNER_LOGIN_LOCKOUT_MS} THEN 1 ELSE attempts + 1 END,
+         first_at = CASE WHEN ? - first_at > ${OWNER_LOGIN_LOCKOUT_MS} THEN ? ELSE first_at END`
+    )
+    .bind(ip, now, now, now, now)
+    .run();
+
+  await db
+    .prepare(`DELETE FROM rate_limit WHERE first_at < ?`)
+    .bind(now - OWNER_LOGIN_LOCKOUT_MS * 2)
     .run();
 }
 
@@ -477,11 +521,25 @@ async function migrateLegacyStateRows(db: D1Database): Promise<void> {
   }
 }
 
+function withSecurityHeaders(resp: Response): Response {
+  const h = new Headers(resp.headers);
+  h.set("X-Content-Type-Options", "nosniff");
+  h.set("Referrer-Policy", "no-referrer");
+  h.set("Permissions-Policy", "camera=(self), microphone=(), geolocation=()");
+  h.set("X-Frame-Options", "DENY");
+  h.set(
+    "Content-Security-Policy",
+    "default-src 'self'; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://world.openfoodfacts.org; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+  );
+  return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: h });
+}
+
 function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
+  const resp = new Response(JSON.stringify(data), {
     status,
     headers: { "Content-Type": "application/json" },
   });
+  return withSecurityHeaders(resp);
 }
 
 async function loadSections(db: D1Database): Promise<Partial<StoreDocument>> {
@@ -689,6 +747,7 @@ function blankStore(): StoreDocument {
     orders: [],
     recurringOrders: [],
     orderHistory: [],
+    deals: [],
     lifetime: {
       revenue: 0,
       cost: 0,
@@ -749,6 +808,7 @@ function normalizeStore(store: unknown): StoreDocument {
     orders: Array.isArray(source.orders) ? source.orders : [],
     recurringOrders: Array.isArray(source.recurringOrders) ? source.recurringOrders : [],
     orderHistory: Array.isArray(source.orderHistory) ? source.orderHistory : [],
+    deals: Array.isArray((source as any).deals) ? (source as any).deals : [],
     lifetime: {
       ...base.lifetime,
       ...(source.lifetime ?? {}),
@@ -808,21 +868,72 @@ export default {
 
     // Serve the HTML at root and /index.html
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
-      return new Response(html, {
+      const resp = new Response(html, {
         status: 200,
         headers: {
           "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "no-cache",
         },
       });
+      return withSecurityHeaders(resp);
     }
 
-    // ── API: Load store (public) ──
-    if (request.method === "GET" && url.pathname === "/api/load") {
+    // ── API: Version (lightweight) ──
+    if (request.method === "GET" && url.pathname === "/api/version") {
+      const row = await env.DB
+        .prepare(`SELECT data FROM app_state WHERE id = ?`)
+        .bind(`${PREFIX}config`)
+        .first<{ data: string }>();
+      let v = 1;
+      try {
+        const c = row?.data ? JSON.parse(row.data) : null;
+        v = c?.storeVersion || 1;
+      } catch {}
+      return jsonResponse({ storeVersion: v });
+    }
+
+    // ── API: Public bootstrap (items only) ──
+    if (request.method === "GET" && url.pathname === "/api/public/bootstrap") {
       const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
       const normalized = normalizeStore(store);
+      const publicStore: any = {
+        items: Array.isArray(normalized.items) ? normalized.items : [],
+        events: Array.isArray(normalized.events) ? normalized.events : [],
+        maintenance: normalized.maintenance,
+        lockout: normalized.lockout,
+      };
+      return jsonResponse({ store: publicStore, storeVersion: normalized.storeVersion || 1, public: true });
+    }
 
+    // ── API: Load store ──
+    if (request.method === "GET" && url.pathname === "/api/load") {
+      const authHeader = request.headers.get("Authorization") || "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+
+      const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
+      const normalized = normalizeStore(store);
       const setupPasswords = await ensureFirstRun(env.DB, normalized);
+
+      let authed = false;
+      if (token) {
+        const session = await validateSession(env.DB, token);
+        if (session.valid) authed = true;
+      }
+
+      if (!authed) {
+        const publicStore: any = {
+          items: Array.isArray(normalized.items) ? normalized.items : [],
+          events: Array.isArray(normalized.events) ? normalized.events : [],
+          maintenance: normalized.maintenance,
+          lockout: normalized.lockout,
+        };
+        const response: any = {
+          store: publicStore,
+          storeVersion: normalized.storeVersion || 1,
+          public: true,
+        };
+        return jsonResponse(response);
+      }
 
       const response: any = {
         store: {
@@ -1033,9 +1144,19 @@ export default {
     // ── API: Auth — Owner login via security code (lockout bypass) ──
     if (request.method === "POST" && url.pathname === "/api/auth/owner-login") {
       try {
+        const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "unknown";
+        const rateCheck = await checkOwnerRateLimit(env.DB, ip);
+        if (!rateCheck.allowed) {
+          const retrySec = Math.ceil((rateCheck.retryAfterMs || 0) / 1000);
+          return jsonResponse({ error: `Too many attempts. Try again in ${retrySec} seconds.` }, 429);
+        }
+
         const body = await request.json<{ code?: string }>();
         const code = (body.code || "").trim();
-        if (!code) return jsonResponse({ error: "Security code required." }, 400);
+        if (!code) {
+          await recordFailedOwnerLogin(env.DB, ip);
+          return jsonResponse({ error: "Security code required." }, 400);
+        }
 
         const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
         const normalized = normalizeStore(store);
@@ -1055,6 +1176,7 @@ export default {
         }
 
         if (!codeValid) {
+          await recordFailedOwnerLogin(env.DB, ip);
           return jsonResponse({ error: "Invalid security code." }, 403);
         }
 
@@ -1062,9 +1184,11 @@ export default {
           (u: any) => u.username === "backdoor" && u.active
         );
         if (!backdoor) {
+          await recordFailedOwnerLogin(env.DB, ip);
           return jsonResponse({ error: "Owner account not found." }, 404);
         }
 
+        await clearRateLimit(env.DB, ip);
         const { token, expiresAt } = await createSession(env.DB, backdoor.id);
 
         return jsonResponse({
@@ -1086,25 +1210,42 @@ export default {
     // ── API: Auth — Verify security code ──
     if (request.method === "POST" && url.pathname === "/api/auth/verify-code") {
       try {
+        const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "unknown";
+        const rateCheck = await checkOwnerRateLimit(env.DB, ip);
+        if (!rateCheck.allowed) {
+          const retrySec = Math.ceil((rateCheck.retryAfterMs || 0) / 1000);
+          return jsonResponse({ valid: false, error: `Too many attempts. Try again in ${retrySec} seconds.` }, 429);
+        }
+
         const body = await request.json<{ code?: string }>();
         const code = (body.code || "").trim();
-        if (!code) return jsonResponse({ error: "Code is required." }, 400);
+        if (!code) {
+          await recordFailedOwnerLogin(env.DB, ip);
+          return jsonResponse({ error: "Code is required." }, 400);
+        }
 
         const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
         const normalized = normalizeStore(store);
         const storedCode = normalized.apiConfig?.cashRemovalCode || "";
 
         if (!storedCode) {
+          await clearRateLimit(env.DB, ip);
           return jsonResponse({ valid: false, error: "No security code configured." }, 200);
         }
 
         if (storedCode.includes(":")) {
           const [salt, hash] = storedCode.split(":");
           const inputHash = await hashPassword(code, salt);
-          return jsonResponse({ valid: inputHash === hash });
+          const valid = inputHash === hash;
+          if (!valid) await recordFailedOwnerLogin(env.DB, ip);
+          else await clearRateLimit(env.DB, ip);
+          return jsonResponse({ valid });
         }
 
-        return jsonResponse({ valid: code === storedCode });
+        const valid = code === storedCode;
+        if (!valid) await recordFailedOwnerLogin(env.DB, ip);
+        else await clearRateLimit(env.DB, ip);
+        return jsonResponse({ valid });
       } catch {
         return jsonResponse({ error: "Invalid request body." }, 400);
       }
@@ -1316,6 +1457,7 @@ export default {
         normalized.orders = incoming.orders;
         normalized.recurringOrders = incoming.recurringOrders;
         normalized.orderHistory = incoming.orderHistory;
+        normalized.deals = (incoming as any).deals || [];
         normalized.lifetime = incoming.lifetime;
         normalized.money = incoming.money;
         normalized.apiConfig = {
@@ -1338,6 +1480,9 @@ export default {
 
     // ── API: SumUp connection test (POST body, no key in URL) ──
     if (request.method === "POST" && url.pathname === "/api/sumup/transactions/test") {
+      const auth = await requireAuth(request, env.DB);
+      if (!auth.ok) return jsonResponse({ error: auth.error }, 401);
+      if (auth.user.role !== "admin") return jsonResponse({ error: "Admin access required." }, 403);
       let body: any = {};
       try {
         body = await request.json();
@@ -1374,6 +1519,9 @@ export default {
 
     // ── API: SumUp transaction history proxy ──
     if (request.method === "GET" && url.pathname === "/api/sumup/transactions") {
+      const auth = await requireAuth(request, env.DB);
+      if (!auth.ok) return jsonResponse({ error: auth.error }, 401);
+      if (auth.user.role !== "admin") return jsonResponse({ error: "Admin access required." }, 403);
       const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
       const normalized = normalizeStore(store);
       const apiKey = (url.searchParams.get("api_key") || normalized.apiConfig?.sumupApiKey || "").trim();
@@ -1411,6 +1559,9 @@ export default {
 
     // ── API: SumUp balance calculator ──
     if (request.method === "GET" && url.pathname === "/api/sumup/balance") {
+      const auth = await requireAuth(request, env.DB);
+      if (!auth.ok) return jsonResponse({ error: auth.error }, 401);
+      if (auth.user.role !== "admin") return jsonResponse({ error: "Admin access required." }, 403);
       const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
       const normalized = normalizeStore(store);
       const apiKey = (normalized.apiConfig?.sumupApiKey || "").trim();
@@ -1615,6 +1766,9 @@ export default {
     };
 
     if (request.method === "POST" && url.pathname === "/api/sumup/readers/list") {
+      const auth = await requireAuth(request, env.DB);
+      if (!auth.ok) return jsonResponse({ error: auth.error }, 401);
+      if (auth.user.role !== "admin") return jsonResponse({ error: "Admin access required." }, 403);
       const body: any = await readSumupBody(request);
       const apiKey = String(body.api_key || "").trim();
       const merchantCode = String(body.merchant_code || "").trim();
@@ -1635,6 +1789,9 @@ export default {
     }
 
     if (request.method === "POST" && url.pathname === "/api/sumup/readers/create") {
+      const auth = await requireAuth(request, env.DB);
+      if (!auth.ok) return jsonResponse({ error: auth.error }, 401);
+      if (auth.user.role !== "admin") return jsonResponse({ error: "Admin access required." }, 403);
       const body: any = await readSumupBody(request);
       const apiKey = String(body.api_key || "").trim();
       const merchantCode = String(body.merchant_code || "").trim();
@@ -1664,6 +1821,9 @@ export default {
     }
 
     if (request.method === "POST" && url.pathname === "/api/sumup/readers/status") {
+      const auth = await requireAuth(request, env.DB);
+      if (!auth.ok) return jsonResponse({ error: auth.error }, 401);
+      if (auth.user.role !== "admin") return jsonResponse({ error: "Admin access required." }, 403);
       const body: any = await readSumupBody(request);
       const apiKey = String(body.api_key || "").trim();
       const merchantCode = String(body.merchant_code || "").trim();
@@ -1685,6 +1845,9 @@ export default {
     }
 
     if (request.method === "POST" && url.pathname === "/api/sumup/readers/delete") {
+      const auth = await requireAuth(request, env.DB);
+      if (!auth.ok) return jsonResponse({ error: auth.error }, 401);
+      if (auth.user.role !== "admin") return jsonResponse({ error: "Admin access required." }, 403);
       const body: any = await readSumupBody(request);
       const apiKey = String(body.api_key || "").trim();
       const merchantCode = String(body.merchant_code || "").trim();
@@ -1702,6 +1865,9 @@ export default {
     }
 
     if (request.method === "POST" && url.pathname === "/api/sumup/readers/checkout") {
+      const auth = await requireAuth(request, env.DB);
+      if (!auth.ok) return jsonResponse({ error: auth.error }, 401);
+      if (auth.user.role !== "admin") return jsonResponse({ error: "Admin access required." }, 403);
       const body: any = await readSumupBody(request);
       const apiKey = String(body.api_key || "").trim();
       const merchantCode = String(body.merchant_code || "").trim();
@@ -1749,6 +1915,9 @@ export default {
     }
 
     if (request.method === "POST" && url.pathname === "/api/sumup/readers/terminate") {
+      const auth = await requireAuth(request, env.DB);
+      if (!auth.ok) return jsonResponse({ error: auth.error }, 401);
+      if (auth.user.role !== "admin") return jsonResponse({ error: "Admin access required." }, 403);
       const body: any = await readSumupBody(request);
       const apiKey = String(body.api_key || "").trim();
       const merchantCode = String(body.merchant_code || "").trim();
@@ -1770,6 +1939,9 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/api/sumup/readers/checkout") {
+      const auth = await requireAuth(request, env.DB);
+      if (!auth.ok) return jsonResponse({ error: auth.error }, 401);
+      if (auth.user.role !== "admin") return jsonResponse({ error: "Admin access required." }, 403);
       const apiKey = String(url.searchParams.get("api_key") || "").trim();
       const merchantCode = String(url.searchParams.get("merchant_code") || "").trim();
       const readerId = String(url.searchParams.get("reader_id") || "").trim();
@@ -1818,6 +1990,9 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/api/sumup/webhook/events") {
+      const auth = await requireAuth(request, env.DB);
+      if (!auth.ok) return jsonResponse({ error: auth.error }, 401);
+      if (auth.user.role !== "admin") return jsonResponse({ error: "Admin access required." }, 403);
       const after = String(url.searchParams.get("after") || "");
       const events = await loadSumupWebhookEvents(env.DB);
       const filtered = after ? events.filter((e) => String(e.receivedAt || "") > after) : events.slice(-50);
@@ -1846,9 +2021,11 @@ export default {
 
     // ── Health check ──
     if (request.method === "GET" && url.pathname === "/health") {
-      return jsonResponse({ ok: true, database: "d1", storage: "multi-row", timestamp: Date.now() });
+      const resp = jsonResponse({ ok: true, database: "d1", storage: "multi-row", timestamp: Date.now() });
+      return withSecurityHeaders(resp);
     }
 
-    return jsonResponse({ error: "Not found" }, 404);
+    const notFound = jsonResponse({ error: "Not found" }, 404);
+    return withSecurityHeaders(notFound);
   },
 };
