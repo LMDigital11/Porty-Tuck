@@ -2444,38 +2444,52 @@ body.dark-mode .modal::backdrop {
     <section class="login-panel">
       <div class="brand-mark" aria-hidden="true"></div>
       <h1>Porty Tuck Shop</h1>
-      <form id="loginForm" class="form-grid">
-        <label>
-          Username
-          <input id="loginUsername" name="username" type="text" autocomplete="username" required>
-        </label>
-        <label>
-          Password
-          <span class="password-field">
-            <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
-            <button type="button" class="password-toggle" data-toggle="loginPassword" tabindex="-1">Show</button>
-          </span>
-        </label>
-        <button type="submit" id="loginSubmitBtn" class="primary-button full-width">Log in</button>
-      </form>
-      <div id="rateLimitTimer" class="rate-limit-timer is-hidden"></div>
-      <p id="loginNote" class="login-note">Default admin: <strong>admin</strong> / <strong>admin</strong></p>
+      <div id="loginNormalSection">
+        <form id="loginForm" class="form-grid">
+          <label>
+            Username
+            <input id="loginUsername" name="username" type="text" autocomplete="username" required>
+          </label>
+          <label>
+            Password
+            <span class="password-field">
+              <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
+              <button type="button" class="password-toggle" data-toggle="loginPassword" tabindex="-1">Show</button>
+            </span>
+          </label>
+          <button type="submit" id="loginSubmitBtn" class="primary-button full-width">Log in</button>
+        </form>
+        <div id="rateLimitTimer" class="rate-limit-timer is-hidden"></div>
+        <p id="loginNote" class="login-note">Default admin: <strong>admin</strong> / <strong>admin</strong></p>
+      </div>
+      <div id="loginLockoutSection" class="is-hidden">
+        <div style="text-align:center; margin-top:16px;">
+          <h2 style="margin:0; color:var(--coral);">System Locked</h2>
+          <p style="color:var(--muted); margin:8px 0 16px;">The system is currently locked out.</p>
+        </div>
+        <button type="button" id="lockoutAdminLoginButton" class="primary-button full-width">Admin login</button>
+        <form id="lockoutAdminLoginForm" class="form-grid is-hidden" style="margin-top:12px;text-align:left;">
+          <label>
+            Username
+            <input id="lockoutAdminUsername" type="text" autocomplete="username" required>
+          </label>
+          <label>
+            Password
+            <span class="password-field">
+              <input id="lockoutAdminPassword" type="password" autocomplete="current-password" required>
+              <button type="button" class="password-toggle" data-toggle="lockoutAdminPassword" tabindex="-1">Show</button>
+            </span>
+          </label>
+          <button type="submit" id="lockoutAdminLoginSubmitBtn" class="primary-button full-width">Log in as Admin</button>
+        </form>
+      </div>
       <button type="button" id="loginDarkModeButton" class="ghost-button" style="margin-top:12px;font-size:0.8rem;" title="Toggle dark mode">🌙 Dark mode</button>
       <div id="loginMaintenanceBanner" class="alert-card is-hidden warning" style="margin-top:18px;" aria-live="polite">
         <span id="loginMaintenanceBannerText"></span>
       </div>
       <div id="loginLockoutBanner" class="alert-card is-hidden warning" style="margin-top:18px;" aria-live="polite">
-        <span id="loginLockoutBannerText">The system is locked. Only the owner can log in.</span>
+        <span id="loginLockoutBannerText">The system is locked. Only admin users can log in.</span>
       </div>
-      <button type="button" id="ownerLoginButton" class="secondary-button is-hidden" style="margin-top:12px;">Owner login</button>
-      <form id="ownerLoginForm" class="form-grid is-hidden" style="margin-top:12px;text-align:left;">
-        <label>
-          Security code
-          <input id="ownerLoginCode" type="password" autocomplete="off" placeholder="Enter owner code" required>
-          <span class="field-hint">If you require this code, talk to admin users.</span>
-        </label>
-        <button type="submit" id="ownerLoginSubmitBtn" class="primary-button full-width">Unlock &amp; log in</button>
-      </form>
     </section>
   </main>
 
@@ -4634,10 +4648,7 @@ body.dark-mode .modal::backdrop {
     elements.lockoutStatusText = document.querySelector("#lockoutStatusText");
     elements.loginLockoutBanner = document.querySelector("#loginLockoutBanner");
     elements.loginLockoutBannerText = document.querySelector("#loginLockoutBannerText");
-    elements.ownerLoginButton = document.querySelector("#ownerLoginButton");
-    elements.ownerLoginForm = document.querySelector("#ownerLoginForm");
-    elements.ownerLoginSubmitBtn = document.querySelector("#ownerLoginSubmitBtn");
-    elements.ownerLoginCode = document.querySelector("#ownerLoginCode");
+    // Owner login elements removed in favor of lockout admin login
     elements.darkModeButton = document.querySelector("#darkModeButton");
     elements.loginDarkModeButton = document.querySelector("#loginDarkModeButton");
     elements.bottomNavTabs = document.querySelectorAll(".bottom-nav-tab[data-tab]");
@@ -4990,11 +5001,7 @@ body.dark-mode .modal::backdrop {
     elements.lockoutForm.addEventListener("submit", handleActivateLockout);
     elements.cancelLockoutButton.addEventListener("click", () => closeModal(elements.lockoutDialog));
     elements.deactivateLockoutButton.addEventListener("click", handleDeactivateLockout);
-    elements.ownerLoginButton.addEventListener("click", () => {
-      elements.ownerLoginForm.classList.toggle("is-hidden");
-      elements.ownerLoginCode.focus();
-    });
-    elements.ownerLoginForm.addEventListener("submit", handleOwnerLogin);
+    // Owner login removed in favor of lockout admin login
   }
 
   async function loadStore(retries = 3, delay = 1000) {
@@ -5877,42 +5884,8 @@ body.dark-mode .modal::backdrop {
   }
 
   async function handleOwnerLogin(event) {
-    event.preventDefault();
-    await withLoading(elements.ownerLoginSubmitBtn, async () => {
-      const code = elements.ownerLoginCode.value.trim();
-      if (!(await verifySecurityCode(code))) {
-        showToast("Invalid security code.");
-        return;
-      }
-
-      try {
-        const resp = await fetch(`${API_URL}/auth/owner-login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code })
-        });
-        const data = await resp.json();
-
-        if (!resp.ok) {
-          showToast(data.error || "Owner login failed.");
-          return;
-        }
-
-        setAuthToken(data.token);
-        if (data.expiresAt) sessionExpiresAt = data.expiresAt;
-        currentUser = data.user;
-        persistCurrentUser();
-        elements.ownerLoginForm.reset();
-        elements.ownerLoginForm.classList.add("is-hidden");
-        startSessionExpiryTimer();
-        await logUserEvent("Logged in", "Owner login via lockout bypass");
-        activeTab = "admin";
-        renderAuth();
-        showToast(`Welcome, ${currentUser.displayName}. Lockout is active.`);
-      } catch (error) {
-        showToast("Owner login failed. Could not reach server.");
-      }
-    });
+    // Legacy owner login removed
+    if (event) event.preventDefault();
   }
 
   function renderLockoutStatus() {
@@ -5932,13 +5905,18 @@ body.dark-mode .modal::backdrop {
 
   function renderLoginLockoutBanner() {
     if (!elements.loginLockoutBanner) return;
+    const loginNormal = document.getElementById("loginNormalSection");
+    const loginLockout = document.getElementById("loginLockoutSection");
     if (isLockoutActive()) {
       elements.loginLockoutBanner.classList.remove("is-hidden");
-      elements.ownerLoginButton.classList.remove("is-hidden");
+      if (loginNormal) loginNormal.classList.add("is-hidden");
+      if (loginLockout) loginLockout.classList.remove("is-hidden");
     } else {
       elements.loginLockoutBanner.classList.add("is-hidden");
-      elements.ownerLoginButton.classList.add("is-hidden");
-      elements.ownerLoginForm.classList.add("is-hidden");
+      if (loginNormal) loginNormal.classList.remove("is-hidden");
+      if (loginLockout) loginLockout.classList.add("is-hidden");
+      const form = document.getElementById("lockoutAdminLoginForm");
+      if (form) form.classList.add("is-hidden");
     }
   }
 
