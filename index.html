@@ -6257,7 +6257,7 @@ body.dark-mode .modal::backdrop {
         return s + (it.quantity || 1) * (item?.sellPrice || 0);
       }, 0);
       const dealTotal = deal.dealTotal || 0;
-      const profit = roundMoney(originalTotal - dealTotal);
+      const profit = roundMoney(dealTotal - originalTotal);
       const profitHtml = `<span style="font-weight:600;color:${profit>=0?'var(--green)':'var(--coral)'}">${profit>=0?'Profit':'Loss'} ${money.format(Math.abs(profit))}</span>`;
       const itemsText = (deal.items || []).map((it) => {
         const item = findItem(it.itemId);
@@ -6331,7 +6331,7 @@ body.dark-mode .modal::backdrop {
               const item = findItem(id);
               if (item) originalTotal += qty * (item.sellPrice || 0);
             });
-            const profit = roundMoney(originalTotal - dealTotal);
+            const profit = roundMoney(dealTotal - originalTotal);
             const preview = document.getElementById("dealProfitPreview");
             if (!preview) return;
             if (originalTotal === 0) { preview.textContent = "Select items to see profit / loss"; preview.style.color = "var(--ink)"; return; }
