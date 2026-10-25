@@ -6252,6 +6252,13 @@ body.dark-mode .modal::backdrop {
       return;
     }
     list.innerHTML = deals.map((deal) => {
+      const originalTotal = (deal.items || []).reduce((s, it) => {
+        const item = findItem(it.itemId);
+        return s + (it.quantity || 1) * (item?.sellPrice || 0);
+      }, 0);
+      const dealTotal = deal.dealTotal || 0;
+      const profit = roundMoney(originalTotal - dealTotal);
+      const profitHtml = `<span style="font-weight:600;color:${profit>=0?'var(--green)':'var(--coral)'}">${profit>=0?'Profit':'Loss'} ${money.format(Math.abs(profit))}</span>`;
       const itemsText = (deal.items || []).map((it) => {
         const item = findItem(it.itemId);
         const name = item ? item.name : it.itemName || it.itemId;
@@ -6263,6 +6270,7 @@ body.dark-mode .modal::backdrop {
             <div class="name-block">
               <strong>${escapeHtml(deal.name || "Deal")}</strong>
               <span class="badge">Deal total ${money.format(roundMoney(deal.dealTotal || 0))}</span>
+            ${profitHtml || ""}
             </div>
             <div class="actions-row">
               <button type="button" class="ghost-button" data-deal-action="edit" data-deal-id="${deal.id}">Edit</button>
@@ -6304,11 +6312,41 @@ body.dark-mode .modal::backdrop {
         <label>Name <input id="dealName" value="${escapeHtml(deal?.name || "")}"></label>
         <label>Deal total (GBP) <input id="dealTotal" type="number" step="0.01" value="${deal?.dealTotal || ""}"></label>
         <label>End date (optional) <input id="dealEndDate" type="date" value="${deal?.endDate || ""}"></label>
+        <div id="dealProfitPreview" style="padding:8px 10px;border-radius:var(--radius);background:var(--soft);font-weight:600;"></div>
         <div style="max-height:200px;overflow:auto;border:1px solid var(--line);padding:8px;border-radius:var(--radius);">${itemsHtml}</div>
       </div>
     `;
     if (typeof showCustomDialog === "function") {
       showCustomDialog(deal ? "Edit deal" : "Add deal", html, async () => {
+        // Live deal profit preview updater
+        setTimeout(() => {
+          const updatePreview = () => {
+            const totalStr = (document.getElementById("dealTotal")?.value || "0").trim();
+            const dealTotal = roundMoney(Number(totalStr) || 0);
+            let originalTotal = 0;
+            document.querySelectorAll('input[data-deal-item]:checked').forEach((cb) => {
+              const id = cb.dataset.dealItem;
+              const qtyInput = document.querySelector(`input[data-deal-qty="${id}"]`);
+              const qty = Math.max(1, parseInt(qtyInput?.value || "1", 10) || 1);
+              const item = findItem(id);
+              if (item) originalTotal += qty * (item.sellPrice || 0);
+            });
+            const profit = roundMoney(originalTotal - dealTotal);
+            const preview = document.getElementById("dealProfitPreview");
+            if (!preview) return;
+            if (originalTotal === 0) { preview.textContent = "Select items to see profit / loss"; preview.style.color = "var(--ink)"; return; }
+            if (profit >= 0) {
+              preview.textContent = `Profit: ${money.format(profit)} (items total ${money.format(originalTotal)} vs deal ${money.format(dealTotal)})`;
+              preview.style.color = "var(--green)"; preview.style.background = "var(--green-soft)";
+            } else {
+              preview.textContent = `Loss: ${money.format(Math.abs(profit))} (items total ${money.format(originalTotal)} vs deal ${money.format(dealTotal)})`;
+              preview.style.color = "var(--coral)"; preview.style.background = "var(--coral-soft)";
+            }
+          };
+          document.getElementById("dealTotal")?.addEventListener("input", updatePreview);
+          document.querySelectorAll('input[data-deal-item], input[data-deal-qty]').forEach((el) => el.addEventListener("change", updatePreview));
+          updatePreview();
+        }, 50);
         const name = document.getElementById("dealName").value.trim();
         const dealTotal = roundMoney(Number(document.getElementById("dealTotal").value));
         const endDate = document.getElementById("dealEndDate").value || "";
