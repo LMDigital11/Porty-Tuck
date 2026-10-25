@@ -6380,15 +6380,18 @@ body.dark-mode .modal::backdrop {
       if (!ok) continue;
       // Check if all required present
       applied.push({ dealId: deal.id, dealName: deal.name, dealTotal: deal.dealTotal });
-      // Apply: set those lines to contribute to deal price
+      // Apply deal price so selected items sum exactly to dealTotal
+      applied.push({ dealId: deal.id, dealName: deal.name, dealTotal: deal.dealTotal });
+      const originalTotal = required.reduce((sum, req) => {
+        const line = working.find((l) => l.itemId === req.itemId);
+        return sum + (line ? (line.quantity || req.quantity) * (line._origPrice || line.sellPrice) : 0);
+      }, 0);
+      const ratio = originalTotal > 0 ? (deal.dealTotal || 0) / originalTotal : 1;
       for (const req of required) {
         const line = working.find((l) => l.itemId === req.itemId);
         if (line) {
-          // Reduce quantity accounted? Easier: mark deal applied by setting price to deal portion
-          // Simple approach: set sellPrice to dealTotal / sum of quantities
-          const totalQty = required.reduce((s, r) => s + r.quantity, 0);
           line._dealApplied = true;
-          line.sellPrice = roundMoney((deal.dealTotal || 0) / totalQty);
+          line.sellPrice = roundMoney((line._origPrice || line.sellPrice) * ratio);
         }
       }
       // If only part matches, don't apply complex partials; apply when full set present
