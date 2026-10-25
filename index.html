@@ -4239,7 +4239,6 @@ body.dark-mode .modal::backdrop {
   let undoSaleTimerId = null;
   let undoSaleCountdownId = null;
   let remoteStoreVersion = null;
-  if (!store.deals) store.deals = [];
   let sessionExpiresAt = null;
   let sessionExpiryTimerId = null;
   let healthCheckTimerId = null;
@@ -5001,7 +5000,59 @@ body.dark-mode .modal::backdrop {
     elements.lockoutForm.addEventListener("submit", handleActivateLockout);
     elements.cancelLockoutButton.addEventListener("click", () => closeModal(elements.lockoutDialog));
     elements.deactivateLockoutButton.addEventListener("click", handleDeactivateLockout);
-    // Owner login removed in favor of lockout admin login
+    const lockoutAdminLoginButtonEl = document.getElementById("lockoutAdminLoginButton");
+    if (lockoutAdminLoginButtonEl) {
+      lockoutAdminLoginButtonEl.addEventListener("click", () => {
+        const form = document.getElementById("lockoutAdminLoginForm");
+        if (form) {
+          form.classList.remove("is-hidden");
+          lockoutAdminLoginButtonEl.classList.add("is-hidden");
+          setTimeout(() => document.getElementById("lockoutAdminUsername")?.focus(), 0);
+        }
+      });
+    }
+    const lockoutAdminLoginFormEl = document.getElementById("lockoutAdminLoginForm");
+    if (lockoutAdminLoginFormEl) {
+      lockoutAdminLoginFormEl.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const usernameEl = document.getElementById("lockoutAdminUsername");
+        const passwordEl = document.getElementById("lockoutAdminPassword");
+        const submitBtn = document.getElementById("lockoutAdminLoginSubmitBtn");
+        if (!usernameEl || !passwordEl) return;
+        await withLoading(submitBtn, async () => {
+          const username = normalizeUsername(usernameEl.value);
+          const password = passwordEl.value;
+          try {
+            const resp = await fetch(`${API_URL}/auth/login`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ username, password })
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+              showToast(data.error || "Login failed.");
+              return;
+            }
+            if (data.user.role !== "admin") {
+              showToast("Only admin accounts can log in during lockout.");
+              return;
+            }
+            setAuthToken(data.token);
+            if (data.expiresAt) sessionExpiresAt = data.expiresAt;
+            currentUser = data.user;
+            persistCurrentUser();
+            lockoutAdminLoginFormEl.reset();
+            startSessionExpiryTimer();
+            activeTab = "stock";
+            await logUserEvent("Logged in", "Lockout admin login");
+            renderAuth();
+            showToast(`Welcome, ${currentUser.displayName}.`);
+          } catch (err) {
+            showToast("Login failed. Could not reach server.");
+          }
+        });
+      });
+    }
   }
 
   async function loadStore(retries = 3, delay = 1000) {
@@ -5063,6 +5114,7 @@ body.dark-mode .modal::backdrop {
       orders: [],
       recurringOrders: [],
       orderHistory: [],
+      deals: [],
       lifetime: {
         revenue: 0,
         cost: 0,
@@ -5126,6 +5178,7 @@ body.dark-mode .modal::backdrop {
     next.orders = Array.isArray(value.orders) ? value.orders : [];
     next.recurringOrders = Array.isArray(value.recurringOrders) ? value.recurringOrders : [];
     next.orderHistory = Array.isArray(value.orderHistory) ? value.orderHistory : [];
+    next.deals = Array.isArray(value.deals) ? value.deals : [];
     next.events = next.events
       .filter((event) => event && event.name)
       .map((event) => ({
