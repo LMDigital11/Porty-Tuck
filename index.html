@@ -6276,6 +6276,20 @@ body.dark-mode .modal::backdrop {
     }).join("");
   }
 
+  function showCustomDialog(title, html, onConfirm) {
+    const d = document.createElement("dialog");
+    d.className = "modal";
+    d.innerHTML = `<form method="dialog" style="padding:16px;min-width:320px;max-width:90vw;"><h3 style="margin-top:0">${escapeHtml(title)}</h3><div>${html}</div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;"><button type="submit" value="cancel" class="secondary-button">Cancel</button><button type="submit" value="ok" class="primary-button" id="customDialogOk">Save</button></div></form>`;
+    document.body.appendChild(d);
+    d.showModal();
+    d.querySelector("#customDialogOk").addEventListener("click", (e) => {
+      e.preventDefault();
+      const ok = onConfirm();
+      if (ok !== false) d.close();
+    });
+    d.addEventListener("close", () => d.remove());
+  }
+
   function openDealDialog(editId) {
     if (!store.deals) store.deals = [];
     const deal = editId ? store.deals.find((d) => d.id === editId) : null;
