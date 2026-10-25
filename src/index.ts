@@ -921,14 +921,26 @@ export default {
       }
 
       if (!authed) {
-        const publicStore: any = {
-          items: Array.isArray(normalized.items) ? normalized.items : [],
-          events: Array.isArray(normalized.events) ? normalized.events : [],
-          maintenance: normalized.maintenance,
-          lockout: normalized.lockout,
-        };
+        // Return full store so front-end never loses data on close/reopen,
+        // but redact secrets from users and apiConfig
+        const redactedUsers = Array.isArray(normalized.users)
+          ? normalized.users.map((u: any) => {
+              const { salt, passwordHash, ...rest } = u;
+              return rest;
+            })
+          : [];
+        const redactedApiConfig = { ...normalized.apiConfig };
+        if (redactedApiConfig.sumupApiKey) redactedApiConfig.sumupApiKey = "***";
+        if (redactedApiConfig.sumupMerchantCode) redactedApiConfig.sumupMerchantCode = "***";
+        if (redactedApiConfig.affiliateKey) redactedApiConfig.affiliateKey = "***";
+        if (redactedApiConfig.appId) redactedApiConfig.appId = "***";
+        if (redactedApiConfig.cashRemovalCode) redactedApiConfig.cashRemovalCode = "***";
         const response: any = {
-          store: publicStore,
+          store: {
+            ...normalized,
+            users: redactedUsers,
+            apiConfig: redactedApiConfig,
+          },
           storeVersion: normalized.storeVersion || 1,
           public: true,
         };
