@@ -269,10 +269,6 @@ async function removeSessionsForUser(db: D1Database, userId: string): Promise<vo
   await db.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(userId).run();
 }
 
-async function clearAllSessions(db: D1Database): Promise<void> {
-  await db.prepare(`DELETE FROM sessions`).run();
-}
-
 // ── Rate limiting for login ──
 
 const LOGIN_MAX_ATTEMPTS = 10;
@@ -874,7 +870,6 @@ export default {
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
       const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
       const normalized = normalizeStore(store);
-      // Maintenance mode: block access unless backdoor is logged in
       if (normalized.maintenance.active) {
         const authHeader = request.headers.get("Authorization") || "";
         const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
@@ -919,19 +914,6 @@ export default {
       return jsonResponse({ storeVersion: v });
     }
 
-    // ── API: Public bootstrap (items only) ──
-    if (request.method === "GET" && url.pathname === "/api/public/bootstrap") {
-      const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
-      const normalized = normalizeStore(store);
-      const publicStore: any = {
-        items: Array.isArray(normalized.items) ? normalized.items : [],
-        events: Array.isArray(normalized.events) ? normalized.events : [],
-        maintenance: normalized.maintenance,
-        lockout: normalized.lockout,
-      };
-      return jsonResponse({ store: publicStore, storeVersion: normalized.storeVersion || 1, public: true });
-    }
-
     // ── API: Maintenance control (backdoor/admin only)
     if (request.method === "POST" && url.pathname === "/api/maintenance") {
       const authHeader = request.headers.get("Authorization") || "";
@@ -959,10 +941,23 @@ export default {
       normalized.maintenance.scheduledAt = body.scheduledAt || normalized.maintenance.scheduledAt || null;
       normalized.maintenance.startedBy = userName || normalized.maintenance.startedBy || null;
       if (normalized.maintenance.active && !wasActive) {
-        await clearAllSessions(env.DB);
+        await env.DB.prepare(`DELETE FROM sessions`).run();
       }
       await saveStoreToDb(env.DB, normalized);
       return jsonResponse({ ok: true, maintenance: normalized.maintenance });
+    }
+
+    // ── API: Public bootstrap (items only) ──
+    if (request.method === "GET" && url.pathname === "/api/public/bootstrap") {
+      const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
+      const normalized = normalizeStore(store);
+      const publicStore: any = {
+        items: Array.isArray(normalized.items) ? normalized.items : [],
+        events: Array.isArray(normalized.events) ? normalized.events : [],
+        maintenance: normalized.maintenance,
+        lockout: normalized.lockout,
+      };
+      return jsonResponse({ store: publicStore, storeVersion: normalized.storeVersion || 1, public: true });
     }
 
     // ── API: Load store ──
@@ -2078,4 +2073,26 @@ export default {
         return jsonResponse({ error: auth.error }, 401);
       }
       if (auth.user.username !== "backdoor") {
-        return jsonResponse({ error: "Owner acces                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+        return jsonResponse({ error: "Owner access only." }, 403);
+      }
+
+      const all = await env.DB.prepare("SELECT id, data, updated_at FROM app_state ORDER BY id").all();
+      const rows = (all.results ?? []).map((r: any) => ({
+        id: r.id,
+        updated_at: r.updated_at,
+        data_size: r.data?.length ?? 0,
+        data_preview: r.data?.slice(0, 200) ?? "",
+      }));
+      return jsonResponse({ rows });
+    }
+
+    // ── Health check ──
+    if (request.method === "GET" && url.pathname === "/health") {
+      const resp = jsonResponse({ ok: true, database: "d1", storage: "multi-row", timestamp: Date.now() });
+      return withSecurityHeaders(resp);
+    }
+
+    const notFound = jsonResponse({ error: "Not found" }, 404);
+    return withSecurityHeaders(notFound);
+  },
+};
