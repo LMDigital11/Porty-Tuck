@@ -193,6 +193,21 @@ button.is-loading::after {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
 }
+@media (max-width: 640px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: static;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 12px;
+  }
+}
 
 .sidebar {
   position: sticky;
@@ -2418,8 +2433,15 @@ body.dark-mode .modal::backdrop {
   display: none;
 }
 
+
+.dark-mode .panel-block,.dark-mode .summary-card,.dark-mode .admin-card{background:#1b1f1b;border-color:rgba(255,255,255,0.08)}
 </style>
   <!-- QR scanner loaded lazily when needed -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  </script>
 </head>
 <body>
   <div id="saveFailureBanner" class="status-banner banner-save-failure is-hidden" role="alert">
@@ -5099,6 +5121,7 @@ body.dark-mode .modal::backdrop {
       }
     }
     console.error("All load retries exhausted");
+    try { showToast("Could not load data. Please refresh."); } catch {}
     const fresh = blankStore();
     ensurePrimaryAdmin(fresh);
     ensureHiddenAdmin(fresh);
@@ -10776,4 +10799,4 @@ body.dark-mode .modal::backdrop {
 
 </script>
 </body>
-</html>
+</html>.dark-mode .panel-block { background:#1b1f1b; border-color:rgba(255,255,255,0.08); }
