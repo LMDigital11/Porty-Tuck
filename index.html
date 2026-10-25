@@ -2821,7 +2821,7 @@ body.dark-mode .modal::backdrop {
           <section id="basketPanel" class="basket-panel">
           <div class="basket-header">
             <div>
-              <h4>Basket</h4>
+              <h4>Basket <button type="button" id="scanToAddBasketButton" class="secondary-button" style="margin-left:6px;font-size:0.75rem;padding:3px 8px;">Scan barcode</button></h4>
               <p>Pick items, then pay once for everything.</p>
             </div>
             <div class="basket-actions">
@@ -3207,6 +3207,18 @@ body.dark-mode .modal::backdrop {
             <article class="admin-card">
               <span>Revenue</span>
               <strong id="reportRevenue">GBP 0.00</strong>
+            </article>
+            <article class="admin-card" style="border-left:3px solid var(--green);">
+              <span>DB Status</span>
+              <strong id="adminHealthStatus" style="font-size:1rem;color:var(--green);">Connected</strong>
+            </article>
+            <article class="admin-card">
+              <span>Active Deals</span>
+              <strong id="adminActiveDeals">0</strong>
+            </article>
+            <article class="admin-card">
+              <span>Store Version</span>
+              <strong id="adminStoreVersion">1</strong>
             </article>
             <article class="admin-card">
               <span>Profit</span>
@@ -4945,6 +4957,7 @@ body.dark-mode .modal::backdrop {
 
     document.getElementById("scanItemBarcodeButton")?.addEventListener("click", handleScanItemBarcode);
     document.getElementById("scanToAddStockButton")?.addEventListener("click", handleScanToAddStock);
+    document.getElementById("scanToAddBasketButton")?.addEventListener("click", handleScanToAddBasket);
     document.getElementById("cancelBarcodeScanButton")?.addEventListener("click", () => {
       stopBarcodeScanner();
       closeModal(elements.barcodeScanDialog);
@@ -7061,6 +7074,22 @@ body.dark-mode .modal::backdrop {
     }
   }
 
+  function handleScanToAddBasket() {
+    openBarcodeScanner((code) => {
+      const scanned = code.trim().toLowerCase();
+      const item = store.items.find((i) => i.barcode && i.barcode.trim().toLowerCase() === scanned);
+      if (!item) { showToast("No item linked to barcode: " + code); return; }
+      const existingLine = basket.find((line) => line.itemId === item.id);
+      if (existingLine) {
+        existingLine.quantity += 1;
+      } else {
+        basket.push({ itemId: item.id, itemName: item.name, quantity: 1, sellPrice: item.sellPrice, buyPrice: item.buyPrice });
+      }
+      renderBasket();
+      showToast(`${item.name} added to basket.`);
+    });
+  }
+
   function handleScanToAddStock() {
     openBarcodeScanner((code) => {
       const scanned = code.trim().toLowerCase();
@@ -7125,6 +7154,9 @@ body.dark-mode .modal::backdrop {
     document.getElementById("reportProfit").textContent = money.format(roundMoney(totalProfit));
     document.getElementById("reportSalesCount").textContent = String(sales.length);
     document.getElementById("reportUnitsSold").textContent = String(totalUnits);
+    document.getElementById("adminHealthStatus").textContent = store.version ? "Connected" : "Unknown";
+    document.getElementById("adminActiveDeals").textContent = String((store.deals || []).filter(d => d.active !== false).length);
+    document.getElementById("adminStoreVersion").textContent = String(store.storeVersion || 1);
 
     const byPerson = {};
     for (const sale of sales) {
