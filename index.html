@@ -22,7 +22,8 @@
   --amber: #9b6a00;
   --amber-soft: #fff1c9;
   --shadow: 0 18px 45px rgba(36, 45, 40, 0.12);
-  --radius: 8px;
+  --radius: 12px;
+  --spacing-md: 1rem;
   font-family: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
@@ -112,11 +113,13 @@ button.is-loading::after {
 
 .login-panel {
   width: min(420px, 100%);
-  padding: 32px;
+  padding: 28px 26px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: var(--shadow);
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(33, 42, 37, 0.08);
+  backdrop-filter: blur(6px);
+}
 }
 
 .maintenance-view {
