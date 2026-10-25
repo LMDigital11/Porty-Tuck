@@ -6254,7 +6254,7 @@ body.dark-mode .modal::backdrop {
     list.innerHTML = deals.map((deal) => {
       const originalTotal = (deal.items || []).reduce((s, it) => {
         const item = findItem(it.itemId);
-        return s + (it.quantity || 1) * (item?.sellPrice || 0);
+        return s + (it.quantity || 1) * (item?.buyPrice || 0);
       }, 0);
       const dealTotal = deal.dealTotal || 0;
       const profit = roundMoney(dealTotal - originalTotal);
@@ -6329,7 +6329,7 @@ body.dark-mode .modal::backdrop {
               const qtyInput = document.querySelector(`input[data-deal-qty="${id}"]`);
               const qty = Math.max(1, parseInt(qtyInput?.value || "1", 10) || 1);
               const item = findItem(id);
-              if (item) originalTotal += qty * (item.sellPrice || 0);
+              if (item) originalTotal += qty * (item.buyPrice || 0);
             });
             const profit = roundMoney(dealTotal - originalTotal);
             const preview = document.getElementById("dealProfitPreview");
