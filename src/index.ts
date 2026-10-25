@@ -269,6 +269,10 @@ async function removeSessionsForUser(db: D1Database, userId: string): Promise<vo
   await db.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(userId).run();
 }
 
+async function clearAllSessions(db: D1Database): Promise<void> {
+  await db.prepare(`DELETE FROM sessions`).run();
+}
+
 // ── Rate limiting for login ──
 
 const LOGIN_MAX_ATTEMPTS = 10;
@@ -868,6 +872,29 @@ export default {
 
     // Serve the HTML at root and /index.html
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
+      const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
+      const normalized = normalizeStore(store);
+      // Maintenance mode: block access unless backdoor is logged in
+      if (normalized.maintenance.active) {
+        const authHeader = request.headers.get("Authorization") || "";
+        const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+        let isBackdoor = false;
+        if (token) {
+          const session = await validateSession(env.DB, token);
+          if (session.valid) {
+            const userRow = await env.DB.prepare(`SELECT data FROM app_state WHERE id = ?`).bind(`${PREFIX}users`).first<{ data: string }>();
+            const users: any[] = userRow ? JSON.parse(userRow.data) : [];
+            const u = users.find((x: any) => x.id === session.userId);
+            if (u?.username === "backdoor") isBackdoor = true;
+          }
+        }
+        if (!isBackdoor) {
+          const resume = normalized.maintenance.resumeAt ? `<br><strong>Back at:</strong> ${(normalized.maintenance.resumeAt || "").replace(/</g,"&lt;").replace(/>/g,"&gt;")}` : "";
+          const reason = normalized.maintenance.reason ? `<br><strong>Reason:</strong> ${(normalized.maintenance.reason || "").replace(/</g,"&lt;").replace(/>/g,"&gt;")}` : "";
+          const htmlMaint = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Maintenance</title><style>body{font-family:sans-serif;text-align:center;padding:10vh 24px;color:#17211b;background:#f4f0e8;}h1{font-size:2rem;color:#b34835;}</style></head><body><h1>Under Maintenance</h1><p>The shop is down for maintenance.</p>${reason}${resume}<p>Only the owner can access during this time.</p></body></html>`;
+          return new Response(htmlMaint, { status: 503, headers: { "Content-Type": "text/html; charset=utf-8", "Retry-After": "3600" } });
+        }
+      }
       const resp = new Response(html, {
         status: 200,
         headers: {
@@ -903,6 +930,39 @@ export default {
         lockout: normalized.lockout,
       };
       return jsonResponse({ store: publicStore, storeVersion: normalized.storeVersion || 1, public: true });
+    }
+
+    // ── API: Maintenance control (backdoor/admin only)
+    if (request.method === "POST" && url.pathname === "/api/maintenance") {
+      const authHeader = request.headers.get("Authorization") || "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+      let userId = "";
+      let userName = "";
+      if (token) {
+        const session = await validateSession(env.DB, token);
+        if (!session.valid) return jsonResponse({ error: "Unauthorized" }, 401);
+        userId = session.userId;
+        const userRow = await env.DB.prepare(`SELECT data FROM app_state WHERE id = ?`).bind(`${PREFIX}users`).first<{ data: string }>();
+        const users: any[] = userRow ? JSON.parse(userRow.data) : [];
+        const u = users.find((x: any) => x.id === userId);
+        userName = u?.username || "";
+      }
+      if (userName !== "backdoor") return jsonResponse({ error: "Only backdoor can manage maintenance" }, 403);
+      let body: any = {};
+      try { body = await request.json(); } catch {}
+      const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
+      const normalized = normalizeStore(store);
+      const wasActive = normalized.maintenance.active;
+      normalized.maintenance.active = !!body.active;
+      normalized.maintenance.reason = body.reason || normalized.maintenance.reason || "";
+      normalized.maintenance.resumeAt = body.resumeAt || normalized.maintenance.resumeAt || null;
+      normalized.maintenance.scheduledAt = body.scheduledAt || normalized.maintenance.scheduledAt || null;
+      normalized.maintenance.startedBy = userName || normalized.maintenance.startedBy || null;
+      if (normalized.maintenance.active && !wasActive) {
+        await clearAllSessions(env.DB);
+      }
+      await saveStoreToDb(env.DB, normalized);
+      return jsonResponse({ ok: true, maintenance: normalized.maintenance });
     }
 
     // ── API: Load store ──
@@ -2018,26 +2078,4 @@ export default {
         return jsonResponse({ error: auth.error }, 401);
       }
       if (auth.user.username !== "backdoor") {
-        return jsonResponse({ error: "Owner access only." }, 403);
-      }
-
-      const all = await env.DB.prepare("SELECT id, data, updated_at FROM app_state ORDER BY id").all();
-      const rows = (all.results ?? []).map((r: any) => ({
-        id: r.id,
-        updated_at: r.updated_at,
-        data_size: r.data?.length ?? 0,
-        data_preview: r.data?.slice(0, 200) ?? "",
-      }));
-      return jsonResponse({ rows });
-    }
-
-    // ── Health check ──
-    if (request.method === "GET" && url.pathname === "/health") {
-      const resp = jsonResponse({ ok: true, database: "d1", storage: "multi-row", timestamp: Date.now() });
-      return withSecurityHeaders(resp);
-    }
-
-    const notFound = jsonResponse({ error: "Not found" }, 404);
-    return withSecurityHeaders(notFound);
-  },
-};
+        return jsonResponse({ error: "Owner acces                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
