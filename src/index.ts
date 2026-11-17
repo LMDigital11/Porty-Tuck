@@ -99,6 +99,27 @@ const RATE_LIMIT_TABLE_SQL = `
   )
 `;
 
+// ── SumUp Cloud API checkout tracking (idempotent reader payments) ──
+const SUMUP_CHECKOUTS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS sumup_checkouts (
+    id TEXT PRIMARY KEY,
+    merchant_code TEXT NOT NULL,
+    reader_id TEXT NOT NULL,
+    client_ref TEXT UNIQUE,
+    amount_minor INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP
+  )
+`;
+const SUMUP_CHECKOUTS_CLIENT_REF_IDX_SQL = `
+  CREATE INDEX IF NOT EXISTS sumup_checkouts_client_ref_idx ON sumup_checkouts(client_ref)
+`;
+const SUMUP_CHECKOUTS_MERCHANT_IDX_SQL = `
+  CREATE INDEX IF NOT EXISTS sumup_checkouts_merchant_idx ON sumup_checkouts(merchant_code)
+`;
+
 const PREFIX = "tuck:";
 
 const SECTIONS = [
@@ -464,6 +485,20 @@ async function initDatabase(db: D1Database): Promise<void> {
     db.prepare(SESSIONS_EXPIRES_AT_IDX_SQL),
     db.prepare(SESSIONS_USER_ID_IDX_SQL),
     db.prepare(RATE_LIMIT_TABLE_SQL),
+    // ── sumup_checkouts table ──
+    db.prepare(`CREATE TABLE IF NOT EXISTS sumup_checkouts (
+        id TEXT PRIMARY KEY,
+        merchant_code TEXT NOT NULL,
+        reader_id TEXT NOT NULL,
+        client_ref TEXT UNIQUE,
+        amount_minor INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        processed_at TIMESTAMP
+      )`),
+    db.prepare(SUMUP_CHECKOUTS_CLIENT_REF_IDX_SQL),
+    db.prepare(SUMUP_CHECKOUTS_MERCHANT_IDX_SQL),
   ]);
   await migrateLegacyStateRows(db);
 }
@@ -708,6 +743,29 @@ async function appendSumupWebhookEvent(db: D1Database, event: any): Promise<void
     .prepare(`INSERT OR REPLACE INTO app_state (id, data, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
     .bind(SUMUP_WEBHOOK_EVENTS_KEY, JSON.stringify({ events: trimmed }))
     .run();
+}
+
+async function upsertSumupCheckout(db: D1Database, client_ref: string, merchant_code: string, reader_id: string, amount_minor: number): Promise<string> {
+  // Use INSERT OR IGNORE for idempotency; if already exists, return existing id
+  const id = `${merchant_code}-${reader_id}-${client_ref}`;
+  await db.prepare(
+    `INSERT OR IGNORE INTO sumup_checkouts (id, merchant_code, reader_id, client_ref, amount_minor, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+  ).bind(id, merchant_code, reader_id, client_ref, amount_minor).run();
+  // Return the id (whether newly inserted or existing)
+  const existing = await db.prepare(`SELECT id, status FROM sumup_checkouts WHERE id = ?`).bind(id).first<{ id: string; status: string }>();
+  return existing?.id || id;
+}
+
+async function getSumupCheckout(db: D1Database, client_ref: string): Promise<{ id: string; status: string; amount_minor: number; merchant_code: string; reader_id: string; created_at: string } | null> {
+  return await db.prepare(`SELECT id, status, amount_minor, merchant_code, reader_id, created_at FROM sumup_checkouts WHERE client_ref = ?`).bind(client_ref).first<{ id: string; status: string; amount_minor: number; merchant_code: string; reader_id: string; created_at: string }>();
+}
+
+async function updateSumupCheckoutStatus(db: D1Database, id: string, status: string): Promise<void> {
+  await db.prepare(`UPDATE sumup_checkouts SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(status, id).run();
+}
+
+async function markSumupCheckoutProcessed(db: D1Database, id: string): Promise<void> {
+  await db.prepare(`UPDATE sumup_checkouts SET status = 'processed', processed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(id).run();
 }
 
 async function sumupVerifyWebhookSignature(rawBody: string, secret: string, signatureHeader: string | null): Promise<boolean> {
