@@ -1,0 +1,59 @@
+{
+  "version": 2,
+  "skills": {
+    "diagnosing-bugs": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/diagnosing-bugs/SKILL.md",
+      "computedHash": "87c78ae966e591f9ceb177789cc5cc9de69277cd26679ffd36ca5300f430d513"
+    },
+    "sumup": {
+      "source": "membranedev/application-skills",
+      "commit": "f484c8265e70ec910a57342389cca5c5de7d8167",
+      "sourceType": "github",
+      "skillPath": "skills/sumup/SKILL.md",
+      "computedHash": "c6cdeb75d1e990046b854c30c8fa8a8424aecea7b69dc18d21e48e71147f0557"
+    },
+    "sumup-best-practices": {
+      "source": "sumup/sumup-skills",
+      "commit": "66257e61fff2cdf37ef360762b42e5783d4436c9",
+      "sourceType": "github",
+      "skillPath": "skills/sumup-best-practices/SKILL.md",
+      "computedHash": "f20107a10599aded4214125f4c783e7f12bfa243274765a2d2445540cb02a48f"
+    },
+    "sumup-debug": {
+      "source": "sumup/sumup-skills",
+      "commit": "66257e61fff2cdf37ef360762b42e5783d4436c9",
+      "sourceType": "github",
+      "skillPath": "skills/sumup-debug/SKILL.md",
+      "computedHash": "2f24bf72e03712ec0cc2ea087b00896b84ebb0df28dd94c0067b4fc2ce399c90"
+    },
+    "sumup-mcp": {
+      "source": "sumup/sumup-skills",
+      "commit": "66257e61fff2cdf37ef360762b42e5783d4436c9",
+      "sourceType": "github",
+      "skillPath": "skills/sumup-mcp/SKILL.md",
+      "computedHash": "bd954a92d98d8f0e556416d2229bcf8bf67e9e80dff441eb164b78f9ee3d7f85"
+    },
+    "sumup-testing": {
+      "source": "sumup/sumup-skills",
+      "commit": "66257e61fff2cdf37ef360762b42e5783d4436c9",
+      "sourceType": "github",
+      "skillPath": "skills/sumup-testing/SKILL.md",
+      "computedHash": "82a7260e7a8d85038aa68ba5113c89fb640eed8796d353a997ddf29e36486570"
+    },
+    "systematic-debugging": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/systematic-debugging/SKILL.md",
+      "computedHash": "ceb6a7a4cb02402360846cd466df67a8c6eaa3c5b1e97d1b419b5ba2ceeb734c"
+    },
+    "upgrade-sumup": {
+      "source": "sumup/sumup-skills",
+      "commit": "66257e61fff2cdf37ef360762b42e5783d4436c9",
+      "sourceType": "github",
+      "skillPath": "skills/upgrade-sumup/SKILL.md",
+      "computedHash": "24c8c0f74f3f2fb223f5a786eb1359a6a123e7d5ed79a5b11c9fc6b9d06bee8f"
+    }
+  }
+}

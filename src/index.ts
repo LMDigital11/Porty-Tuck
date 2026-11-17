@@ -2007,6 +2007,11 @@ export default {
       if (!affiliateKeyVal || !appIdVal || !foreignTxId) {
         return jsonResponse({ error: "Affiliate key, app id and a payment reference are required." }, 400);
       }
+      // Idempotency: if client_ref already has a completed checkout, return that instead of creating a new one.
+      const existingCheckout = await getSumupCheckout(env.DB, foreignTxId);
+      if (existingCheckout && existingCheckout.status !== "pending" && existingCheckout.status !== "declined" && existingCheckout.status !== "failed") {
+        return jsonResponse({ idempotent: true, client_ref: foreignTxId, checkout: existingCheckout, message: "This payment was already processed." });
+      }
       const payload: Record<string, unknown> = {
         total_amount: {
           currency: String(body.currency || "GBP").toUpperCase(),
@@ -2023,6 +2028,8 @@ export default {
         payload.description = String(body.description).trim();
       }
       try {
+        // Track this checkout attempt in DB
+        await upsertSumupCheckout(env.DB, foreignTxId, merchantCode, readerId, Math.round(amount * 100));
         const resp = await sumupCloudApi(`/v0.1/merchants/${merchantCode}/readers/${readerId}/checkout`, apiKey, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2030,13 +2037,37 @@ export default {
         });
         const data = await resp.json();
         if (!resp.ok) {
+          await updateSumupCheckoutStatus(env.DB, `${merchantCode}-${readerId}-${foreignTxId}`, "error");
           return jsonResponse({ error: data?.message || data?.error_description || `SumUp API returned HTTP ${resp.status}`, detail: data }, resp.status);
         }
-        return jsonResponse(data);
+        // Determine initial status from response
+        const sumupStatus = String(data?.status || data?.state || "pending").toUpperCase();
+        let ourStatus = "pending";
+        if (sumupStatus.includes("SUCCESS") || sumupStatus.includes("PAID") || sumupStatus.includes("SETTLED") || sumupStatus.includes("RECONCILED")) ourStatus = "success";
+        else if (sumupStatus.includes("DECLINE") || sumupStatus.includes("FAIL") || sumupStatus.includes("REJECT")) ourStatus = "declined";
+        await updateSumupCheckoutStatus(env.DB, `${merchantCode}-${readerId}-${foreignTxId}`, ourStatus);
+        return jsonResponse({ ...data, client_ref: foreignTxId, checkout_status: ourStatus });
       } catch (error) {
         console.error("SumUp reader checkout error:", error);
+        await updateSumupCheckoutStatus(env.DB, `${merchantCode}-${readerId}-${foreignTxId}`, "error");
         return jsonResponse({ error: "Failed to reach SumUp API." }, 502);
       }
+    }
+
+    // Get checkout status by client_ref (idempotency key)
+    if (request.method === "GET" && url.pathname === "/api/sumup/readers/checkout/status") {
+      const auth = await requireAuth(request, env.DB);
+      if (!auth.ok) return jsonResponse({ error: auth.error }, 401);
+      if (auth.user.role !== "admin") return jsonResponse({ error: "Admin access required." }, 403);
+      const clientRef = String(url.searchParams.get("client_ref") || "").trim();
+      if (!clientRef) {
+        return jsonResponse({ error: "client_ref is required." }, 400);
+      }
+      const checkout = await getSumupCheckout(env.DB, clientRef);
+      if (!checkout) {
+        return jsonResponse({ error: "No checkout found for that client_ref." }, 404);
+      }
+      return jsonResponse({ client_ref: clientRef, status: checkout.status, amount_minor: checkout.amount_minor, created_at: checkout.created_at });
     }
 
     if (request.method === "POST" && url.pathname === "/api/sumup/readers/terminate") {
