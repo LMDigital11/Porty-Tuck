@@ -2142,6 +2142,36 @@ export default {
         payload,
         merchant_code: String(body.merchant_code || payload.merchant_code || ""),
       });
+      
+      // ── Process Solo Cloud API transaction updates ──
+      if (body.event_type === "solo.transaction.updated" || body.type === "solo.transaction.updated") {
+        const tx = payload.transaction || payload;
+        const clientRef = String(tx.client_transaction_id || tx.foreign_transaction_id || "");
+        if (clientRef) {
+          const checkout = await getSumupCheckout(env.DB, clientRef);
+          if (checkout) {
+            const sumupStatus = String(tx.status || "").toUpperCase();
+            let ourStatus = checkout.status;
+            if (sumupStatus === "SUCCESSFUL" || sumupStatus === "PAID_OUT" || sumupStatus === "SETTLED" || sumupStatus === "RECONCILED") {
+              ourStatus = "success";
+              await markSumupCheckoutProcessed(env.DB, checkout.id);
+              // Update expectedAdjustment
+              const amount = Number(tx.amount || 0) / 100; // Convert from cents
+              const existing = (await loadStoreFromDb(env.DB)) ?? blankStore();
+              const normalized = normalizeStore(existing);
+              normalized.money = normalized.money || { cash: { actual: 0, expectedAdjustment: 0 }, sumup: { actual: 0, expectedAdjustment: 0 } };
+              normalized.money.sumup.expectedAdjustment = Math.round((normalized.money.sumup.expectedAdjustment || 0) + amount * 100) / 100;
+              normalized.money.sumup.lastUpdatedAt = new Date().toISOString();
+              await saveStoreToDb(env.DB, normalized);
+            } else if (sumupStatus === "DECLINED" || sumupStatus === "FAILED") {
+              ourStatus = "declined";
+              await updateSumupCheckoutStatus(env.DB, checkout.id, "declined");
+            }
+            await updateSumupCheckoutStatus(env.DB, checkout.id, ourStatus);
+          }
+        }
+      }
+      
       return jsonResponse({ ok: true });
     }
 

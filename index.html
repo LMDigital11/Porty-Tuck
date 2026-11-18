@@ -9656,6 +9656,7 @@ body.dark-mode .modal::backdrop {
         finalizeFulfilledOrder(draft.fulfilOrderId);
       }
     } else {
+      // Cloud API / Solo reader payment path
       for (const sale of sales) {
         store.sales.unshift(sale);
       }
@@ -9670,12 +9671,31 @@ body.dark-mode .modal::backdrop {
         renderSellGrid();
       }
       renderMoneyTab();
-      logUserEvent("Recorded sale", `${sales.length} item(s), ${money.format(roundMoney(draft.total))} SumUp`);
+      logUserEvent("Recorded sale", `${sales.length} item(s), ${money.format(roundMoney(draft.total))} SumUp Cloud`);
       if (isFulfil) {
         finalizeFulfilledOrder(draft.fulfilOrderId);
       }
-      openSumUpPayment(draft.total, sumupRef);
-      showToast(`SumUp payment started for ${money.format(roundMoney(draft.total))}. Stock held until confirmed.`);
+      const hasReader = (store.apiConfig?.sumupReaderId || "").trim();
+      if (hasReader && paymentMethod === "sumup") {
+        // Solo reader via Cloud API
+        const clientRef = crypto && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : "";
+        const result = await startSoloCheckout(draft.total, clientRef);
+        if (result) {
+          showToast(`Solo checkout started (${result.checkout_status || "pending"}). Polling for confirmation...`);
+          // Poll every 3 seconds, up to 10 times (30 seconds)
+          let attempts = 0;
+          const interval = setInterval(async () => {
+            attempts++;
+            const statusOk = await pollSoloCheckoutStatus(sales[0].id, clientRef);
+            if (statusOk || attempts >= 10) {
+              clearInterval(interval);
+            }
+          }, 3000);
+        }
+      } else {
+        openSumUpPayment(draft.total, sumupRef);
+        showToast(`SumUp payment started for ${money.format(roundMoney(draft.total))}. Stock held until confirmed.`);
+      }
     }
   }
 
@@ -9745,6 +9765,261 @@ body.dark-mode .modal::backdrop {
       console.error(error);
       showToast("Could not launch SumUp. Make sure the SumUp app is installed.");
     }
+  }
+
+  // ── SumUp Solo Cloud API reader management functions ──
+
+  function saveSumupWebhookSecret() {
+    const secret = elements.sumupWebhookSecretInput.value.trim();
+    if (!secret) {
+      showToast("Webhook secret cleared.");
+      return;
+    }
+    if (!isBackdoor()) {
+      showToast("Only the backdoor account can change this secret.");
+      return;
+    }
+    store.apiConfig.sumupWebhookSecret = secret;
+    scheduleSave();
+    logUserEvent("Updated SumUp webhook secret", "Webhook secret saved.");
+    showToast("Webhook secret saved.");
+  }
+
+  async function pairSumupReader() {
+    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
+    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
+    const pairingCode = elements.sumupPairingCodeInput.value.trim();
+    const readerName = elements.sumupReaderNameInput.value.trim();
+    const errorEl = elements.sumupReaderError;
+    
+    if (!apiKey || !merchantCode || !pairingCode) {
+      showToast("API key, merchant code and pairing code are required.");
+      return;
+    }
+    
+    errorEl.textContent = "Pairing reader...";
+    errorEl.classList.remove("is-hidden", "success", "warning");
+    errorEl.classList.add("info");
+    
+    try {
+      const resp = await fetch(`${API_URL}/sumup/readers/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: apiKey,
+          merchant_code: merchantCode,
+          pairing_code: pairingCode,
+          name: readerName || "",
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Pairing failed (HTTP ${resp.status}).`);
+      }
+      const data = await resp.json();
+      showToast("Reader paired successfully!");
+      if (typeof refreshSumupReaders === "function") refreshSumupReaders();
+      if (typeof refreshSumupReaderStatus === "function") refreshSumupReaderStatus();
+    } catch (error) {
+      console.error("Pair reader error:", error);
+      errorEl.textContent = error.message || "Pairing failed.";
+      errorEl.classList.add("warning");
+    }
+  }
+
+  async function refreshSumupReaders() {
+    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
+    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
+    if (!apiKey || !merchantCode) {
+      showToast("Configure API key and merchant code first.");
+      return;
+    }
+    try {
+      const resp = await fetch(`${API_URL}/sumup/readers/list`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey, merchant_code: merchantCode }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to fetch readers (HTTP ${resp.status}).`);
+      }
+      const data = await resp.json();
+      if (Array.isArray(data.items)) {
+        elements.sumupReaderSelect.innerHTML = '<option value="">No reader configured</option>' +
+          data.items.map(r => `<option value="${r.id}">${escapeHtml(r.name || r.id)}</option>`).join('');
+        elements.sumupReaderSelect.disabled = false;
+      }
+      renderSumupApiConfig();
+    } catch (error) {
+      console.error("Refresh readers error:", error);
+      showToast(error.message || "Failed to refresh readers.");
+    }
+  }
+
+  async function removeSumupReader() {
+    const readerId = elements.sumupReaderSelect.value;
+    if (!readerId) {
+      showToast("Select a reader to unpair.");
+      return;
+    }
+    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
+    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
+    if (!apiKey || !merchantCode) {
+      showToast("Configure API key and merchant code first.");
+      return;
+    }
+    const confirmed = window.confirm("Unpair this reader? Stock will be deducted (expected adjustment will be updated).");
+    if (!confirmed) return;
+    try {
+      const resp = await fetch(`${API_URL}/sumup/readers/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey, merchant_code: merchantCode, reader_id: readerId }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to unpair reader (HTTP ${resp.status}).`);
+      }
+      showToast("Reader unpaired successfully.");
+      elements.sumupReaderSelect.innerHTML = '<option value="">No reader configured</option>';
+      elements.sumupReaderSelect.disabled = true;
+      delete store.apiConfig.sumupReaderId;
+      delete store.apiConfig.sumupReaderName;
+      scheduleSave();
+      if (typeof refreshSumupReaderStatus === "function") refreshSumupReaderStatus();
+    } catch (error) {
+      console.error("Remove reader error:", error);
+      showToast(error.message || "Failed to unpair reader.");
+    }
+  }
+
+  async function refreshSumupReaderStatus() {
+    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
+    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
+    const readerId = store.apiConfig?.sumupReaderId || "";
+    if (!apiKey || !merchantCode || !readerId) {
+      elements.sumupReaderStatusText.textContent = "Not configured";
+      elements.sumupReaderError.textContent = "";
+      elements.sumupReaderError.classList.add("is-hidden");
+      return;
+    }
+    try {
+      const resp = await fetch(`${API_URL}/sumup/readers/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey, merchant_code: merchantCode, reader_id: readerId }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to fetch reader status (HTTP ${resp.status}).`);
+      }
+      const data = await resp.json();
+      elements.sumupReaderStatusText.textContent = data.online ? "Online" : "Offline";
+      elements.sumupReaderStatusText.style.color = data.online ? "#0a0" : "#d00";
+    } catch (error) {
+      console.error("Refresh reader status error:", error);
+      elements.sumupReaderStatusText.textContent = "Error";
+      elements.sumupReaderStatusText.style.color = "#d00";
+      elements.sumupReaderError.textContent = error.message || "Failed to check status.";
+      elements.sumupReaderError.classList.remove("is-hidden");
+    }
+  }
+
+  async function startSoloCheckout(amount, foreignTxId) {
+    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
+    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
+    const readerId = (store.apiConfig?.sumupReaderId || "").trim();
+    const affiliateKey = (store.apiConfig?.affiliateKey || "").trim();
+    const appId = (store.apiConfig?.appId || "").trim();
+    if (!apiKey || !merchantCode || !readerId) {
+      showToast("Configure SumUp API key, merchant code and reader first.");
+      return null;
+    }
+    try {
+      const resp = await fetch(`${API_URL}/sumup/readers/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: apiKey,
+          merchant_code: merchantCode,
+          reader_id: readerId,
+          amount: Number(amount),
+          currency: "GBP",
+          affiliate_key: affiliateKey || "",
+          app_id: appId || "",
+          foreign_transaction_id: foreignTxId || "",
+          description: `Porty Tuck Sale`,
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        if (resp.status === 409) {
+          const data = await resp.json();
+          showToast(`Payment already processed: ${data.message || "This payment was already completed."}`);
+          return data;
+        }
+        throw new Error(err.error || `Failed to start checkout (HTTP ${resp.status}).`);
+      }
+      const data = await resp.json();
+      showToast(`Sent to Solo reader for ${money.format(Number(amount))} (client_ref: ${data.client_ref}).`);
+      return data;
+    } catch (error) {
+      console.error("Solo checkout error:", error);
+      showToast(error.message || "Failed to send payment to reader.");
+      return null;
+    }
+  }
+
+  async function pollSoloCheckoutStatus(saleId, clientRef) {
+    const errorEl = document.getElementById("sumupReaderError");
+    if (!errorEl) return;
+    errorEl.textContent = "Polling solo checkout...";
+    errorEl.classList.remove("is-hidden", "success", "warning");
+    errorEl.classList.add("info");
+    try {
+      const resp = await fetch(`${API_URL}/sumup/readers/checkout/status?client_ref=${encodeURIComponent(clientRef)}`);
+      if (!resp.ok) {
+        if (resp.status === 404) {
+          errorEl.textContent = `No checkout found for ${clientRef}.`;
+          errorEl.classList.add("warning");
+          return false;
+        }
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to fetch status (HTTP ${resp.status}).`);
+      }
+      const data = await resp.json();
+      if (data.status === "success" || data.status === "processed") {
+        await confirmSumupSale(saleId);
+        await updateExpectedSumupAdjustment(data.amount_minor / 100);
+        showToast(`Payment confirmed from Solo reader! Stock deducted. Profit: ${money.format(getSaleProfit(saleId))}.`);
+        return true;
+      }
+      if (data.status === "declined" || data.status === "failed") {
+        errorEl.textContent = `Payment ${data.status}. Use retry button to attempt again.`;
+        errorEl.classList.add("warning");
+        return false;
+      }
+      errorEl.textContent = `Payment status: ${data.status}. Waiting for completion...`;
+      errorEl.classList.add("info");
+      return false;
+    } catch (error) {
+      console.error("Poll solo checkout status error:", error);
+      return false;
+    }
+  }
+
+  async function updateExpectedSumupAdjustment(amount) {
+    store.money = store.money || { cash: { actual: 0, expectedAdjustment: 0 }, sumup: { actual: 0, expectedAdjustment: 0 } };
+    store.money.sumup.expectedAdjustment = roundMoney((store.money.sumup.expectedAdjustment || 0) + amount);
+    store.money.sumup.lastUpdatedAt = new Date().toISOString();
+    scheduleSave();
+    renderMoneyTab();
+  }
+
+  function getSaleProfit(saleId) {
+    const sale = store.sales.find(s => s.id === saleId);
+    return sale ? sale.profit : 0;
   }
 
   function showReceiptDialog(draft) {
