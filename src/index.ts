@@ -2130,8 +2130,10 @@ export default {
       const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
       const normalized = normalizeStore(store);
       const secret = String(normalized.apiConfig?.sumupWebhookSecret || "").trim();
-      if (secret) {
-        const valid = await sumupVerifyWebhookSignature(rawBody, secret, request.headers.get("x-sumup-signature"));
+      // Cloud API webhooks are not signed per SumUp docs. Only verify if a signature header is present.
+      const sigHeader = request.headers.get("x-sumup-signature");
+      if (secret && sigHeader) {
+        const valid = await sumupVerifyWebhookSignature(rawBody, secret, sigHeader);
         if (!valid) {
           return jsonResponse({ error: "Invalid webhook signature." }, 401);
         }
@@ -2145,25 +2147,24 @@ export default {
       
       // ── Process Solo Cloud API transaction updates ──
       if (body.event_type === "solo.transaction.updated" || body.type === "solo.transaction.updated") {
-        const tx = payload.transaction || payload;
-        const clientRef = String(tx.client_transaction_id || tx.foreign_transaction_id || "");
+        const clientRef = String(payload.client_transaction_id || "");
         if (clientRef) {
           const checkout = await getSumupCheckout(env.DB, clientRef);
           if (checkout) {
-            const sumupStatus = String(tx.status || "").toUpperCase();
+            const sumupStatus = String(payload.status || "").toLowerCase();
             let ourStatus = checkout.status;
-            if (sumupStatus === "SUCCESSFUL" || sumupStatus === "PAID_OUT" || sumupStatus === "SETTLED" || sumupStatus === "RECONCILED") {
+            if (sumupStatus === "successful") {
               ourStatus = "success";
               await markSumupCheckoutProcessed(env.DB, checkout.id);
-              // Update expectedAdjustment
-              const amount = Number(tx.amount || 0) / 100; // Convert from cents
+              // Update expectedAdjustment using the checkout amount (in minor units)
+              const amount = checkout.amount_minor / 100; // Convert from cents
               const existing = (await loadStoreFromDb(env.DB)) ?? blankStore();
               const normalized = normalizeStore(existing);
               normalized.money = normalized.money || { cash: { actual: 0, expectedAdjustment: 0 }, sumup: { actual: 0, expectedAdjustment: 0 } };
               normalized.money.sumup.expectedAdjustment = Math.round((normalized.money.sumup.expectedAdjustment || 0) + amount * 100) / 100;
               normalized.money.sumup.lastUpdatedAt = new Date().toISOString();
               await saveStoreToDb(env.DB, normalized);
-            } else if (sumupStatus === "DECLINED" || sumupStatus === "FAILED") {
+            } else if (sumupStatus === "failed") {
               ourStatus = "declined";
               await updateSumupCheckoutStatus(env.DB, checkout.id, "declined");
             }
