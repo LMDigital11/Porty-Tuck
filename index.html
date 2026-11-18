@@ -4166,6 +4166,12 @@ body.dark-mode .modal::backdrop {
     sessionStorage.removeItem("authToken");
   }
 
+  function getAuthHeaders(extra = {}) {
+    const headers = { ...extra };
+    if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+    return headers;
+  }
+
   async function verifySecurityCode(code) {
     if (!code) return false;
     try {
@@ -6933,7 +6939,7 @@ body.dark-mode .modal::backdrop {
     if (errEl) errEl.classList.add("is-hidden");
 
     try {
-      const response = await fetch("/api/sumup/balance");
+      const response = await fetch("/api/sumup/balance", { headers: getAuthHeaders() });
       const data = await response.json();
 
       if (!response.ok || data.error) {
@@ -7686,7 +7692,7 @@ body.dark-mode .modal::backdrop {
       if (oldestTime) {
         params.set("oldest_time", oldestTime);
       }
-      const response = await fetch(`${API_URL}/sumup/transactions?${params.toString()}`);
+      const response = await fetch(`${API_URL}/sumup/transactions?${params.toString()}`, { headers: getAuthHeaders() });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
         showToast(err.error || `API returned ${response.status}`);
@@ -7771,7 +7777,7 @@ body.dark-mode .modal::backdrop {
     try {
       const response = await fetch(`${API_URL}/sumup/transactions/test`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ api_key: apiKey, merchant_code: merchantCode }),
       });
       if (response.status === 400) {
@@ -7827,7 +7833,7 @@ body.dark-mode .modal::backdrop {
     elements.sumupApiStatus.classList.add("info");
     elements.testSumupApiButton.disabled = true;
 
-    const result = await testSumupApi(url, apiKey);
+    const result = await testSumupApi((store.apiConfig?.sumupApiUrl || "").trim(), apiKey);
     showApiTestResult(elements.sumupApiStatus, result);
     showToast(result.ok ? "SumUp API connected." : "SumUp API test failed.");
     elements.testSumupApiButton.disabled = false;
@@ -9804,7 +9810,7 @@ body.dark-mode .modal::backdrop {
     try {
       const resp = await fetch(`${API_URL}/sumup/readers/create`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           api_key: apiKey,
           merchant_code: merchantCode,
@@ -9837,7 +9843,7 @@ body.dark-mode .modal::backdrop {
     try {
       const resp = await fetch(`${API_URL}/sumup/readers/list`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ api_key: apiKey, merchant_code: merchantCode }),
       });
       if (!resp.ok) {
@@ -9874,7 +9880,7 @@ body.dark-mode .modal::backdrop {
     try {
       const resp = await fetch(`${API_URL}/sumup/readers/delete`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ api_key: apiKey, merchant_code: merchantCode, reader_id: readerId }),
       });
       if (!resp.ok) {
@@ -9907,7 +9913,7 @@ body.dark-mode .modal::backdrop {
     try {
       const resp = await fetch(`${API_URL}/sumup/readers/status`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ api_key: apiKey, merchant_code: merchantCode, reader_id: readerId }),
       });
       if (!resp.ok) {
@@ -9939,7 +9945,7 @@ body.dark-mode .modal::backdrop {
     try {
       const resp = await fetch(`${API_URL}/sumup/readers/checkout`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           api_key: apiKey,
           merchant_code: merchantCode,
@@ -9978,7 +9984,7 @@ body.dark-mode .modal::backdrop {
     errorEl.classList.remove("is-hidden", "success", "warning");
     errorEl.classList.add("info");
     try {
-      const resp = await fetch(`${API_URL}/sumup/readers/checkout/status?client_ref=${encodeURIComponent(clientRef)}`);
+      const resp = await fetch(`${API_URL}/sumup/readers/checkout/status?client_ref=${encodeURIComponent(clientRef)}`, { headers: getAuthHeaders() });
       if (!resp.ok) {
         if (resp.status === 404) {
           errorEl.textContent = `No checkout found for ${clientRef}.`;
