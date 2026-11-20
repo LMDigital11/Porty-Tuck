@@ -3389,18 +3389,15 @@ body.dark-mode .modal::backdrop {
 
           <div class="form-grid">
             <label>
-              Pairing code
-              <input id="sumupPairingCodeInput" type="text" autocomplete="off" placeholder="Shown on the Solo under Connections &gt; API" maxlength="12">
+              Reader name (optional)
+              <input id="sumupReaderNameInput" type="text" autocomplete="off" placeholder="e.g. Solo counter">
             </label>
-            <label>
-              Reader name
-              <input id="sumupReaderNameInput" type="text" autocomplete="off" placeholder="e.g. Solo counter (optional)">
-            </label>
+            <p style="font-size:12px;margin:8px 0;opacity:0.75;">Pair your Solo reader in the SumUp Dashboard first (Developers → Readers → Add reader), then click Refresh readers below.</p>
           </div>
 
           <div class="actions-row" style="margin-top:12px;">
-            <button type="button" id="sumupPairReaderButton" class="primary-button">Pair reader</button>
-            <button type="button" id="sumupRefreshReadersButton" class="secondary-button">Refresh readers</button>
+            <button type="button" id="sumupRefreshReadersButton" class="primary-button">Refresh readers</button>
+            
             <button type="button" id="sumupRemoveReaderButton" class="danger-button">Unpair selected</button>
           </div>
 
@@ -4902,9 +4899,7 @@ body.dark-mode .modal::backdrop {
         if (typeof refreshSumupReaderStatus === "function") refreshSumupReaderStatus();
       }
     });
-    if (typeof pairSumupReader === "function") {
-      elements.sumupPairReaderButton.addEventListener("click", pairSumupReader);
-    }
+    // Pairing code flow removed — readers are now paired via SumUp Dashboard
     if (typeof refreshSumupReaders === "function") {
       elements.sumupRefreshReadersButton.addEventListener("click", refreshSumupReaders);
     }
