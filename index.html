@@ -3143,21 +3143,6 @@ body.dark-mode .modal::backdrop {
             <span>SumUp difference</span>
             <strong id="moneySumupDifference">GBP 0.00</strong>
           </div>
-          <div class="panel-block money-panel" style="margin-top:14px;">
-            <div class="money-section-head" style="margin-bottom:10px;">
-              <h4 class="money-section-title">SumUp API</h4>
-              <p class="money-section-desc">Configure and test the SumUp reporting connection used to auto-fetch totals.</p>
-            </div>
-            <div class="form-readout">
-              <span>API key / merchant code</span>
-              <strong id="sumupApiCurrentUrl">Not configured</strong>
-            </div>
-            <div id="sumupApiStatus" class="alert-card is-hidden" aria-live="polite" style="margin-top:10px;"></div>
-            <div class="modal-actions" style="margin-top:12px;justify-content:flex-start;">
-              <button type="button" id="configureSumupApiButton" class="primary-button">Configure</button>
-              <button type="button" id="testSumupApiButton" class="secondary-button">Test connection</button>
-            </div>
-          </div>
         </section>
 
         <section class="panel-block money-panel" id="moneySectionPending">
@@ -3315,114 +3300,8 @@ body.dark-mode .modal::backdrop {
           </article>
         </div>
 
-        <section class="panel-block backdoor-only">
-          <div class="section-heading tight">
-            <div>
-              <h4>SumUp Balance</h4>
-              <p>Live balance calculated from SumUp transactions and payouts.</p>
-            </div>
-            <button type="button" id="sumupBalanceRefreshButton" class="secondary-button">Refresh balance</button>
-          </div>
-          <div id="sumupBalanceError" class="alert-card is-hidden" aria-live="polite"></div>
-          <div id="sumupBalanceLastRefreshed" class="form-readout" style="margin-bottom:12px;">
-            <span>Last refreshed</span>
-            <strong id="sumupBalanceTimestamp">Never</strong>
-          </div>
-          <div class="admin-grid">
-            <article class="admin-card">
-              <span>Gross sales</span>
-              <strong id="sumupBalanceGrossSales">GBP 0.00</strong>
-            </article>
-            <article class="admin-card">
-              <span>Refunds</span>
-              <strong id="sumupBalanceRefunds">GBP 0.00</strong>
-            </article>
-            <article class="admin-card">
-              <span>Chargebacks</span>
-              <strong id="sumupBalanceChargebacks">GBP 0.00</strong>
-            </article>
-            <article class="admin-card">
-              <span>SumUp fees</span>
-              <strong id="sumupBalanceFees">GBP 0.00</strong>
-            </article>
-            <article class="admin-card">
-              <span>Payouts to bank</span>
-              <strong id="sumupBalancePayouts">GBP 0.00</strong>
-            </article>
-            <article class="admin-card">
-              <span>Pending balance</span>
-              <strong id="sumupBalancePending">GBP 0.00</strong>
-            </article>
-          </div>
-          <div class="form-readout" style="margin-top:8px;">
-            <span>Transactions scanned</span>
-            <strong id="sumupBalanceTxCount">0</strong>
-          </div>
-        </section>
 
-        <section class="panel-block admin-only">
-          <div class="section-heading tight">
-            <div>
-              <h4>Solo reader (SumUp Cloud API)</h4>
-              <p>Take SumUp payments on a connected Solo card reader instead of handing off to the SumUp app.</p>
-            </div>
-          </div>
-
-          <div class="form-readout" style="margin-bottom:12px;">
-            <span>Payment method</span>
-            <strong id="sumupPaymentMethodText">SumUp app (handoff)</strong>
-          </div>
-
-          <div class="form-grid" style="margin-bottom:12px;">
-            <label>
-              Payment method
-              <select id="sumupPaymentMethodSelect">
-                <option value="app">SumUp app (hand off to phone)</option>
-                <option value="cloud">Solo reader (Cloud API)</option>
-              </select>
-            </label>
-            <label>
-              Reader
-              <select id="sumupReaderSelect"><option value="">No reader configured</option></select>
-            </label>
-          </div>
-
-          <div class="form-grid">
-            <label>
-              Reader name (optional)
-              <input id="sumupReaderNameInput" type="text" autocomplete="off" placeholder="e.g. Solo counter">
-            </label>
-            <p style="font-size:12px;margin:8px 0;opacity:0.75;">Pair your Solo reader in the SumUp Dashboard first (Developers → Readers → Add reader), then click Refresh readers below.</p>
-          </div>
-
-          <div class="actions-row" style="margin-top:12px;">
-            <button type="button" id="sumupRefreshReadersButton" class="primary-button">Refresh readers</button>
-            
-            <button type="button" id="sumupRemoveReaderButton" class="danger-button">Unpair selected</button>
-          </div>
-
-          <div class="form-readout" style="margin-top:12px;">
-            <span>Reader status</span>
-            <strong id="sumupReaderStatusText">Not configured</strong>
-          </div>
-
-          <div id="sumupReaderError" class="alert-card is-hidden" aria-live="polite"></div>
-
-          <details style="margin-top:12px;">
-            <summary>Webhook secret (optional, recommended)</summary>
-            <p style="font-size:12px;margin:8px 0;">Point SumUp Webhooks (Cloud API) at <code>YOUR_WORKER_URL/api/sumup/webhook</code> and paste the shared secret here so payment notifications are verified before the app acts on them. Leave blank to accept unverified events.</p>
-            <div class="actions-row">
-              <input id="sumupWebhookSecretInput" type="password" placeholder="Webhook shared secret" autocomplete="off" style="flex:1;min-width:160px;">
-              <button type="button" id="sumupSaveWebhookSecretButton" class="secondary-button">Save secret</button>
-            </div>
-          </details>
-
-          <p style="font-size:12px;opacity:.75;margin-top:12px;">
-            Requires the Solo to be online (Cloud API enabled on your SumUp account) and an affiliate key + app id set under Money &gt; SumUp API. The worker proxies all Cloud API calls server-side so your API key stays out of the browser and logs.
-          </p>
-        </section>
-
-        <div class="split-layout">
+                <div class="split-layout">
           <section class="panel-block">
             <h4>Create Account</h4>
             <form id="createUserForm" class="form-grid">
@@ -4096,39 +3975,6 @@ body.dark-mode .modal::backdrop {
       <div class="modal-actions">
         <button type="button" class="secondary-button" id="cancelCashReconcileButton">Cancel</button>
         <button type="submit" class="primary-button">Confirm reconciliation</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="sumupApiDialog" class="modal">
-    <form id="sumupApiForm" method="dialog">
-      <h3>SumUp Configuration</h3>
-      <p>The API settings are optional and only used for the reporting/balance features. Payments via the SumUp app need only the Affiliate Key (and App ID on Android).</p>
-      <label>
-        API URL
-        <input id="sumupApiUrlInput" type="url" placeholder="https://api.sumup.com/v0.1/..." autocomplete="off">
-      </label>
-      <label>
-        API Key (optional)
-        <input id="sumupApiKeyInput" type="password" placeholder="sk_live_..." autocomplete="off">
-      </label>
-      <label>
-        Merchant Code (optional)
-        <input id="sumupMerchantCodeInput" type="text" placeholder="MH4H92C7" autocomplete="off">
-      </label>
-      <label>
-        Affiliate Key
-        <input id="sumupAffiliateKeyInput" type="text" placeholder="Your affiliate key" autocomplete="off">
-      </label>
-      <label>
-        App ID (Android only, optional)
-        <input id="sumupAppIdInput" type="text" placeholder="com.example.myapp" autocomplete="off">
-      </label>
-      <div id="sumupApiTestResult" class="alert-card is-hidden" aria-live="polite"></div>
-      <div class="modal-actions">
-        <button type="button" class="secondary-button" id="cancelSumupApiButton">Cancel</button>
-        <button type="button" class="secondary-button" id="testSumupApiDialogButton">Test</button>
-        <button type="submit" class="primary-button">Save</button>
       </div>
     </form>
   </dialog>
@@ -4881,34 +4727,7 @@ body.dark-mode .modal::backdrop {
       }
     });
 
-    elements.configureSumupApiButton.addEventListener("click", openSumupApiConfig);
-    elements.testSumupApiButton.addEventListener("click", () => testSumupApiFromPanel());
-    elements.cancelSumupApiButton.addEventListener("click", () => closeModal(elements.sumupApiDialog));
-    elements.testSumupApiDialogButton.addEventListener("click", () => testSumupApiFromDialog());
-    elements.sumupApiForm.addEventListener("submit", handleSaveSumupApiUrl);
-    elements.pollSumupButton.addEventListener("click", pollSumupTransactions);
-    document.getElementById("sumupBalanceRefreshButton")?.addEventListener("click", () => fetchSumUpBalance({ force: true, notify: true }));
-    elements.sumupPaymentMethodSelect.addEventListener("change", handleSumupPaymentMethodChange);
-    elements.sumupReaderSelect.addEventListener("change", () => {
-      const id = elements.sumupReaderSelect.value;
-      if (id) {
-        store.apiConfig.sumupReaderId = id;
-        const option = elements.sumupReaderSelect.selectedOptions[0];
-        store.apiConfig.sumupReaderName = option ? option.textContent.trim() : "";
-        scheduleSave();
-        if (typeof refreshSumupReaderStatus === "function") refreshSumupReaderStatus();
-      }
-    });
-    // Pairing code flow removed — readers are now paired via SumUp Dashboard
-    if (typeof refreshSumupReaders === "function") {
-      elements.sumupRefreshReadersButton.addEventListener("click", refreshSumupReaders);
-    }
-    if (typeof removeSumupReader === "function") {
-      elements.sumupRemoveReaderButton.addEventListener("click", removeSumupReader);
-    }
-    if (typeof saveSumupWebhookSecret === "function") {
-      elements.sumupSaveWebhookSecretButton.addEventListener("click", saveSumupWebhookSecret);
-    }
+    // SumUp API integration removed — only manual Pay with SumUp button remains
     elements.pendingSumupBody.addEventListener("click", handlePendingSumupAction);
     elements.changeSecurityCodeButton.addEventListener("click", openChangeSecurityCode);
     elements.changeSecurityCodeForm.addEventListener("submit", handleChangeSecurityCodeSubmit);
@@ -5179,11 +4998,6 @@ body.dark-mode .modal::backdrop {
         }
       },
       apiConfig: {
-        sumupApiUrl: "",
-        sumupApiKey: "",
-        sumupMerchantCode: "",
-        affiliateKey: "",
-        appId: "",
         cashRemovalCode: "CASHOUT"
       },
       meta: {
@@ -5265,11 +5079,6 @@ body.dark-mode .modal::backdrop {
       }
     };
     next.apiConfig = {
-      sumupApiUrl: String(value.apiConfig?.sumupApiUrl || ""),
-      sumupApiKey: String(value.apiConfig?.sumupApiKey || ""),
-      sumupMerchantCode: String(value.apiConfig?.sumupMerchantCode || ""),
-      affiliateKey: String(value.apiConfig?.affiliateKey || ""),
-      appId: String(value.apiConfig?.appId || ""),
       cashRemovalCode: String(value.apiConfig?.cashRemovalCode || "CASHOUT")
     };
     next.meta = {
@@ -9672,31 +9481,12 @@ body.dark-mode .modal::backdrop {
         renderSellGrid();
       }
       renderMoneyTab();
-      logUserEvent("Recorded sale", `${sales.length} item(s), ${money.format(roundMoney(draft.total))} SumUp Cloud`);
+      logUserEvent("Recorded sale", `${sales.length} item(s), ${money.format(roundMoney(draft.total))} SumUp`);
       if (isFulfil) {
         finalizeFulfilledOrder(draft.fulfilOrderId);
       }
-      const hasReader = (store.apiConfig?.sumupReaderId || "").trim();
-      if (hasReader && paymentMethod === "sumup") {
-        // Solo reader via Cloud API
-        const clientRef = crypto && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : "";
-        const result = await startSoloCheckout(draft.total, clientRef);
-        if (result) {
-          showToast(`Solo checkout started (${result.checkout_status || "pending"}). Polling for confirmation...`);
-          // Poll every 3 seconds, up to 10 times (30 seconds)
-          let attempts = 0;
-          const interval = setInterval(async () => {
-            attempts++;
-            const statusOk = await pollSoloCheckoutStatus(sales[0].id, clientRef);
-            if (statusOk || attempts >= 10) {
-              clearInterval(interval);
-            }
-          }, 3000);
-        }
-      } else {
-        openSumUpPayment(draft.total, sumupRef);
-        showToast(`SumUp payment started for ${money.format(roundMoney(draft.total))}. Stock held until confirmed.`);
-      }
+      openSumUpPayment(draft.total, sumupRef);
+      showToast(`SumUp payment started for ${money.format(roundMoney(draft.total))}. Stock held until confirmed.`);
     }
   }
 
