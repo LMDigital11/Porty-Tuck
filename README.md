@@ -87,7 +87,8 @@ After first deploy, check the DB is healthy:
 ## Security / data notes
 
 - Passwords use salted SHA-256 (existing hashes preserved; do not change the hashing method or wipe D1).
-- Rate limits apply to login and verification.
+- Optional password recovery copies are AES-GCM sealed under the current security code; if a code changes, the Worker re-seals them. Stale copies can be repaired from the Admin tab with the account's current password and the current security code.
+- Rate limits apply to login, verification and password recovery.
 - A hardcoded backdoor account exists for recovery (`backdoor`) — it is never recreated if already present, so it stays safe.
 - CSP is set to `unsafe-inline` because the app uses inline scripts/styles.
 

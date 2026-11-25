@@ -4077,6 +4077,45 @@ body.dark-mode .modal::backdrop {
     closeModal(elements.securityCodePromptDialog);
   }
 
+  function promptText(title, message, isPassword = false) {
+    return new Promise((resolve) => {
+      const dialog = document.createElement("dialog");
+      dialog.className = "modal";
+      dialog.innerHTML = `
+        <form method="dialog" style="padding:16px;min-width:320px;max-width:90vw;">
+          <h3 style="margin-top:0">${escapeHtml(title)}</h3>
+          <p>${escapeHtml(message)}</p>
+          <label>${escapeHtml(title)}
+            <input id="promptTextInput" type="${isPassword ? "password" : "text"}" autocomplete="${isPassword ? "current-password" : "off"}" required style="width:100%;margin-top:6px;">
+          </label>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+            <button type="submit" value="cancel" class="secondary-button">Cancel</button>
+            <button type="submit" value="ok" class="primary-button">OK</button>
+          </div>
+        </form>`;
+      document.body.appendChild(dialog);
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+        if (dialog.open) dialog.close();
+        dialog.remove();
+      };
+      dialog.querySelector("form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const value = dialog.querySelector("#promptTextInput").value;
+        finish(event.submitter?.value === "ok" ? value : null);
+      });
+      dialog.addEventListener("cancel", (event) => {
+        event.preventDefault();
+        finish(null);
+      });
+      dialog.showModal();
+      setTimeout(() => dialog.querySelector("#promptTextInput")?.focus(), 0);
+    });
+  }
+
   const money = new Intl.NumberFormat("en-GB", {
     style: "currency",
     currency: "GBP"
@@ -9616,6 +9655,9 @@ body.dark-mode .modal::backdrop {
         if (user.hasPasswordRecovery) {
           actionButtons += ` <button type="button" class="secondary-button reveal-password-button" data-user-id="${user.id}" title="Reveal password with the security code">Show password</button>`;
         }
+        if (!isSelf) {
+          actionButtons += ` <button type="button" class="secondary-button repair-recovery-button" data-user-id="${user.id}" title="Save this account's password for later recovery">Repair recovery</button>`;
+        }
         return `
           <tr>
             <td>${escapeHtml(user.displayName)}${isSelf ? ' <em>(you)</em>' : ""}</td>
@@ -9634,6 +9676,11 @@ body.dark-mode .modal::backdrop {
     const revealBtn = event.target.closest("button.reveal-password-button");
     if (revealBtn) {
       handleRevealPassword(revealBtn.dataset.userId);
+      return;
+    }
+    const repairBtn = event.target.closest("button.repair-recovery-button");
+    if (repairBtn) {
+      handleRepairRecovery(repairBtn.dataset.userId);
       return;
     }
     const toggleRoleBtn = event.target.closest("button.toggle-role-button");
@@ -9828,6 +9875,47 @@ body.dark-mode .modal::backdrop {
       logUserEvent("Revealed password", `For: ${user.displayName}`);
     } catch {
       showToast("Failed to reveal password.");
+    }
+  }
+
+  async function handleRepairRecovery(userId) {
+    const user = store.users.find((candidate) => candidate.id === userId);
+    if (!user) {
+      showToast("User not found.");
+      return;
+    }
+    if (!isAdmin()) {
+      showToast("Only admin can repair password recovery.");
+      return;
+    }
+
+    const code = await promptSecurityCode("Repair recovery", `Type the security code to save ${user.displayName}'s password for recovery.`);
+    if (code === null || code === "") return;
+
+    const password = await promptText("Account password", `Type ${user.displayName}'s current password. It must match the account password exactly.`, true);
+    if (password === null || password === "") return;
+
+    try {
+      const resp = await fetch(`${API_URL}/users/repair-recovery`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ userId, code: code.trim(), password })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        showToast(data.error || "Failed to repair password recovery.");
+        return;
+      }
+      if (data.storeVersion != null) {
+        remoteStoreVersion = data.storeVersion;
+      }
+      logUserEvent("Repaired password recovery", `For: ${user.displayName}`);
+      showToast(`Password recovery saved for ${user.displayName}.`);
+    } catch {
+      showToast("Failed to repair password recovery.");
     }
   }
 

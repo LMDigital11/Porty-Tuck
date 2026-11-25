@@ -1267,10 +1267,67 @@ export default {
 
         const password = await openPassword(code, user.pwEnc);
         if (password === null) {
-          return jsonResponse({ error: "Could not decrypt the stored password." }, 500);
+          return jsonResponse(
+            {
+              error:
+                "This saved password is out of date. Change this user's password or use Repair recovery to save it again.",
+            },
+            500
+          );
         }
 
         return jsonResponse({ ok: true, password });
+      } catch {
+        return jsonResponse({ error: "Invalid request body." }, 400);
+      }
+    }
+
+    // ── API: Users — Repair password recovery with the current code ──
+    if (request.method === "POST" && url.pathname === "/api/users/repair-recovery") {
+      const auth = await requireAuth(request, env.DB);
+      if (!auth.ok) return jsonResponse({ error: auth.error }, 401);
+      if (auth.user.role !== "admin") return jsonResponse({ error: "Admin access required." }, 403);
+
+      const ip = `recovery:${request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "unknown"}`;
+      const rateCheck = await checkOwnerRateLimit(env.DB, ip);
+      if (!rateCheck.allowed) {
+        return jsonResponse({ error: `Too many attempts. Try again in ${Math.ceil((rateCheck.retryAfterMs || 0) / 1000)} seconds.` }, 429);
+      }
+
+      try {
+        const body = await request.json<{ userId?: string; password?: string; code?: string }>();
+        const userId = (body.userId || "").trim();
+        const password = body.password || "";
+        const code = (body.code || "").trim();
+        if (!userId || !password || !code) {
+          return jsonResponse({ error: "User ID, password and security code are required." }, 400);
+        }
+
+        const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
+        const normalized = normalizeStore(store);
+        const storedCode = normalized.apiConfig?.cashRemovalCode || "";
+        if (!storedCode) return jsonResponse({ error: "No security code configured." }, 403);
+
+        if (!(await securityCodeMatches(storedCode, code))) {
+          await recordFailedOwnerLogin(env.DB, ip);
+          return jsonResponse({ error: "Invalid security code." }, 403);
+        }
+
+        const user = normalized.users.find((u: any) => u.id === userId);
+        if (!user) return jsonResponse({ error: "User not found." }, 404);
+
+        const passwordHash = await hashPassword(password, String(user.salt || ""));
+        if (passwordHash !== user.passwordHash) {
+          await recordFailedOwnerLogin(env.DB, ip);
+          return jsonResponse({ error: "That password does not match this account." }, 403);
+        }
+
+        user.pwEnc = await sealPassword(code, password);
+        normalized.storeVersion = (normalized.storeVersion || 1) + 1;
+        await saveStoreToDb(env.DB, normalized);
+        await clearRateLimit(env.DB, ip);
+
+        return jsonResponse({ ok: true, storeVersion: normalized.storeVersion });
       } catch {
         return jsonResponse({ error: "Invalid request body." }, 400);
       }
@@ -1296,6 +1353,7 @@ export default {
         const store = (await loadStoreFromDb(env.DB)) ?? blankStore();
         const normalized = normalizeStore(store);
         const storedCode = normalized.apiConfig?.cashRemovalCode || "";
+        let recoveryDropped = 0;
 
         if (storedCode) {
           const currentCode = (body.currentCode || "").trim();
@@ -1318,6 +1376,7 @@ export default {
             const plain = await openPassword(currentCode, u.pwEnc);
             if (plain === null) {
               delete u.pwEnc;
+              recoveryDropped += 1;
               continue;
             }
             u.pwEnc = await sealPassword(newCode, plain);
@@ -1334,6 +1393,7 @@ export default {
           ok: true,
           cashRemovalCode: normalized.apiConfig.cashRemovalCode,
           storeVersion: normalized.storeVersion,
+          recoveryDropped,
         });
       } catch {
         return jsonResponse({ error: "Invalid request body." }, 400);

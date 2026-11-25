@@ -102,6 +102,12 @@ On first load, the system creates two default accounts:
 - Admins can change any user's password via the **Admin** tab
 - Users with "must change password" flag will be prompted on next login
 
+### Password recovery
+- When an account is created or its password is changed, an admin can optionally save a recoverable copy sealed with the current security code
+- Accounts with a recoverable copy show a **Show password** button in the Admin tab
+- If the saved copy was sealed with an old security code, reveal will say it is out of date. Use **Repair recovery**, enter the account's current password and the current security code, then reveal it again
+- If you do not know the current password, reset it with **Change password** and enter the security code when prompted to re-enable recovery
+
 ---
 
 ## Stock Management
@@ -377,6 +383,7 @@ flowchart TD
 ### Security code
 - Used for confirming SumUp sales, undoing sales, etc.
 - Backdoor account can change the code
+- Changing the code re-seals saved password recovery copies automatically; copies that cannot be opened are removed
 
 ### Settings
 - Security code configuration
@@ -486,7 +493,8 @@ flowchart TD
 - Use **Import backup** to restore from a file
 
 ### Security
-- All passwords are hashed (never stored in plain text)
+- Login passwords are hashed and the hashing method has not changed
+- Optional password recovery copies are encrypted with the security code and are not sent to the browser
 - Sessions expire after inactivity
 - Rate limiting on login attempts
 - Security headers (CSP, HSTS, etc.) enabled
