@@ -224,7 +224,7 @@ Use the sort buttons: Stock (default), Name, Price ↑, Price ↓
 - Sale recorded as "pending"
 - Stock held until you confirm payment received
 - Go to **Money → Pending payments** to confirm or cancel
-- Click "Check for payments" to poll SumUp transaction history
+- Check the payment in your SumUp app before confirming
 
 ### Confirming a SumUp sale
 1. Go to **Money** tab → **Pending payments**
@@ -461,8 +461,8 @@ flowchart TD
 - Check if the item has infinite stock enabled
 
 **SumUp payment not confirming**
-- Click "Check for payments" in Money → Pending payments
-- Make sure the SumUp transaction matches the sale amount
+- Open **Money → Pending payments** and confirm the sale manually
+- Make sure the SumUp transaction in your SumUp app matches the sale amount
 
 **Deals not applying**
 - Ensure all deal items are in the basket in the required quantities

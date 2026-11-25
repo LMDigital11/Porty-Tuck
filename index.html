@@ -3042,8 +3042,6 @@ body.dark-mode .modal::backdrop {
             <article class="admin-card">
               <span>Actual SumUp</span>
               <strong id="moneyActualSumup">GBP 0.00</strong>
-              <small id="sumupActualStatus" class="is-hidden" style="display:block;margin-top:4px;opacity:0.75;"></small>
-              <button type="button" id="fetchSumupButton" class="ghost-button money-card-action">Fetch from API</button>
             </article>
           </div>
           <div class="money-overview">
@@ -3151,7 +3149,6 @@ body.dark-mode .modal::backdrop {
               <h4>Pending SumUp payments</h4>
               <p>Sales waiting for SumUp confirmation. Stock is held until the payment clears or the sale is cancelled.</p>
             </div>
-            <button type="button" id="pollSumupButton" class="secondary-button">Check for payments</button>
           </div>
           <div id="pendingSumupList" class="table-wrap">
             <table>
@@ -4173,11 +4170,6 @@ body.dark-mode .modal::backdrop {
         }
       } catch {}
     }, 15000);
-    setInterval(() => {
-      if (isAdmin() && currentUser) {
-        fetchSumUpBalance({ force: true });
-      }
-    }, SUMUP_BALANCE_REFRESH_MS);
   }
 
   async function refreshStore() {
@@ -4354,7 +4346,6 @@ body.dark-mode .modal::backdrop {
     elements.enterSumupButton = document.querySelector("#enterSumupButton");
     elements.removeSumupButton = document.querySelector("#removeSumupButton");
     elements.removeSumupActualButton = document.querySelector("#removeSumupActualButton");
-    elements.fetchSumupButton = document.querySelector("#fetchSumupButton");
     elements.moneyImbalanceBanner = document.querySelector("#moneyImbalanceBanner");
     elements.moneyImbalanceBannerText = document.querySelector("#moneyImbalanceBannerText");
     elements.moneyImbalanceBannerButton = document.querySelector("#moneyImbalanceBannerButton");
@@ -4392,34 +4383,7 @@ body.dark-mode .modal::backdrop {
     elements.moneyInputDisplay = document.querySelector("#moneyInputDisplay");
     elements.moneyInputValue = document.querySelector("#moneyInputValue");
     elements.cancelMoneyInputButton = document.querySelector("#cancelMoneyInputButton");
-    elements.sumupApiDialog = document.querySelector("#sumupApiDialog");
-    elements.sumupApiForm = document.querySelector("#sumupApiForm");
-    elements.sumupApiUrlInput = document.querySelector("#sumupApiUrlInput");
-    elements.sumupApiKeyInput = document.querySelector("#sumupApiKeyInput");
-    elements.sumupMerchantCodeInput = document.querySelector("#sumupMerchantCodeInput");
-    elements.sumupAffiliateKeyInput = document.querySelector("#sumupAffiliateKeyInput");
-    elements.sumupAppIdInput = document.querySelector("#sumupAppIdInput");
-    elements.sumupApiTestResult = document.querySelector("#sumupApiTestResult");
-    elements.cancelSumupApiButton = document.querySelector("#cancelSumupApiButton");
-    elements.testSumupApiDialogButton = document.querySelector("#testSumupApiDialogButton");
-    elements.configureSumupApiButton = document.querySelector("#configureSumupApiButton");
-    elements.testSumupApiButton = document.querySelector("#testSumupApiButton");
-    elements.sumupApiCurrentUrl = document.querySelector("#sumupApiCurrentUrl");
-    elements.sumupApiStatus = document.querySelector("#sumupApiStatus");
-    elements.sumupPaymentMethodSelect = document.querySelector("#sumupPaymentMethodSelect");
-    elements.sumupPaymentMethodText = document.querySelector("#sumupPaymentMethodText");
-    elements.sumupReaderSelect = document.querySelector("#sumupReaderSelect");
-    elements.sumupPairingCodeInput = document.querySelector("#sumupPairingCodeInput");
-    elements.sumupReaderNameInput = document.querySelector("#sumupReaderNameInput");
-    elements.sumupPairReaderButton = document.querySelector("#sumupPairReaderButton");
-    elements.sumupRefreshReadersButton = document.querySelector("#sumupRefreshReadersButton");
-    elements.sumupRemoveReaderButton = document.querySelector("#sumupRemoveReaderButton");
-    elements.sumupReaderStatusText = document.querySelector("#sumupReaderStatusText");
-    elements.sumupReaderError = document.querySelector("#sumupReaderError");
-    elements.sumupWebhookSecretInput = document.querySelector("#sumupWebhookSecretInput");
-    elements.sumupSaveWebhookSecretButton = document.querySelector("#sumupSaveWebhookSecretButton");
     elements.pendingSumupBody = document.querySelector("#pendingSumupBody");
-    elements.pollSumupButton = document.querySelector("#pollSumupButton");
     elements.currentCashCodeDisplay = document.querySelector("#currentCashCodeDisplay");
     elements.changeSecurityCodeButton = document.querySelector("#changeSecurityCodeButton");
     elements.securityCodePromptDialog = document.querySelector("#securityCodePromptDialog");
@@ -4545,17 +4509,6 @@ body.dark-mode .modal::backdrop {
     elements.lowStockBanner = document.querySelector("#lowStockBanner");
   }
 
-  function handleSumupPaymentMethodChange() {
-    const value = elements.sumupPaymentMethodSelect.value;
-    if (!value) return;
-    store.apiConfig.sumupPaymentMethod = value;
-    const option = elements.sumupPaymentMethodSelect.selectedOptions[0];
-    if (option && elements.sumupPaymentMethodText) {
-      elements.sumupPaymentMethodText.textContent = option.textContent.trim();
-    }
-    scheduleSave();
-  }
-
   function bindEvents() {
     elements.loginForm.addEventListener("submit", handleLogin);
     elements.logoutButton.addEventListener("click", async () => {
@@ -4659,7 +4612,6 @@ body.dark-mode .modal::backdrop {
     elements.enterSumupButton.addEventListener("click", () => enterSumUpAmount());
     elements.removeSumupButton.addEventListener("click", () => removeSumUpAmount());
     elements.removeSumupActualButton.addEventListener("click", () => removeSumUpActualAmount());
-    elements.fetchSumupButton.addEventListener("click", handleFetchSumUpClick);
     elements.reconcileCashButton.addEventListener("click", openCashReconcileDialog);
     elements.cancelCashReconcileButton.addEventListener("click", () => closeModal(elements.cashReconcileDialog));
     elements.cashReconcileForm.addEventListener("submit", handleCashReconcileSubmit);
@@ -6292,7 +6244,6 @@ body.dark-mode .modal::backdrop {
 
     renderMoneyImbalanceBanner({ cashDifference, sumupDifference, totalDifference });
 
-    renderSumupApiConfig();
     renderPendingSumupSales();
     renderCashDrawerSection();
 
@@ -6644,165 +6595,6 @@ body.dark-mode .modal::backdrop {
 
     pendingMoneyAction = null;
     closeMoneyKeypad();
-  }
-
-  async function fetchSumUpAmountFromApi() {
-    const endpoint = (store.apiConfig?.sumupApiUrl || "").trim();
-    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
-    if (!endpoint) {
-      showToast("No SumUp API URL configured. Click Configure API URL in the Money tab.");
-      return;
-    }
-    if (!apiKey) {
-      showToast("No SumUp API key configured. It is optional, but the reporting endpoint may require one. Enter it in the SumUp configuration to continue.");
-      return;
-    }
-
-    try {
-      const response = await fetch(endpoint, {
-        method: "GET",
-        headers: {
-          "Accept": "application/json",
-          "Authorization": `Bearer ${apiKey}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`SumUp API returned ${response.status}`);
-      }
-
-      const payload = await response.json();
-      const total = Number(payload?.total ?? payload?.amount ?? payload?.gross ?? 0);
-      if (!Number.isFinite(total)) {
-        throw new Error("SumUp response did not include a valid total value.");
-      }
-
-      store.money = store.money || { cash: { actual: 0 }, sumup: { actual: 0 } };
-      store.money.sumup = store.money.sumup || { actual: 0 };
-      store.money.sumup.actual = roundMoney(total);
-      store.money.sumup.lastUpdatedAt = new Date().toISOString();
-      scheduleSave();
-      renderMoneyTab();
-      showToast(`SumUp total synced from the API: ${money.format(store.money.sumup.actual)}.`);
-    } catch (error) {
-      console.error("SumUp API sync failed", error);
-      showToast("Could not sync the SumUp amount from the configured API endpoint.");
-    }
-  }
-
-  function renderSumupApiConfig() {
-    const url = (store.apiConfig?.sumupApiUrl || "").trim();
-    const hasKey = Boolean((store.apiConfig?.sumupApiKey || "").trim());
-    if (!url) {
-      elements.sumupApiCurrentUrl.textContent = "Not configured";
-    } else if (!hasKey) {
-      elements.sumupApiCurrentUrl.textContent = url + " (no API key)";
-    } else {
-      elements.sumupApiCurrentUrl.textContent = url + " (key set)";
-    }
-  }
-
-  let lastSumUpBalanceFetchAt = 0;
-  const SUMUP_BALANCE_REFRESH_MS = 15 * 60 * 1000;
-
-  async function fetchSumUpBalance(options = {}) {
-    const force = options.force === true;
-    const notify = options.notify === true;
-    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
-    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
-    const statusEl = document.getElementById("sumupActualStatus");
-    if (!apiKey || !merchantCode) {
-      const message = "SumUp API key or merchant code not set. Configure them in Money > SumUp API.";
-      if (statusEl) {
-        statusEl.textContent = message;
-        statusEl.classList.remove("is-hidden");
-      }
-      if (notify) {
-        if (!apiKey && !merchantCode) {
-          showToast("Set your SumUp API key AND merchant code in Money > SumUp API first.");
-        } else if (!merchantCode) {
-          showToast("Merchant code is missing. Add it in Money > SumUp API first.");
-        } else {
-          showToast("SumUp API key is missing. Add it in Money > SumUp API first.");
-        }
-      }
-      const errEl = document.getElementById("sumupBalanceError");
-      if (errEl) {
-        errEl.textContent = message;
-        errEl.classList.remove("is-hidden");
-      }
-      return false;
-    }
-    if (!force && Date.now() - lastSumUpBalanceFetchAt < SUMUP_BALANCE_REFRESH_MS) {
-      return false;
-    }
-
-    const refreshBtn = document.getElementById("sumupBalanceRefreshButton");
-    if (refreshBtn) refreshBtn.disabled = true;
-    const errEl = document.getElementById("sumupBalanceError");
-    if (errEl) errEl.classList.add("is-hidden");
-
-    try {
-      const response = await fetch("/api/sumup/balance", { headers: getAuthHeaders() });
-      const data = await response.json();
-
-      if (!response.ok || data.error) {
-        throw new Error(data.error || `HTTP ${response.status}`);
-      }
-
-      const setText = (id, value) => {
-        const node = document.getElementById(id);
-        if (node) node.textContent = value;
-      };
-      setText("sumupBalanceGrossSales", money.format(data.grossSales));
-      setText("sumupBalanceRefunds", money.format(data.refunds));
-      setText("sumupBalanceChargebacks", money.format(data.chargebacks));
-      setText("sumupBalanceFees", money.format(data.fees));
-      setText("sumupBalancePayouts", money.format(data.payouts));
-      setText("sumupBalancePending", money.format(data.pendingBalance));
-      setText("sumupBalanceTxCount", String(data.transactionCount || 0));
-      setText("sumupBalanceTimestamp", new Date().toLocaleString());
-
-      const pendingBalance = roundMoney(Number(data.pendingBalance || 0));
-      store.money = store.money || { cash: { actual: 0 }, sumup: { actual: 0 } };
-      store.money.sumup = store.money.sumup || { actual: 0 };
-      store.money.sumup.actual = pendingBalance;
-      store.money.sumup.lastUpdatedAt = new Date().toISOString();
-      lastSumUpBalanceFetchAt = Date.now();
-      scheduleSave();
-      renderMoneyTab();
-      if (statusEl) {
-        const txCount = Number(data.transactionCount || 0);
-        statusEl.textContent = txCount === 0
-          ? "Synced - no SumUp transactions found (check merchant code)"
-          : `sales ${money.format(data.grossSales)} - refunds ${money.format(data.refunds)} - chargebacks ${money.format(data.chargebacks)} - payouts ${money.format(data.payouts)} - fees ${money.format(data.fees)} = ${money.format(pendingBalance)} (${txCount} tx)`;
-        statusEl.classList.remove("is-hidden");
-      }
-      if (notify) {
-        showToast(`Actual SumUp = ${money.format(pendingBalance)} (sales ${money.format(data.grossSales)} - refunds ${money.format(data.refunds)} - chargebacks ${money.format(data.chargebacks)} - payouts ${money.format(data.payouts)} - fees ${money.format(data.fees)}, ${data.transactionCount || 0} tx).`);
-      }
-      return true;
-    } catch (error) {
-      console.error("SumUp balance fetch failed", error);
-      if (statusEl) {
-        statusEl.textContent = "Last sync failed: " + (error.message || "Unknown error");
-        statusEl.classList.remove("is-hidden");
-      }
-      if (errEl) {
-        errEl.textContent = "Failed to load SumUp balance: " + (error.message || "Unknown error");
-        errEl.classList.remove("is-hidden");
-      }
-      if (notify) {
-        showToast("Could not fetch the SumUp balance. Check your API settings.");
-      }
-      return false;
-    } finally {
-      if (refreshBtn) refreshBtn.disabled = false;
-    }
-  }
-
-  function handleFetchSumUpClick() {
-    fetchSumUpBalance({ notify: true, force: true });
   }
 
   let html5QrCode = null;
@@ -7467,210 +7259,6 @@ body.dark-mode .modal::backdrop {
     logUserEvent("Cancelled SumUp sale", `${sale.itemName} x${sale.quantity}, ${money.format(sale.revenue)}`);
     renderMoneyTab();
     showToast("Pending sale cancelled.");
-  }
-
-  async function pollSumupTransactions() {
-    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
-    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
-    if (!apiKey || !merchantCode) {
-      showToast("Configure your SumUp API key and merchant code first.");
-      return;
-    }
-
-    const pending = getPendingSumupSales();
-    if (!pending.length) {
-      showToast("No pending SumUp sales to check.");
-      return;
-    }
-
-    const oldestTime = pending.reduce((oldest, sale) => {
-      const t = new Date(sale.createdAt).toISOString();
-      return !oldest || t < oldest ? t : oldest;
-    }, "");
-
-    elements.pollSumupButton.disabled = true;
-    elements.pollSumupButton.textContent = "Checking...";
-
-    try {
-      const params = new URLSearchParams();
-      if (oldestTime) {
-        params.set("oldest_time", oldestTime);
-      }
-      const response = await fetch(`${API_URL}/sumup/transactions?${params.toString()}`, { headers: getAuthHeaders() });
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        showToast(err.error || `API returned ${response.status}`);
-        return;
-      }
-
-      const data = await response.json();
-      const items = data?.items || [];
-      let confirmed = 0;
-
-      for (const sale of pending) {
-        if (sale.paymentStatus !== "pending") {
-          continue;
-        }
-        const saleTime = new Date(sale.createdAt).getTime();
-        const match = items.find((tx) => {
-          const status = String(tx.status || tx.simple_status || "").toUpperCase();
-          if (status !== "SUCCESSFUL" && status !== "PAID_OUT" && status !== "SETTLED" && status !== "RECONCILED") {
-            return false;
-          }
-          if (sale.foreignTxId) {
-            const clientRef = String(tx.client_transaction_id || tx.foreign_transaction_id || "").trim();
-            if (clientRef && clientRef === sale.foreignTxId) {
-              return true;
-            }
-          }
-          const txAmount = Math.round(Number(tx.amount) * 100) / 100;
-          if (Math.abs(txAmount - sale.revenue) > 0.01) {
-            return false;
-          }
-          const txTime = new Date(tx.timestamp).getTime();
-          const diff = Math.abs(txTime - saleTime);
-          return diff < 5 * 60 * 1000;
-        });
-
-        if (match) {
-          await confirmSumupSale(sale.id);
-          confirmed++;
-        }
-      }
-
-      if (confirmed > 0) {
-        showToast(`${confirmed} sale${confirmed === 1 ? "" : "s"} confirmed from SumUp API.`);
-      } else {
-        showToast("No matching SumUp transactions found yet. Try again after payment completes.");
-      }
-    } catch (error) {
-      console.error("SumUp poll failed:", error);
-      showToast("Failed to check SumUp transactions.");
-    } finally {
-      elements.pollSumupButton.disabled = false;
-      elements.pollSumupButton.textContent = "Check for payments";
-    }
-  }
-
-  function openSumupApiConfig() {
-    const url = store.apiConfig?.sumupApiUrl || "";
-    const apiKey = store.apiConfig?.sumupApiKey || "";
-    const merchantCode = store.apiConfig?.sumupMerchantCode || "";
-    const affiliateKey = store.apiConfig?.affiliateKey || "";
-    const appId = store.apiConfig?.appId || "";
-    elements.sumupApiUrlInput.value = url;
-    elements.sumupApiKeyInput.value = apiKey;
-    elements.sumupMerchantCodeInput.value = merchantCode;
-    elements.sumupAffiliateKeyInput.value = affiliateKey;
-    elements.sumupAppIdInput.value = appId;
-    elements.sumupApiTestResult.classList.add("is-hidden");
-    elements.sumupApiTestResult.textContent = "";
-    openModal(elements.sumupApiDialog);
-    setTimeout(() => elements.sumupApiUrlInput.focus(), 0);
-  }
-
-  async function testSumupApi(url, apiKey) {
-    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
-    if (!merchantCode) {
-      return { ok: false, message: "No merchant code configured. Enter your SumUp merchant code first." };
-    }
-    if (!apiKey) {
-      return { ok: false, message: "No API key provided. Enter your SumUp API key (sk_test_... or sk_live_...)." };
-    }
-
-    try {
-      const response = await fetch(`${API_URL}/sumup/transactions/test`, {
-        method: "POST",
-        headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ api_key: apiKey, merchant_code: merchantCode }),
-      });
-      if (response.status === 400) {
-        const err = await response.json().catch(() => ({}));
-        return { ok: false, message: err.error || "SumUp API key or merchant code not configured." };
-      }
-      if (response.status === 401 || response.status === 403) {
-        return { ok: false, message: "Authentication failed. The API key is invalid or expired." };
-      }
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        return { ok: false, message: err.error || `API returned HTTP ${response.status}` };
-      }
-
-      const data = await response.json();
-      if (data.ok) {
-        return { ok: true, message: `Connected successfully. Transaction history returned ${data.itemCount || 0} transaction(s).` };
-      }
-      return { ok: true, message: "Connected successfully. The SumUp API is reachable." };
-    } catch (error) {
-      return { ok: false, message: `Connection failed: ${error.message || "Network error"}` };
-    }
-  }
-
-  function showApiTestResult(container, result) {
-    container.textContent = result.message;
-    container.classList.remove("is-hidden", "success", "warning");
-    container.classList.add(result.ok ? "success" : "warning");
-  }
-
-  async function testSumupApiFromDialog() {
-    const url = elements.sumupApiUrlInput.value.trim();
-    const apiKey = elements.sumupApiKeyInput.value.trim();
-    elements.sumupApiTestResult.textContent = "Testing connection...";
-    elements.sumupApiTestResult.classList.remove("is-hidden", "success", "warning");
-    elements.sumupApiTestResult.classList.add("info");
-    elements.testSumupApiDialogButton.disabled = true;
-
-    const result = await testSumupApi(url, apiKey);
-    showApiTestResult(elements.sumupApiTestResult, result);
-    elements.testSumupApiDialogButton.disabled = false;
-  }
-
-  async function testSumupApiFromPanel() {
-    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
-    if (!apiKey) {
-      showToast("No SumUp API key configured. Click Configure API settings and enter your key.");
-      return;
-    }
-
-    elements.sumupApiStatus.textContent = "Testing connection...";
-    elements.sumupApiStatus.classList.remove("is-hidden", "success", "warning");
-    elements.sumupApiStatus.classList.add("info");
-    elements.testSumupApiButton.disabled = true;
-
-    const result = await testSumupApi((store.apiConfig?.sumupApiUrl || "").trim(), apiKey);
-    showApiTestResult(elements.sumupApiStatus, result);
-    showToast(result.ok ? "SumUp API connected." : "SumUp API test failed.");
-    elements.testSumupApiButton.disabled = false;
-  }
-
-  function handleSaveSumupApiUrl(event) {
-    event.preventDefault();
-    const url = elements.sumupApiUrlInput.value.trim();
-    const apiKey = elements.sumupApiKeyInput.value.trim();
-    const merchantCode = elements.sumupMerchantCodeInput.value.trim();
-    const affiliateKey = elements.sumupAffiliateKeyInput.value.trim();
-    const appId = elements.sumupAppIdInput.value.trim();
-
-    if (url) {
-      try {
-        new URL(url);
-      } catch (e) {
-        showToast("Enter a valid URL (including https://).");
-        return;
-      }
-    }
-
-    store.apiConfig = store.apiConfig || {};
-    store.apiConfig.sumupApiUrl = url;
-    store.apiConfig.sumupApiKey = apiKey;
-    store.apiConfig.sumupMerchantCode = merchantCode;
-    store.apiConfig.affiliateKey = affiliateKey;
-    store.apiConfig.appId = appId;
-    scheduleSave();
-    closeModal(elements.sumupApiDialog);
-    renderSumupApiConfig();
-    logUserEvent("Updated SumUp API config", url ? "Configured" : "Cleared");
-    showToast(url ? "SumUp API configuration saved." : "SumUp API configuration cleared.");
   }
 
   function renderEvents() {
@@ -9517,8 +9105,6 @@ body.dark-mode .modal::backdrop {
   function openSumUpPayment(amount, foreignTxId) {
     const pounds = Number(amount || 0);
     const sumUpAmount = pounds.toFixed(2);
-    const affiliateKey = (store.apiConfig?.affiliateKey || "").trim();
-    const appId = (store.apiConfig?.appId || "").trim();
     const os = getMobileOS();
 
     let resolvedForeignTxId = foreignTxId || "";
@@ -9533,16 +9119,10 @@ body.dark-mode .modal::backdrop {
     let sumUpUrl;
     if (os === "android") {
       sumUpUrl = `sumupmerchant://pay/1.0?total=${sumUpAmount}`;
-      if (appId) {
-        sumUpUrl += `&app-id=${encodeURIComponent(appId)}`;
-      }
     } else {
       sumUpUrl = `sumupmerchant://pay/1.0?amount=${sumUpAmount}`;
     }
     sumUpUrl += `&currency=GBP&title=Porty%20Tuck%20Sale`;
-    if (affiliateKey) {
-      sumUpUrl += `&affiliate-key=${encodeURIComponent(affiliateKey)}`;
-    }
     if (foreignTxId) {
       sumUpUrl += `&foreign-tx-id=${foreignTxId}`;
     }
@@ -9555,248 +9135,6 @@ body.dark-mode .modal::backdrop {
     } catch (error) {
       console.error(error);
       showToast("Could not launch SumUp. Make sure the SumUp app is installed.");
-    }
-  }
-
-  // ── SumUp Solo Cloud API reader management functions ──
-
-  function saveSumupWebhookSecret() {
-    const secret = elements.sumupWebhookSecretInput.value.trim();
-    if (!secret) {
-      showToast("Webhook secret cleared.");
-      return;
-    }
-    if (!isBackdoor()) {
-      showToast("Only the backdoor account can change this secret.");
-      return;
-    }
-    store.apiConfig.sumupWebhookSecret = secret;
-    scheduleSave();
-    logUserEvent("Updated SumUp webhook secret", "Webhook secret saved.");
-    showToast("Webhook secret saved.");
-  }
-
-  async function pairSumupReader() {
-    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
-    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
-    const pairingCode = elements.sumupPairingCodeInput.value.trim();
-    const readerName = elements.sumupReaderNameInput.value.trim();
-    const errorEl = elements.sumupReaderError;
-    
-    if (!apiKey || !merchantCode || !pairingCode) {
-      showToast("API key, merchant code and pairing code are required.");
-      return;
-    }
-    
-    errorEl.textContent = "Pairing reader...";
-    errorEl.classList.remove("is-hidden", "success", "warning");
-    errorEl.classList.add("info");
-    
-    try {
-      const resp = await fetch(`${API_URL}/sumup/readers/create`, {
-        method: "POST",
-        headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          api_key: apiKey,
-          merchant_code: merchantCode,
-          pairing_code: pairingCode,
-          name: readerName || "",
-        }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.error || `Pairing failed (HTTP ${resp.status}).`);
-      }
-      const data = await resp.json();
-      showToast("Reader paired successfully!");
-      if (typeof refreshSumupReaders === "function") refreshSumupReaders();
-      if (typeof refreshSumupReaderStatus === "function") refreshSumupReaderStatus();
-    } catch (error) {
-      console.error("Pair reader error:", error);
-      errorEl.textContent = error.message || "Pairing failed.";
-      errorEl.classList.add("warning");
-    }
-  }
-
-  async function refreshSumupReaders() {
-    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
-    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
-    if (!apiKey || !merchantCode) {
-      showToast("Configure API key and merchant code first.");
-      return;
-    }
-    try {
-      const resp = await fetch(`${API_URL}/sumup/readers/list`, {
-        method: "POST",
-        headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ api_key: apiKey, merchant_code: merchantCode }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.error || `Failed to fetch readers (HTTP ${resp.status}).`);
-      }
-      const data = await resp.json();
-      if (Array.isArray(data.items)) {
-        elements.sumupReaderSelect.innerHTML = '<option value="">No reader configured</option>' +
-          data.items.map(r => `<option value="${r.id}">${escapeHtml(r.name || r.id)}</option>`).join('');
-        elements.sumupReaderSelect.disabled = false;
-      }
-      renderSumupApiConfig();
-    } catch (error) {
-      console.error("Refresh readers error:", error);
-      showToast(error.message || "Failed to refresh readers.");
-    }
-  }
-
-  async function removeSumupReader() {
-    const readerId = elements.sumupReaderSelect.value;
-    if (!readerId) {
-      showToast("Select a reader to unpair.");
-      return;
-    }
-    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
-    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
-    if (!apiKey || !merchantCode) {
-      showToast("Configure API key and merchant code first.");
-      return;
-    }
-    const confirmed = window.confirm("Unpair this reader? Stock will be deducted (expected adjustment will be updated).");
-    if (!confirmed) return;
-    try {
-      const resp = await fetch(`${API_URL}/sumup/readers/delete`, {
-        method: "POST",
-        headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ api_key: apiKey, merchant_code: merchantCode, reader_id: readerId }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.error || `Failed to unpair reader (HTTP ${resp.status}).`);
-      }
-      showToast("Reader unpaired successfully.");
-      elements.sumupReaderSelect.innerHTML = '<option value="">No reader configured</option>';
-      elements.sumupReaderSelect.disabled = true;
-      delete store.apiConfig.sumupReaderId;
-      delete store.apiConfig.sumupReaderName;
-      scheduleSave();
-      if (typeof refreshSumupReaderStatus === "function") refreshSumupReaderStatus();
-    } catch (error) {
-      console.error("Remove reader error:", error);
-      showToast(error.message || "Failed to unpair reader.");
-    }
-  }
-
-  async function refreshSumupReaderStatus() {
-    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
-    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
-    const readerId = store.apiConfig?.sumupReaderId || "";
-    if (!apiKey || !merchantCode || !readerId) {
-      elements.sumupReaderStatusText.textContent = "Not configured";
-      elements.sumupReaderError.textContent = "";
-      elements.sumupReaderError.classList.add("is-hidden");
-      return;
-    }
-    try {
-      const resp = await fetch(`${API_URL}/sumup/readers/status`, {
-        method: "POST",
-        headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ api_key: apiKey, merchant_code: merchantCode, reader_id: readerId }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.error || `Failed to fetch reader status (HTTP ${resp.status}).`);
-      }
-      const data = await resp.json();
-      elements.sumupReaderStatusText.textContent = data.online ? "Online" : "Offline";
-      elements.sumupReaderStatusText.style.color = data.online ? "#0a0" : "#d00";
-    } catch (error) {
-      console.error("Refresh reader status error:", error);
-      elements.sumupReaderStatusText.textContent = "Error";
-      elements.sumupReaderStatusText.style.color = "#d00";
-      elements.sumupReaderError.textContent = error.message || "Failed to check status.";
-      elements.sumupReaderError.classList.remove("is-hidden");
-    }
-  }
-
-  async function startSoloCheckout(amount, foreignTxId) {
-    const apiKey = (store.apiConfig?.sumupApiKey || "").trim();
-    const merchantCode = (store.apiConfig?.sumupMerchantCode || "").trim();
-    const readerId = (store.apiConfig?.sumupReaderId || "").trim();
-    const affiliateKey = (store.apiConfig?.affiliateKey || "").trim();
-    const appId = (store.apiConfig?.appId || "").trim();
-    if (!apiKey || !merchantCode || !readerId) {
-      showToast("Configure SumUp API key, merchant code and reader first.");
-      return null;
-    }
-    try {
-      const resp = await fetch(`${API_URL}/sumup/readers/checkout`, {
-        method: "POST",
-        headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          api_key: apiKey,
-          merchant_code: merchantCode,
-          reader_id: readerId,
-          amount: Number(amount),
-          currency: "GBP",
-          affiliate_key: affiliateKey || "",
-          app_id: appId || "",
-          foreign_transaction_id: foreignTxId || "",
-          description: `Porty Tuck Sale`,
-        }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        if (resp.status === 409) {
-          const data = await resp.json();
-          showToast(`Payment already processed: ${data.message || "This payment was already completed."}`);
-          return data;
-        }
-        throw new Error(err.error || `Failed to start checkout (HTTP ${resp.status}).`);
-      }
-      const data = await resp.json();
-      showToast(`Sent to Solo reader for ${money.format(Number(amount))} (client_ref: ${data.client_ref}).`);
-      return data;
-    } catch (error) {
-      console.error("Solo checkout error:", error);
-      showToast(error.message || "Failed to send payment to reader.");
-      return null;
-    }
-  }
-
-  async function pollSoloCheckoutStatus(saleId, clientRef) {
-    const errorEl = document.getElementById("sumupReaderError");
-    if (!errorEl) return;
-    errorEl.textContent = "Polling solo checkout...";
-    errorEl.classList.remove("is-hidden", "success", "warning");
-    errorEl.classList.add("info");
-    try {
-      const resp = await fetch(`${API_URL}/sumup/readers/checkout/status?client_ref=${encodeURIComponent(clientRef)}`, { headers: getAuthHeaders() });
-      if (!resp.ok) {
-        if (resp.status === 404) {
-          errorEl.textContent = `No checkout found for ${clientRef}.`;
-          errorEl.classList.add("warning");
-          return false;
-        }
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.error || `Failed to fetch status (HTTP ${resp.status}).`);
-      }
-      const data = await resp.json();
-      if (data.status === "success" || data.status === "processed") {
-        await confirmSumupSale(saleId);
-        await updateExpectedSumupAdjustment(data.amount_minor / 100);
-        showToast(`Payment confirmed from Solo reader! Stock deducted. Profit: ${money.format(getSaleProfit(saleId))}.`);
-        return true;
-      }
-      if (data.status === "declined" || data.status === "failed") {
-        errorEl.textContent = `Payment ${data.status}. Use retry button to attempt again.`;
-        errorEl.classList.add("warning");
-        return false;
-      }
-      errorEl.textContent = `Payment status: ${data.status}. Waiting for completion...`;
-      errorEl.classList.add("info");
-      return false;
-    } catch (error) {
-      console.error("Poll solo checkout status error:", error);
-      return false;
     }
   }
 
@@ -10192,10 +9530,6 @@ body.dark-mode .modal::backdrop {
 
     if (isBackdoor() && elements.currentCashCodeDisplay) {
       elements.currentCashCodeDisplay.textContent = store.apiConfig?.cashRemovalCode ? "••••••••" : "Not set";
-    }
-
-    if (isBackdoor()) {
-      fetchSumUpBalance();
     }
   }
 
