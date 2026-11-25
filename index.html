@@ -3149,6 +3149,7 @@ body.dark-mode .modal::backdrop {
               <h4>Pending SumUp payments</h4>
               <p>Sales waiting for SumUp confirmation. Stock is held until the payment clears or the sale is cancelled.</p>
             </div>
+            <button type="button" id="confirmAllSumupButton" class="primary-button" title="Confirm every pending SumUp payment in one go">Confirm all</button>
           </div>
           <div id="pendingSumupList" class="table-wrap">
             <table>
@@ -4423,6 +4424,7 @@ body.dark-mode .modal::backdrop {
     elements.moneyInputValue = document.querySelector("#moneyInputValue");
     elements.cancelMoneyInputButton = document.querySelector("#cancelMoneyInputButton");
     elements.pendingSumupBody = document.querySelector("#pendingSumupBody");
+    elements.confirmAllSumupButton = document.querySelector("#confirmAllSumupButton");
     elements.currentCashCodeDisplay = document.querySelector("#currentCashCodeDisplay");
     elements.changeSecurityCodeButton = document.querySelector("#changeSecurityCodeButton");
     elements.securityCodePromptDialog = document.querySelector("#securityCodePromptDialog");
@@ -4720,6 +4722,7 @@ body.dark-mode .modal::backdrop {
 
     // SumUp API integration removed — only manual Pay with SumUp button remains
     elements.pendingSumupBody.addEventListener("click", handlePendingSumupAction);
+    elements.confirmAllSumupButton.addEventListener("click", handleConfirmAllSumup);
     elements.changeSecurityCodeButton.addEventListener("click", openChangeSecurityCode);
     elements.changeSecurityCodeForm.addEventListener("submit", handleChangeSecurityCodeSubmit);
     elements.cancelChangeSecurityCodeButton.addEventListener("click", cancelChangeSecurityCode);
@@ -7052,6 +7055,8 @@ body.dark-mode .modal::backdrop {
 
   function renderPendingSumupSales() {
     const pending = getPendingSumupSales();
+    elements.confirmAllSumupButton.disabled = pending.length === 0;
+    elements.confirmAllSumupButton.textContent = pending.length ? `Confirm all (${pending.length})` : "Confirm all";
     if (!pending.length) {
       elements.pendingSumupBody.innerHTML = `<tr><td colspan="5" class="empty-state">No pending SumUp sales.</td></tr>`;
       return;
@@ -7101,6 +7106,90 @@ body.dark-mode .modal::backdrop {
       }
       cancelPendingSumupSale(cancelButton.dataset.cancelSaleId);
     }
+  }
+
+  async function handleConfirmAllSumup() {
+    const pending = getPendingSumupSales();
+    if (!pending.length) {
+      showToast("No pending SumUp payments to confirm.");
+      return;
+    }
+
+    const total = roundMoney(pending.reduce((sum, sale) => sum + Number(sale.revenue || 0), 0));
+    elements.confirmAllSumupButton.disabled = true;
+    try {
+      const enteredCode = await promptSecurityCode(
+        "Confirm all SumUp sales",
+        `Enter the confirmation code to finalise ${pending.length} pending sale${pending.length === 1 ? "" : "s"} totalling ${money.format(total)}.`
+      );
+      if (enteredCode === null || enteredCode === "") {
+        return;
+      }
+      if (!(await verifySecurityCode(enteredCode))) {
+        showToast("Invalid code.");
+        return;
+      }
+      confirmAllSumupSales(pending);
+    } finally {
+      elements.confirmAllSumupButton.disabled = getPendingSumupSales().length === 0;
+    }
+  }
+
+  function confirmAllSumupSales(pending) {
+    if (!pending.length) {
+      return;
+    }
+
+    const requiredByItem = new Map();
+    for (const sale of pending) {
+      const quantity = Number(sale.quantity || 0);
+      requiredByItem.set(sale.itemId, (requiredByItem.get(sale.itemId) || 0) + quantity);
+    }
+
+    for (const [itemId, required] of requiredByItem) {
+      const item = findItem(itemId);
+      const itemName = item?.name || pending.find((sale) => sale.itemId === itemId)?.itemName || itemId;
+      if (!item) {
+        showToast(`Cannot confirm all: ${itemName} no longer exists in stock.`);
+        return;
+      }
+      if (!isInfiniteStock(item) && Number(item.quantity || 0) < required) {
+        showToast(`Cannot confirm all: not enough stock for ${item.name}. Need ${required}, have ${item.quantity}.`);
+        return;
+      }
+    }
+
+    const confirmedAt = new Date().toISOString();
+    let confirmedRevenue = 0;
+    let confirmedUnits = 0;
+    for (const sale of pending) {
+      const item = findItem(sale.itemId);
+      const quantity = Number(sale.quantity || 0);
+      if (!isInfiniteStock(item)) {
+        item.quantity = Number(item.quantity || 0) - quantity;
+        item.updatedAt = confirmedAt;
+      }
+
+      sale.paymentStatus = "paid";
+      sale.confirmedAt = confirmedAt;
+      sale.confirmedBy = currentUser.id;
+
+      store.lifetime.revenue = roundMoney(store.lifetime.revenue + Number(sale.revenue || 0));
+      store.lifetime.cost = roundMoney(store.lifetime.cost + Number(sale.cost || 0));
+      store.lifetime.profit = roundMoney(store.lifetime.profit + Number(sale.profit || 0));
+      store.lifetime.sales += 1;
+      store.lifetime.unitsSold += quantity;
+      recordSaleForActiveEvent(sale);
+
+      confirmedRevenue += Number(sale.revenue || 0);
+      confirmedUnits += quantity;
+    }
+
+    scheduleSave();
+    renderAll();
+    const formattedTotal = money.format(roundMoney(confirmedRevenue));
+    logUserEvent("Confirmed all SumUp sales", `${pending.length} sale(s), ${confirmedUnits} unit(s), ${formattedTotal}`);
+    showToast(`Confirmed ${pending.length} SumUp sale(s). Stock deducted. Total: ${formattedTotal}.`);
   }
 
   function openChangeSecurityCode() {

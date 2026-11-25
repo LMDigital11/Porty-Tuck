@@ -238,6 +238,13 @@ Use the sort buttons: Stock (default), Name, Price ↑, Price ↓
 3. Enter security code
 4. Stock is deducted, lifetime totals updated
 
+### Confirming all SumUp sales
+1. Go to **Money** tab → **Pending payments**
+2. Check each payment in your SumUp app first
+3. Click **Confirm all**
+4. Enter the security code once
+5. All pending sales are finalised together; stock levels are checked before anything is changed
+
 ### Cancelling a SumUp sale
 1. Click the cancel button (×) on the pending sale
 2. Enter security code
@@ -362,7 +369,7 @@ flowchart TD
 
 ### Pending payments
 - List of SumUp sales awaiting confirmation
-- Confirm (✓) or Cancel (×) each one
+- Confirm (✓) or Cancel (×) each one, or use **Confirm all**
 - Requires security code
 
 ### Sales reports
